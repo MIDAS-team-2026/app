@@ -23,10 +23,12 @@ public class User {
     @Column(name = "name", length = 50)
     private String name;
 
-    @Column
-    private String role = "GUARDIAN";
+    @Column(name = "role", nullable = false, length = 20)
+    private String role;
 
     @Column(name = "patient_code", length = 20)
     private String patientCode;
 
+    @Column(name = "connected_user_id")
+    private Integer connectedUserId;
 }
