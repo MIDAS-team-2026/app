@@ -27,7 +27,7 @@ public class AuthController {
         user.setEmail(signupDTO.getEmail());
         user.setPassword(signupDTO.getPassword());
         user.setName(signupDTO.getName());
-        user.setPatientCode(signupDTO.getPatientCode());
+        user.setRole(signupDTO.getRole());
 
         User savedUser = userService.register(user);
         return ResponseEntity.ok(savedUser);
