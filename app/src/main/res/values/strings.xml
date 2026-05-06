@@ -1,3 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MobileApp</string>
+    <string name="app_name">마이다스</string>
+    <string name="app_tagline">매일 대화하며 인지 건강 지키기</string>
+
+    <!-- 온보딩 -->
+    <string name="onboarding_1_title">매일 AI와 대화하며\n인지 건강을 지켜요</string>
+    <string name="onboarding_1_desc">음성 대화를 통해 발화 속도, 어휘 다양성,\n기억 일치도를 분석해드려요</string>
+    <string name="onboarding_2_title">회상 과제로\n기억력을 점검해요</string>
+    <string name="onboarding_2_desc">이전 대화 내용을 바탕으로\n기억력 변화를 꾸준히 추적해요</string>
+    <string name="onboarding_3_title">가족과 함께\n건강을 관리해요</string>
+    <string name="onboarding_3_desc">분석 결과를 보호자와 공유하고\n이상 징후 발생 시 즉시 알려드려요</string>
+    <string name="btn_next">다음</string>
+    <string name="btn_start">시작하기</string>
+    <string name="btn_skip">건너뛰기</string>
+
+    <!-- 로그인 -->
+    <string name="login_title">다시 만나서 반가워요 😊</string>
+    <string name="login_subtitle">로그인하고 오늘의 점검을 시작해요</string>
+    <string name="hint_email">이메일</string>
+    <string name="hint_password">비밀번호</string>
+    <string name="btn_login">로그인</string>
+    <string name="login_no_account">계정이 없으신가요?</string>
+    <string name="btn_signup">회원가입</string>
+    <string name="btn_forgot_password">비밀번호 찾기</string>
+    <string name="login_or">또는</string>
+
+    <!-- 회원가입 -->
+    <string name="signup_title_1">반갑습니다!\n어떤 역할로 사용하실 건가요?</string>
+    <string name="signup_role_user">사용자</string>
+    <string name="signup_role_user_desc">인지 건강을 직접 점검하고 싶어요</string>
+    <string name="signup_role_guardian">보호자</string>
+    <string name="signup_role_guardian_desc">가족의 건강 상태를 함께 관리하고 싶어요</string>
+    <string name="signup_title_2">기본 정보를 입력해주세요</string>
+    <string name="hint_name">이름</string>
+    <string name="hint_birth">생년월일 (YYYYMMDD)</string>
+    <string name="hint_phone">전화번호</string>
+    <string name="btn_complete">완료</string>
+    <string name="signup_step_1_of_2">1 / 2단계</string>
+    <string name="signup_step_2_of_2">2 / 2단계</string>
+    <string name="password_helper">영문, 숫자 포함 8자 이상</string>
+
+    <!-- 공통 에러 -->
+    <string name="error_email_invalid">올바른 이메일 형식이 아니에요</string>
+    <string name="error_password_short">비밀번호는 8자 이상이어야 해요</string>
+    <string name="error_required">필수 입력 항목이에요</string>
+    <string name="error_birth_format">YYYYMMDD 형식으로 입력해주세요</string>
 </resources>
