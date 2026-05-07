@@ -3,8 +3,12 @@ package com.midas26.mobileapp.ui.navigation
 /**
  * Navigation Compose 라우트 상수.
  *
- * zip 파일의 nav_graph.xml 액션을 1:1로 옮긴 형태로,
- * `signup_info` 라우트만 role 인자를 받도록 구성합니다.
+ * 흐름:
+ *   Splash → (Onboarding) → Login
+ *   Login → SignupRole → SignupInfo/{role} → Permission → Privacy
+ *           → (사용자) SignupComplete → UserHome
+ *           → (보호자)                     GuardianHome
+ *   Login (이미 가입됨) → 역할에 따라 UserHome / GuardianHome
  */
 object Routes {
     const val Splash = "splash"
@@ -12,12 +16,27 @@ object Routes {
     const val Login = "login"
     const val SignupRole = "signup_role"
 
-    // Signup info: role을 path arg로 전달
+    // Signup info: role 을 path arg 로 전달
     private const val SignupInfoBase = "signup_info"
     const val SignupInfoArgRole = "role"
     const val SignupInfo = "$SignupInfoBase/{$SignupInfoArgRole}"
     fun signupInfo(role: String) = "$SignupInfoBase/$role"
 
-    /** 후속 단계에서 구현될 홈. 현재는 자리표시자. */
-    const val Home = "home"
+    // 인증 직후 흐름 — role 인자를 path 로 전달
+    const val PermissionArgRole = "role"
+    const val Permission = "permission/{$PermissionArgRole}"
+    fun permission(role: String) = "permission/$role"
+
+    const val PrivacyArgRole = "role"
+    const val Privacy = "privacy/{$PrivacyArgRole}"
+    fun privacy(role: String) = "privacy/$role"
+
+    const val SignupComplete = "signup_complete"
+
+    // 메인 홈
+    const val UserHome = "user_home"
+    const val GuardianHome = "guardian_home"
+
+    /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
+    const val Home = UserHome
 }
