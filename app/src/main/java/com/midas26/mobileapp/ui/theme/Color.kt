@@ -22,9 +22,15 @@ val Gray800 = Color(0xFF1F2937)
 val Gray900 = Color(0xFF111827)
 
 // Semantic
-val Amber400 = Color(0xFFF59E0B)
+val Amber50 = Color(0xFFFEF6E0)
+val Amber400 = Color(0xFFF5BF34)
 val Red400 = Color(0xFFEF4444)
 val Red50 = Color(0xFFFEF2F2)
+
+// Guardian accent (보호자 화면 — 따뜻한 코랄)
+val GuardianAccent = Color(0xFFE4725B)
+val GuardianAccentDark = Color(0xFFC85E48)
+val GuardianAccentLight = Color(0xFFFEE5E0)
 
 // Base
 val MidasWhite = Color(0xFFFFFFFF)

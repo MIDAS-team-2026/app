@@ -8,3 +8,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# 형섭 작업용
+private/
+/private/

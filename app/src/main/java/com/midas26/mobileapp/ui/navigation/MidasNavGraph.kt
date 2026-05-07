@@ -1,6 +1,7 @@
 package com.midas26.mobileapp.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -8,27 +9,33 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.auth.LoginScreen
+import com.midas26.mobileapp.ui.auth.SignupCompleteScreen
 import com.midas26.mobileapp.ui.auth.SignupInfoScreen
 import com.midas26.mobileapp.ui.auth.SignupRoleScreen
-import com.midas26.mobileapp.ui.home.HomeScreen
+import com.midas26.mobileapp.ui.home.GuardianHomeScreen
+import com.midas26.mobileapp.ui.home.UserHomeScreen
+import com.midas26.mobileapp.ui.legal.PrivacyScreen
 import com.midas26.mobileapp.ui.onboarding.OnboardingScreen
 import com.midas26.mobileapp.ui.onboarding.SplashScreen
+import com.midas26.mobileapp.ui.permission.PermissionScreen
 import com.midas26.mobileapp.util.PrefsManager
 
 /**
- * zip 의 nav_graph.xml 을 1:1 로 옮긴 Compose Navigation 그래프.
+ * Midas 앱 네비게이션 그래프.
  *
- * 주요 액션 맵:
- *  - splash → onboarding/login/home (popUpTo splash inclusive)
- *  - onboarding → login (popUpTo onboarding inclusive)
- *  - login → home (popUpTo login inclusive) / signup_role
- *  - signup_role → signup_info/{role}
- *  - signup_info → login (popUpTo signup_role inclusive)
+ * 흐름:
+ *   Splash → (Onboarding) → Login
+ *   Login → SignupRole → SignupInfo/{role} → Permission/{role} → Privacy/{role}
+ *           ├─ role=user     → SignupComplete → UserHome
+ *           └─ role=guardian → GuardianHome
+ *   Splash 진입 시 토큰 있으면 → 역할에 따라 UserHome / GuardianHome
  */
 @Composable
 fun MidasNavHost(
     navController: NavHostController = rememberNavController()
 ) {
+    val context = LocalContext.current
+
     NavHost(
         navController = navController,
         startDestination = Routes.Splash
@@ -36,7 +43,9 @@ fun MidasNavHost(
         composable(Routes.Splash) {
             SplashScreen(
                 onNavigateToHome = {
-                    navController.navigate(Routes.Home) {
+                    val home = if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN)
+                        Routes.GuardianHome else Routes.UserHome
+                    navController.navigate(home) {
                         popUpTo(Routes.Splash) { inclusive = true }
                     }
                 },
@@ -66,7 +75,9 @@ fun MidasNavHost(
         composable(Routes.Login) {
             LoginScreen(
                 onNavigateToHome = {
-                    navController.navigate(Routes.Home) {
+                    val home = if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN)
+                        Routes.GuardianHome else Routes.UserHome
+                    navController.navigate(home) {
                         popUpTo(Routes.Login) { inclusive = true }
                     }
                 },
@@ -99,16 +110,75 @@ fun MidasNavHost(
             SignupInfoScreen(
                 role = role,
                 onBack = { navController.popBackStack() },
+                // 회원가입 완료 후 권한 요청 화면으로 이동
                 onComplete = {
-                    navController.navigate(Routes.Login) {
+                    navController.navigate(Routes.permission(role)) {
                         popUpTo(Routes.SignupRole) { inclusive = true }
                     }
                 }
             )
         }
 
-        composable(Routes.Home) {
-            HomeScreen()
+        composable(
+            route = Routes.Permission,
+            arguments = listOf(
+                navArgument(Routes.PermissionArgRole) {
+                    type = NavType.StringType
+                    defaultValue = PrefsManager.ROLE_USER
+                }
+            )
+        ) { backStackEntry ->
+            val role = backStackEntry.arguments?.getString(Routes.PermissionArgRole)
+                ?: PrefsManager.ROLE_USER
+            PermissionScreen(
+                onNext = { navController.navigate(Routes.privacy(role)) }
+            )
+        }
+
+        composable(
+            route = Routes.Privacy,
+            arguments = listOf(
+                navArgument(Routes.PrivacyArgRole) {
+                    type = NavType.StringType
+                    defaultValue = PrefsManager.ROLE_USER
+                }
+            )
+        ) { backStackEntry ->
+            val role = backStackEntry.arguments?.getString(Routes.PrivacyArgRole)
+                ?: PrefsManager.ROLE_USER
+            PrivacyScreen(
+                onAgreeAndStart = {
+                    if (role == PrefsManager.ROLE_GUARDIAN) {
+                        // 보호자는 가입 완료 화면 없이 바로 보호자 홈
+                        navController.navigate(Routes.GuardianHome) {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate(Routes.SignupComplete) {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.SignupComplete) {
+            SignupCompleteScreen(
+                userCode = "842716", // 더미. 실제 백엔드 연동 시 ViewModel에서 주입
+                onGoHome = {
+                    navController.navigate(Routes.UserHome) {
+                        popUpTo(Routes.SignupComplete) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.UserHome) {
+            UserHomeScreen()
+        }
+
+        composable(Routes.GuardianHome) {
+            GuardianHomeScreen()
         }
     }
 }

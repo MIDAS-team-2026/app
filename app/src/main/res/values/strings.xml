@@ -45,4 +45,83 @@
     <string name="error_password_short">비밀번호는 8자 이상이어야 해요</string>
     <string name="error_required">필수 입력 항목이에요</string>
     <string name="error_birth_format">YYYYMMDD 형식으로 입력해주세요</string>
+
+    <!-- 권한 요청 -->
+    <string name="permission_title">권한 안내</string>
+    <string name="permission_subtitle">서비스 이용을 위해 아래 권한이 필요해요</string>
+    <string name="permission_mic">마이크</string>
+    <string name="permission_mic_desc">음성 대화 및 분석</string>
+    <string name="permission_location">위치</string>
+    <string name="permission_location_desc">보호자 위치 공유</string>
+    <string name="permission_notification">알림</string>
+    <string name="permission_notification_desc">점검 알림 수신</string>
+    <string name="permission_storage">저장소</string>
+    <string name="permission_storage_desc">분석 결과 저장</string>
+    <string name="permission_required">필수</string>
+    <string name="permission_optional">선택</string>
+    <string name="btn_grant_and_start">권한 허용하고 시작하기</string>
+
+    <!-- 개인정보 처리방침 -->
+    <string name="privacy_title">개인정보 보호 안내</string>
+    <string name="privacy_agree_all">전체 동의</string>
+    <string name="privacy_agree_all_desc">아래 약관에 모두 동의해요</string>
+    <string name="privacy_terms">이용 약관 동의</string>
+    <string name="privacy_terms_desc">서비스 이용에 관한 규정</string>
+    <string name="privacy_personal">개인정보 처리방침</string>
+    <string name="privacy_personal_desc">수집·이용 목적 및 보유 기간</string>
+    <string name="privacy_voice">음성 데이터 수집 동의</string>
+    <string name="privacy_voice_desc">인지 분석용 데이터 안내</string>
+    <string name="privacy_marketing">마케팅 정보 수신</string>
+    <string name="privacy_marketing_desc">서비스 소식 및 혜택 안내</string>
+    <string name="btn_agree_and_start">동의하고 시작하기</string>
+
+    <!-- 회원가입 완료 -->
+    <string name="signup_complete_title">가입이 완료되었어요!</string>
+    <string name="signup_complete_subtitle">이제 매일 음성 대화로 인지 건강을\n점검해보세요</string>
+    <string name="signup_complete_code_label">내 사용자 코드</string>
+    <string name="signup_complete_code_desc">보호자에게 코드를 전달하면\n분석 결과가 자동 공유돼요</string>
+    <string name="btn_copy_code">📋 코드 복사</string>
+    <string name="btn_go_home">홈으로 시작하기</string>
+
+    <!-- 사용자 홈 -->
+    <string name="home_hello">안녕하세요 👋</string>
+    <string name="home_user_suffix">님</string>
+    <string name="home_streak">🔥 4일 연속 점검 중</string>
+    <string name="home_week_status">이번 주 점검 현황</string>
+    <string name="home_today">오늘</string>
+    <string name="home_week_score_label">이번 주 인지 점수</string>
+    <string name="home_score_unit">점</string>
+    <string name="home_score_diff">지난 주 대비 +3점 향상 🎉</string>
+    <string name="home_score_normal">정상 범위</string>
+    <string name="home_today_check">오늘의 점검</string>
+    <string name="menu_voice_chat">음성 대화</string>
+    <string name="menu_recall">회상 과제</string>
+    <string name="menu_analysis">분석 결과</string>
+    <string name="menu_settings">설정</string>
+    <string name="tab_home">홈</string>
+    <string name="tab_chat">대화</string>
+    <string name="tab_analysis">분석</string>
+    <string name="tab_profile">내 정보</string>
+
+    <!-- 보호자 홈 -->
+    <string name="guardian_user_suffix">보호자님</string>
+    <string name="guardian_linked">👤 %1$s 님 연결됨</string>
+    <string name="guardian_today_status">오늘의 점검 상태</string>
+    <string name="guardian_voice_done">음성 대화 완료</string>
+    <string name="guardian_recall_pending">회상 미완료</string>
+    <string name="guardian_score_normal">정상 범위 — 이상 징후 없음</string>
+    <string name="guardian_menu">보호자 메뉴</string>
+    <string name="guardian_menu_analysis">분석 결과</string>
+    <string name="guardian_menu_location">위치 정보</string>
+    <string name="guardian_menu_info">관련 정보</string>
+    <string name="guardian_tab_location">위치</string>
+
+    <!-- 요일 -->
+    <string name="weekday_mon">월</string>
+    <string name="weekday_tue">화</string>
+    <string name="weekday_wed">수</string>
+    <string name="weekday_thu">목</string>
+    <string name="weekday_fri">금</string>
+    <string name="weekday_sat">토</string>
+    <string name="weekday_sun">일</string>
 </resources>
