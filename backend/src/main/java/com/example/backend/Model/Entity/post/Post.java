@@ -36,7 +36,7 @@ public class Post {
     @Column(name = "category", length = 20)
     private String category;
 
-    @CreatedDate // 2. 자동으로 생성 시간 주입
+    @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

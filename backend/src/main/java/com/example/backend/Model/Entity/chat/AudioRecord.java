@@ -7,6 +7,8 @@ import com.example.backend.Model.Entity.user.User;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -16,6 +18,7 @@ import java.util.List;
 @Setter
 @Entity
 @Table(name = "audio_records")
+@EntityListeners(AuditingEntityListener.class)
 public class AudioRecord {
 
     @Id
@@ -36,9 +39,6 @@ public class AudioRecord {
 
     @OneToOne(mappedBy = "audioRecord", cascade = CascadeType.ALL)
     private TextAnalysisResult textAnalysisResult;
-
-    @OneToMany(mappedBy = "currentRecord")
-    private List<RecallAnalysisResult> recallAnalysisResults = new ArrayList<>();
 
     @Column(name = "speaker", nullable = false)
     private Integer speaker;
@@ -71,17 +71,13 @@ public class AudioRecord {
     @Column(name = "stt_confidence")
     private Float sttConfidence;
 
+    @CreatedDate
     @Column(name = "recorded_at", nullable = false, updatable = false)
     private LocalDateTime recordedAt;
-
-    @PrePersist
-    protected void onRecord() {
-        this.recordedAt = LocalDateTime.now();
-    }
 
     @OneToMany(mappedBy = "pastRecord")
     private List<RecallAnalysisResult> pastAnalysisBasics = new ArrayList<>();
 
-    @OneToMany(mappedBy = "currentRecord")
+    @OneToMany(mappedBy = "currentRecord", cascade = CascadeType.ALL)
     private List<RecallAnalysisResult> currentAnalysisResults = new ArrayList<>();
 }
