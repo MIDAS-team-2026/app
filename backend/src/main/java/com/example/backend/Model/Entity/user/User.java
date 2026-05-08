@@ -5,6 +5,8 @@ import com.example.backend.Model.Entity.chat.ChatSession;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -13,6 +15,7 @@ import java.util.List;
 @Getter
 @Setter
 @Entity
+@EntityListeners(AuditingEntityListener.class)
 @Table(name = "users")
 public class User {
     @Id
@@ -44,14 +47,9 @@ public class User {
     @Column(name = "gender")
     private Integer gender;
 
+    @CreatedDate // 자동으로 생성 시간 주입
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    // 데이터 삽입 전 자동으로 현재 시간 설정
-    @PrePersist
-    protected void onCreate() {
-        this.createdAt = LocalDateTime.now();
-    }
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<ChatSession> chatSessions = new ArrayList<>();
