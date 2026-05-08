@@ -10,11 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
-
 @Service
 @RequiredArgsConstructor
 public class LocationService {
@@ -33,14 +28,6 @@ public class LocationService {
         location.setLatitude(dto.getLatitude());
         location.setLongitude(dto.getLongitude());
 
-        // String timestamp -> Instant 변환
-        if (dto.getTimestamp() != null) {
-            LocalDateTime ldt = LocalDateTime.parse(dto.getTimestamp(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-            location.setCreatedAt(ldt.toInstant(ZoneOffset.UTC));
-        } else {
-            location.setCreatedAt(Instant.now());
-        }
-
         locationRepository.save(location);
     }
 
@@ -49,6 +36,7 @@ public class LocationService {
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // UserLocation(안심구역 설정) 정보 가져오기
         UserLocation config = userLocationRepository.findById(dto.getUserId())
                 .orElseGet(() -> {
                     UserLocation newConfig = new UserLocation();
@@ -61,7 +49,7 @@ public class LocationService {
         config.setBaseLongitude(dto.getLongitude());
         config.setSafeRadius(dto.getRadius());
 
-        userLocationRepository.saveAndFlush(config);
+        userLocationRepository.save(config);
     }
 
     public boolean isWithinSafeZone(Integer userId) {
@@ -72,8 +60,9 @@ public class LocationService {
 
         double distance = calculateDistance(
                 current.getLatitude().doubleValue(), current.getLongitude().doubleValue(),
-                config.getBaseLatitude(), config.getBaseLongitude()
+                config.getBaseLatitude().doubleValue(), config.getBaseLongitude().doubleValue()
         );
+
         return distance <= config.getSafeRadius();
     }
 
@@ -84,13 +73,16 @@ public class LocationService {
      * 단위: 미터(m)
      */
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        double R = 6371e3;
-        double phi1 = Math.toRadians(lat1), phi2 = Math.toRadians(lat2);
+        double R = 6371e3; // 지구 반경 (m)
+        double phi1 = Math.toRadians(lat1);
+        double phi2 = Math.toRadians(lat2);
         double deltaPhi = Math.toRadians(lat2 - lat1);
         double deltaLambda = Math.toRadians(lon2 - lon1);
+
         double a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
                 Math.cos(phi1) * Math.cos(phi2) *
                         Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }
