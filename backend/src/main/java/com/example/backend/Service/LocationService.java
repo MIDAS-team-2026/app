@@ -1,6 +1,7 @@
 package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.LocationDTO;
+import com.example.backend.Model.DTO.LocationResponseDTO;
 import com.example.backend.Model.DTO.SafeZoneDTO;
 import com.example.backend.Model.Entity.location.Location;
 import com.example.backend.Model.Entity.location.UserLocation;
@@ -9,6 +10,11 @@ import com.example.backend.Model.Repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -84,5 +90,34 @@ public class LocationService {
                         Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
 
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    public LocationResponseDTO getCurrentLocation(Integer userId) {
+        Location location = locationRepository.findFirstByUserIdOrderByCreatedAtDesc(userId);
+        if (location == null) return null;
+
+        return new LocationResponseDTO(
+                location.getLatitude(),
+                location.getLongitude(),
+                location.getCreatedAt()
+        );
+    }
+
+    // 2. 일일 동선 조회
+    public List<LocationResponseDTO> getDailyRoute(Integer userId, LocalDate date) {
+        // 해당 날짜의 시작 시간(00:00:00)과 끝 시간(다음날 00:00:00) 설정
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay = startOfDay.plusDays(1);
+
+        List<Location> routes = locationRepository.findRouteByDate(userId, startOfDay, endOfDay);
+
+        // Entity 리스트를 DTO 리스트로 변환
+        return routes.stream()
+                .map(loc -> new LocationResponseDTO(
+                        loc.getLatitude(),
+                        loc.getLongitude(),
+                        loc.getCreatedAt()
+                ))
+                .collect(Collectors.toList());
     }
 }
