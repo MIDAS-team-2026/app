@@ -37,8 +37,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasOutlinedTextField
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
+import com.midas26.mobileapp.ui.components.AppOutlinedTextField
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
@@ -147,7 +147,7 @@ fun SignupInfoScreen(
         )
         Spacer(modifier = Modifier.height(40.dp))
 
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = name,
             onValueChange = { name = it; nameError = null },
             label = stringResource(R.string.hint_name),
@@ -156,7 +156,7 @@ fun SignupInfoScreen(
             imeAction = ImeAction.Next,
             errorText = nameError
         )
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = birth,
             onValueChange = { value -> birth = value.filter { it.isDigit() }; birthError = null },
             label = stringResource(R.string.hint_birth),
@@ -166,7 +166,7 @@ fun SignupInfoScreen(
             maxLength = 8,
             errorText = birthError
         )
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = email,
             onValueChange = { email = it; emailError = null },
             label = stringResource(R.string.hint_email),
@@ -175,7 +175,7 @@ fun SignupInfoScreen(
             imeAction = ImeAction.Next,
             errorText = emailError
         )
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = password,
             onValueChange = { password = it; passwordError = null },
             label = stringResource(R.string.hint_password),
@@ -188,7 +188,7 @@ fun SignupInfoScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        MidasPrimaryButton(
+        AppPrimaryButton(
             text = stringResource(R.string.btn_complete),
             onClick = {
                 if (validate()) {

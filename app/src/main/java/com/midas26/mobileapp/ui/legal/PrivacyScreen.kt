@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Amber400
 import com.midas26.mobileapp.ui.theme.Amber50
 import com.midas26.mobileapp.ui.theme.Gray200
@@ -50,7 +50,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 private data class PrivacyItem(
     val titleRes: Int,
@@ -146,7 +146,7 @@ fun PrivacyScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            MidasPrimaryButton(
+            AppPrimaryButton(
                 text = stringResource(R.string.btn_agree_and_start),
                 onClick = onAgreeAndStart,
                 enabled = canProceed
@@ -203,7 +203,7 @@ private fun PrivacyRow(
             .fillMaxWidth()
             .clickable(onClick = onToggle),
         shape = RoundedCornerShape(16.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         border = BorderStroke(1.5.dp, Gray200)
     ) {
         Row(
@@ -255,7 +255,7 @@ private fun Checkbox(
     Surface(
         modifier = Modifier.size(36.dp),
         shape = RoundedCornerShape(10.dp),
-        color = if (checked) accent else MidasWhite,
+        color = if (checked) accent else BrandWhite,
         border = BorderStroke(2.dp, if (checked) accent else Gray200)
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -263,7 +263,7 @@ private fun Checkbox(
                 Icon(
                     imageVector = Icons.Filled.Check,
                     contentDescription = null,
-                    tint = MidasWhite,
+                    tint = BrandWhite,
                     modifier = Modifier.size(22.dp)
                 )
             }

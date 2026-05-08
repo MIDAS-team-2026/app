@@ -17,11 +17,20 @@ import com.midas26.mobileapp.ui.home.UserHomeScreen
 import com.midas26.mobileapp.ui.legal.PrivacyScreen
 import com.midas26.mobileapp.ui.onboarding.OnboardingScreen
 import com.midas26.mobileapp.ui.onboarding.SplashScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.permission.PermissionScreen
+import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
+import com.midas26.mobileapp.ui.recall.RecallResultScreen
+import com.midas26.mobileapp.ui.recall.RecallStartScreen
+import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
+import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
+import com.midas26.mobileapp.ui.home.UserMenu
 import com.midas26.mobileapp.util.PrefsManager
 
 /**
- * Midas 앱 네비게이션 그래프.
+ * 앱 네비게이션 그래프.
  *
  * 흐름:
  *   Splash → (Onboarding) → Login
@@ -31,7 +40,7 @@ import com.midas26.mobileapp.util.PrefsManager
  *   Splash 진입 시 토큰 있으면 → 역할에 따라 UserHome / GuardianHome
  */
 @Composable
-fun MidasNavHost(
+fun AppNavHost(
     navController: NavHostController = rememberNavController()
 ) {
     val context = LocalContext.current
@@ -174,11 +183,99 @@ fun MidasNavHost(
         }
 
         composable(Routes.UserHome) {
-            UserHomeScreen()
+            UserHomeScreen(
+                onMenuClick = { menu ->
+                    when (menu) {
+                        UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
+                        UserMenu.Recall    -> navController.navigate(Routes.RecallStart)
+                        UserMenu.Analysis  -> navController.navigate(Routes.AnalysisLoading)
+                        // 설정은 추후 화면 작성 시 라우트 추가
+                        else -> Unit
+                    }
+                }
+            )
         }
 
         composable(Routes.GuardianHome) {
             GuardianHomeScreen()
+        }
+
+        composable(Routes.VoiceChat) {
+            VoiceChatScreen(
+                onBack = { navController.popBackStack() },
+                onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) }
+            )
+        }
+
+        composable(Routes.VoiceChatDisconnected) {
+            VoiceChatDisconnectedScreen(
+                onBack = { navController.popBackStack() },
+                onGoHome = {
+                    navController.navigate(Routes.UserHome) {
+                        popUpTo(Routes.UserHome) { inclusive = true }
+                    }
+                },
+                onRetry = { navController.popBackStack() }
+            )
+        }
+
+        composable(Routes.RecallStart) {
+            RecallStartScreen(
+                onBack = { navController.popBackStack() },
+                onStart = {
+                    navController.navigate(Routes.RecallQuestion) {
+                        popUpTo(Routes.RecallStart) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.RecallQuestion) {
+            RecallQuestionScreen(
+                onBack = { navController.popBackStack() },
+                onFinishedAll = {
+                    navController.navigate(Routes.RecallResult) {
+                        popUpTo(Routes.RecallQuestion) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.RecallResult) {
+            RecallResultScreen(
+                onBack = { navController.popBackStack() },
+                onGoHome = {
+                    navController.navigate(Routes.UserHome) {
+                        popUpTo(Routes.UserHome) { inclusive = true }
+                    }
+                },
+                onSeeDetails = {
+                    navController.navigate(Routes.AnalysisLoading)
+                }
+            )
+        }
+
+        composable(Routes.AnalysisLoading) {
+            AnalysisLoadingScreen(
+                onFinished = {
+                    navController.navigate(Routes.AnalysisResult) {
+                        popUpTo(Routes.AnalysisLoading) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Routes.AnalysisResult) {
+            AnalysisResultScreen(
+                onBack = { navController.popBackStack() },
+                onShowGraph = { navController.navigate(Routes.AnalysisGraph) }
+            )
+        }
+
+        composable(Routes.AnalysisGraph) {
+            AnalysisGraphScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

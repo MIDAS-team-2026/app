@@ -36,15 +36,15 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasOutlinedTextField
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
-import com.midas26.mobileapp.ui.components.MidasTextButton
+import com.midas26.mobileapp.ui.components.AppOutlinedTextField
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
+import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 @Composable
 fun LoginScreen(
@@ -96,7 +96,7 @@ fun LoginScreen(
                 Icon(
                     imageVector = Icons.Filled.Psychology,
                     contentDescription = null,
-                    tint = MidasWhite,
+                    tint = BrandWhite,
                     modifier = Modifier.size(44.dp)
                 )
             }
@@ -118,7 +118,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(40.dp))
 
         // 입력 폼
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = email,
             onValueChange = {
                 email = it
@@ -130,7 +130,7 @@ fun LoginScreen(
             imeAction = ImeAction.Next,
             errorText = emailError
         )
-        MidasOutlinedTextField(
+        AppOutlinedTextField(
             value = password,
             onValueChange = {
                 password = it
@@ -148,7 +148,7 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.End
         ) {
-            MidasTextButton(
+            AppTextButton(
                 text = stringResource(R.string.btn_forgot_password),
                 onClick = onForgotPassword
             )
@@ -156,7 +156,7 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // 로그인 버튼
-        MidasPrimaryButton(
+        AppPrimaryButton(
             text = stringResource(R.string.btn_login),
             onClick = {
                 if (validate()) {
@@ -206,7 +206,7 @@ fun LoginScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Gray400
             )
-            MidasTextButton(
+            AppTextButton(
                 text = stringResource(R.string.btn_signup),
                 onClick = onNavigateToSignup
             ) {

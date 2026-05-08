@@ -36,7 +36,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.GuardianAccentLight
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 enum class GuardianMenu { Analysis, Location, Info, Settings }
 
@@ -115,14 +115,14 @@ private fun GuardianHeader(
                 .size(200.dp)
                 .offset(x = 240.dp, y = 20.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.15f))
+                .background(BrandWhite.copy(alpha = 0.15f))
         )
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .offset(x = (-30).dp, y = 110.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.10f))
+                .background(BrandWhite.copy(alpha = 0.10f))
         )
 
         Column(
@@ -134,24 +134,24 @@ private fun GuardianHeader(
             Text(
                 text = stringResource(R.string.home_hello),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "$guardianName ${stringResource(R.string.guardian_user_suffix)}",
                 fontSize = 26.sp,
                 fontWeight = FontWeight.Bold,
-                color = MidasWhite
+                color = BrandWhite
             )
             Spacer(modifier = Modifier.height(10.dp))
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = MidasWhite.copy(alpha = 0.20f)
+                color = BrandWhite.copy(alpha = 0.20f)
             ) {
                 Text(
                     text = stringResource(R.string.guardian_linked, linkedUserName),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MidasWhite,
+                    color = BrandWhite,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
@@ -169,13 +169,13 @@ private fun TodayStatusCard(voiceCheckDone: Boolean, recallCheckDone: Boolean) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MidasWhite.copy(alpha = 0.20f)
+        color = BrandWhite.copy(alpha = 0.20f)
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text = stringResource(R.string.guardian_today_status),
                 style = MaterialTheme.typography.bodySmall,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(
@@ -195,12 +195,12 @@ private fun StatusItem(label: String, done: Boolean) {
         Surface(
             modifier = Modifier.size(22.dp),
             shape = CircleShape,
-            color = MidasWhite.copy(alpha = if (done) 0.6f else 0.2f)
+            color = BrandWhite.copy(alpha = if (done) 0.6f else 0.2f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = if (done) "✓" else "—",
-                    color = MidasWhite,
+                    color = BrandWhite,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -210,7 +210,7 @@ private fun StatusItem(label: String, done: Boolean) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
-            color = MidasWhite,
+            color = BrandWhite,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -223,7 +223,7 @@ private fun GuardianScoreCard(score: Int) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Row(
@@ -349,7 +349,7 @@ private fun GuardianMenuCard(
             .fillMaxHeight()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Column(

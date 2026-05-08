@@ -37,7 +37,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
 
 @Composable
@@ -116,14 +116,14 @@ private fun UserHomeHeader(
                 .size(200.dp)
                 .offset(x = 240.dp, y = 20.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.15f))
+                .background(BrandWhite.copy(alpha = 0.15f))
         )
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .offset(x = (-30).dp, y = 110.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.10f))
+                .background(BrandWhite.copy(alpha = 0.10f))
         )
 
         Column(
@@ -135,24 +135,24 @@ private fun UserHomeHeader(
             Text(
                 text = stringResource(R.string.home_hello),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "$userName ${stringResource(R.string.home_user_suffix)}",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = MidasWhite
+                color = BrandWhite
             )
             Spacer(modifier = Modifier.height(10.dp))
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = MidasWhite.copy(alpha = 0.20f)
+                color = BrandWhite.copy(alpha = 0.20f)
             ) {
                 Text(
                     text = stringResource(R.string.home_streak),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MidasWhite,
+                    color = BrandWhite,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
@@ -174,13 +174,13 @@ private fun WeekStatusCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MidasWhite.copy(alpha = 0.20f)
+        color = BrandWhite.copy(alpha = 0.20f)
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text = stringResource(R.string.home_week_status),
                 style = MaterialTheme.typography.bodySmall,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Row(
@@ -205,15 +205,15 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
         Text(
             text = dayLabel,
             style = MaterialTheme.typography.bodySmall,
-            color = MidasWhite.copy(alpha = 0.85f)
+            color = BrandWhite.copy(alpha = 0.85f)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Surface(
             modifier = Modifier.size(width = 30.dp, height = 24.dp),
             shape = RoundedCornerShape(12.dp),
-            color = if (isToday) MidasWhite
-            else if (checked) MidasWhite.copy(alpha = 0.4f)
-            else MidasWhite.copy(alpha = 0.15f)
+            color = if (isToday) BrandWhite
+            else if (checked) BrandWhite.copy(alpha = 0.4f)
+            else BrandWhite.copy(alpha = 0.15f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (isToday) {
@@ -225,7 +225,7 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
                         fontSize = 11.sp
                     )
                 } else if (checked) {
-                    Text(text = "✓", color = MidasWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "✓", color = BrandWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -239,7 +239,7 @@ private fun ScoreCard(score: Int) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Row(
@@ -367,7 +367,7 @@ private fun MenuCard(
             .fillMaxHeight()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Box(modifier = Modifier.padding(12.dp)) {
@@ -405,7 +405,7 @@ private fun MenuCard(
                         Text(
                             text = badge,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MidasWhite,
+                            color = BrandWhite,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -425,7 +425,7 @@ internal fun BottomTabBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 8.dp
     ) {
         Row(

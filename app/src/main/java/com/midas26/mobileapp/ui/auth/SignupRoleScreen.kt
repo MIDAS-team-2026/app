@@ -36,7 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -44,7 +44,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -130,7 +130,7 @@ fun SignupRoleScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        MidasPrimaryButton(
+        AppPrimaryButton(
             text = stringResource(R.string.btn_next),
             onClick = { onNext(selectedRole) },
             modifier = Modifier.padding(bottom = 48.dp)
@@ -151,7 +151,7 @@ private fun RoleCard(
         label = "roleCardBorder"
     )
     val container by animateColorAsState(
-        targetValue = if (selected) Green50 else MidasWhite,
+        targetValue = if (selected) Green50 else BrandWhite,
         label = "roleCardContainer"
     )
     val titleColor = if (selected) Green600 else Gray800

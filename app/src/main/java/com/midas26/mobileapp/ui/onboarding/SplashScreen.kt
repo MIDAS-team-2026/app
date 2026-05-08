@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 
@@ -71,7 +71,7 @@ fun SplashScreen(
                 Surface(
                     modifier = Modifier.size(120.dp),
                     shape = RoundedCornerShape(32.dp),
-                    color = MidasWhite,
+                    color = BrandWhite,
                     shadowElevation = 0.dp
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -86,7 +86,7 @@ fun SplashScreen(
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = stringResource(id = R.string.app_name),
-                    color = MidasWhite,
+                    color = BrandWhite,
                     fontSize = 36.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -104,7 +104,7 @@ fun SplashScreen(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 72.dp)
                     .size(36.dp),
-                color = MidasWhite,
+                color = BrandWhite,
                 strokeWidth = 4.dp
             )
         }

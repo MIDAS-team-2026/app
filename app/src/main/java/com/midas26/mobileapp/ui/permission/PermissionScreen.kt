@@ -28,7 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Amber400
 import com.midas26.mobileapp.ui.theme.Amber50
 import com.midas26.mobileapp.ui.theme.Gray100
@@ -37,7 +37,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 private data class PermissionItem(
     val emoji: String,
@@ -74,7 +74,7 @@ fun PermissionScreen(
                     .size(180.dp)
                     .offset(x = 250.dp, y = 20.dp)
                     .clip(CircleShape)
-                    .background(MidasWhite.copy(alpha = 0.18f))
+                    .background(BrandWhite.copy(alpha = 0.18f))
             )
         }
 
@@ -90,7 +90,7 @@ fun PermissionScreen(
             Surface(
                 modifier = Modifier.size(80.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = MidasWhite,
+                color = BrandWhite,
                 shadowElevation = 4.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -120,7 +120,7 @@ fun PermissionScreen(
 
             // 남는 공간을 weight 로 흡수해 버튼이 하단 근처에 위치
             Spacer(modifier = Modifier.weight(1f))
-            MidasPrimaryButton(
+            AppPrimaryButton(
                 text = stringResource(R.string.btn_grant_and_start),
                 onClick = onNext
             )
@@ -152,7 +152,7 @@ private fun PermissionRow(item: PermissionItem) {
             Surface(
                 modifier = Modifier.size(52.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = MidasWhite
+                color = BrandWhite
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(text = item.emoji, fontSize = 30.sp)

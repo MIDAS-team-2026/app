@@ -15,15 +15,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 /**
- * zip의 `Widget.Midas.Button.Primary` 스타일에 대응하는 Compose 버튼.
+ * zip의 `Widget.App.Button.Primary` 스타일에 대응하는 Compose 버튼.
  * - 높이 64dp, 코너 16dp, 배경 green_400, 텍스트 onPrimary, 18sp semi-bold
  *   (노년층 가독성 우선으로 기존 52dp/14dp/15sp 대비 확대됨)
  */
 @Composable
-fun MidasPrimaryButton(
+fun AppPrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -38,9 +38,9 @@ fun MidasPrimaryButton(
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Green400,
-            contentColor = MidasWhite,
+            contentColor = BrandWhite,
             disabledContainerColor = Green400.copy(alpha = 0.4f),
-            disabledContentColor = MidasWhite.copy(alpha = 0.7f)
+            disabledContentColor = BrandWhite.copy(alpha = 0.7f)
         )
     ) {
         Text(text = text, style = MaterialTheme.typography.labelLarge)
@@ -48,10 +48,10 @@ fun MidasPrimaryButton(
 }
 
 /**
- * zip의 `Widget.Midas.Button.Outline` 스타일에 대응.
+ * zip의 `Widget.App.Button.Outline` 스타일에 대응.
  */
 @Composable
-fun MidasOutlineButton(
+fun AppOutlineButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -73,10 +73,10 @@ fun MidasOutlineButton(
 }
 
 /**
- * zip의 `Widget.Midas.Button.Text` 스타일에 대응.
+ * zip의 `Widget.App.Button.Text` 스타일에 대응.
  */
 @Composable
-fun MidasTextButton(
+fun AppTextButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,

@@ -37,8 +37,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.components.MidasPrimaryButton
-import com.midas26.mobileapp.ui.components.MidasTextButton
+import com.midas26.mobileapp.ui.components.AppPrimaryButton
+import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -88,7 +88,7 @@ fun OnboardingScreen(
             horizontalArrangement = Arrangement.End
         ) {
             if (!isLast) {
-                MidasTextButton(
+                AppTextButton(
                     text = stringResource(R.string.btn_skip),
                     onClick = { finish() }
                 )
@@ -133,7 +133,7 @@ fun OnboardingScreen(
         }
 
         // 다음 / 시작하기 버튼
-        MidasPrimaryButton(
+        AppPrimaryButton(
             text = if (isLast) stringResource(R.string.btn_start) else stringResource(R.string.btn_next),
             onClick = {
                 if (isLast) {

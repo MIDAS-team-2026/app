@@ -11,22 +11,22 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.midas26.mobileapp.ui.navigation.MidasNavHost
-import com.midas26.mobileapp.ui.theme.MobileAppTheme
+import com.midas26.mobileapp.ui.navigation.AppNavHost
+import com.midas26.mobileapp.ui.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MidasApp()
+            AppRoot()
         }
     }
 }
 
 @Composable
-fun MidasApp() {
-    MobileAppTheme {
+fun AppRoot() {
+    AppTheme {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
             // NavHost 자체는 화면을 채우고 시스템 인셋은 각 화면에서 처리
             Box(
@@ -34,7 +34,7 @@ fun MidasApp() {
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                MidasNavHost()
+                AppNavHost()
             }
         }
     }
@@ -42,6 +42,6 @@ fun MidasApp() {
 
 @Preview(showBackground = true)
 @Composable
-fun MidasAppPreview() {
-    MidasApp()
+fun AppRootPreview() {
+    AppRoot()
 }

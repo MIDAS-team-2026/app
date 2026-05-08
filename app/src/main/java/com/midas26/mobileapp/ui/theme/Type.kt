@@ -7,7 +7,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Midas 앱 타이포그래피 — 노년층 가독성 우선.
+ * 앱 타이포그래피 — 노년층 가독성 우선.
  *
  * 모든 본문/라벨이 기존보다 약 25~30% 커지고, 줄간격(lineHeight)도
  * 1.4~1.5배 비율을 유지하여 읽기 편하게 구성되어 있습니다.

@@ -31,14 +31,14 @@ import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Green400
 
 /**
- * zip의 `Widget.Midas.TextInput` (OutlinedBox) 스타일에 대응.
+ * zip의 `Widget.App.TextInput` (OutlinedBox) 스타일에 대응.
  *
  * - 코너 16dp (기존 12dp), 포커스 시 green_400 / 비포커스 시 gray_200
  * - 본문 19sp, label 18sp 로 노년층 가독성 우선
  * - leading icon 지원, password 토글 지원, 에러 텍스트 지원
  */
 @Composable
-fun MidasOutlinedTextField(
+fun AppOutlinedTextField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
