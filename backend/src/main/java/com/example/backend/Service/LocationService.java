@@ -2,7 +2,9 @@ package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.LocationDTO;
 import com.example.backend.Model.DTO.SafeZoneDTO;
-import com.example.backend.Model.Entity.*;
+import com.example.backend.Model.Entity.location.Location;
+import com.example.backend.Model.Entity.location.UserLocation;
+import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

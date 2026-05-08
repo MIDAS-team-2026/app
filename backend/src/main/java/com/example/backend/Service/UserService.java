@@ -1,6 +1,6 @@
 package com.example.backend.Service;
 
-import com.example.backend.Model.Entity.User;
+import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
