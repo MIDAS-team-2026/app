@@ -1,60 +1,94 @@
 package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.LocationDTO;
-import com.example.backend.Model.Entity.Location;
-import com.example.backend.Model.Repository.LocationRepository;
+import com.example.backend.Model.DTO.SafeZoneDTO;
+import com.example.backend.Model.Entity.*;
+import com.example.backend.Model.Repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 
 @Service
 @RequiredArgsConstructor
 public class LocationService {
 
     private final LocationRepository locationRepository;
+    private final UserLocationRepository userLocationRepository;
+    private final UserRepository userRepository;
 
     @Transactional
     public void saveLocation(LocationDTO dto) {
+        User user = userRepository.findById(dto.getUserId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
         Location location = new Location();
-        // User 객체는 실제 프로젝트의 User 확보 로직에 따라 설정 필요
+        location.setUser(user);
         location.setLatitude(dto.getLatitude());
         location.setLongitude(dto.getLongitude());
-        location.setCreatedAt(Instant.now());
+
+        // String timestamp -> Instant 변환
+        if (dto.getTimestamp() != null) {
+            LocalDateTime ldt = LocalDateTime.parse(dto.getTimestamp(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            location.setCreatedAt(ldt.toInstant(ZoneOffset.UTC));
+        } else {
+            location.setCreatedAt(Instant.now());
+        }
+
         locationRepository.save(location);
     }
 
-    public Location getLatestLocation(Integer userId) {
-        return locationRepository.findFirstByUserIdOrderByCreatedAtDesc(userId);
+    @Transactional
+    public void updateSafeZone(SafeZoneDTO dto) {
+        User user = userRepository.findById(dto.getUserId())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        UserLocation config = userLocationRepository.findById(dto.getUserId())
+                .orElseGet(() -> {
+                    UserLocation newConfig = new UserLocation();
+                    newConfig.setUser(user);
+                    return newConfig;
+                });
+
+        config.setZoneName(dto.getZoneName());
+        config.setBaseLatitude(dto.getLatitude());
+        config.setBaseLongitude(dto.getLongitude());
+        config.setSafeRadius(dto.getRadius());
+
+        userLocationRepository.saveAndFlush(config);
     }
 
-    // 안심 구역 이탈 판별 로직
     public boolean isWithinSafeZone(Integer userId) {
-        Location current = getLatestLocation(userId);
-        if (current == null) return true;
+        Location current = locationRepository.findFirstByUserIdOrderByCreatedAtDesc(userId);
+        UserLocation config = userLocationRepository.findById(userId).orElse(null);
 
-        // 임의의 중심점과 반경(예: 500m) - 실제로는 SafeZoneDTO 등에서 가져와야 함
-        double centerLat = 37.5665;
-        double centerLon = 126.9780;
-        double radius = 500.0;
+        if (current == null || config == null || config.getBaseLatitude() == null) return true;
 
         double distance = calculateDistance(
                 current.getLatitude().doubleValue(), current.getLongitude().doubleValue(),
-                centerLat, centerLon
+                config.getBaseLatitude(), config.getBaseLongitude()
         );
-
-        return distance <= radius;
+        return distance <= config.getSafeRadius();
     }
 
-    // 두 좌표 사이의 거리를 계산하는 메서드 (단위: m)
+    /**
+     * 하버사인 공식 (Haversine Formula):
+     * 위도(Latitude)와 경도(Longitude) 좌표를 사용하여 구(Sphere) 위에서의 대원 거리를 계산함.
+     * 지구의 곡률을 고려하므로, 피타고라스 정리에 비해 GPS 좌표 간 거리 계산 시 오차가 매우 적음.
+     * 단위: 미터(m)
+     */
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        double theta = lon1 - lon2;
-        double dist = Math.sin(Math.toRadians(lat1)) * Math.sin(Math.toRadians(lat2))
-                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.cos(Math.toRadians(theta));
-        dist = Math.acos(dist);
-        dist = Math.toDegrees(dist);
-        return dist * 60 * 1.1515 * 1609.344;
+        double R = 6371e3;
+        double phi1 = Math.toRadians(lat1), phi2 = Math.toRadians(lat2);
+        double deltaPhi = Math.toRadians(lat2 - lat1);
+        double deltaLambda = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) *
+                        Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 }
