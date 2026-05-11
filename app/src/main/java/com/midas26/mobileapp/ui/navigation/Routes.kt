@@ -51,6 +51,9 @@ object Routes {
     const val AnalysisResult = "analysis_result"
     const val AnalysisGraph = "analysis_graph"
 
+    // 설정
+    const val Settings = "settings"
+
     /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
     const val Home = UserHome
 }

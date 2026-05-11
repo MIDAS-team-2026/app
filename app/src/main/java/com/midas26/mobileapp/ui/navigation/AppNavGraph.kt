@@ -27,6 +27,7 @@ import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.ui.home.UserMenu
+import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.util.PrefsManager
 
 /**
@@ -189,8 +190,23 @@ fun AppNavHost(
                         UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
                         UserMenu.Recall    -> navController.navigate(Routes.RecallStart)
                         UserMenu.Analysis  -> navController.navigate(Routes.AnalysisLoading)
-                        // 설정은 추후 화면 작성 시 라우트 추가
-                        else -> Unit
+                        UserMenu.Settings  -> navController.navigate(Routes.Settings)
+                    }
+                }
+            )
+        }
+
+        composable(Routes.Settings) {
+            SettingsScreen(
+                onBack = { navController.popBackStackIfCurrent(Routes.Settings) },
+                onLogout = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onDeleteAccount = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             )
