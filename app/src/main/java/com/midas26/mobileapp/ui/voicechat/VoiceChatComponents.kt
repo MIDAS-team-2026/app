@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.voicechat
+﻿package com.midas26.mobileapp.ui.voicechat
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode

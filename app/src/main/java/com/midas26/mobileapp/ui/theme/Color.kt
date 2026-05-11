@@ -22,8 +22,13 @@ val Gray800 = Color(0xFF1F2937)
 val Gray900 = Color(0xFF111827)
 
 // Semantic
-val Amber50 = Color(0xFFFEF6E0)
+val Amber50  = Color(0xFFFEF6E0)
+val Amber100 = Color(0xFFFDE9A8)
+val Amber200 = Color(0xFFFBD57A)
 val Amber400 = Color(0xFFF5BF34)
+val Amber500 = Color(0xFFE6A800)
+val Amber600 = Color(0xFFCC8C00)
+val Amber900 = Color(0xFF7A5100)
 val Red400 = Color(0xFFEF4444)
 val Red50 = Color(0xFFFEF2F2)
 

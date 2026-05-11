@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.permission
+﻿package com.midas26.mobileapp.ui.permission
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,8 +29,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber400
-import com.midas26.mobileapp.ui.theme.Amber50
+import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -132,8 +132,8 @@ fun PermissionScreen(
 @Composable
 private fun PermissionRow(item: PermissionItem) {
     // 필수=녹색, 선택=앰버 (위치/알림/저장소 모두 앰버로 통일하여 시각적 잡음 최소화)
-    val cardBg = if (item.isRequired) Green50 else Amber50
-    val stroke = if (item.isRequired) Green400 else Amber400
+    val cardBg = if (item.isRequired) Green50 else Green50
+    val stroke = if (item.isRequired) Green400 else Green400
     val chipBg = cardBg
     val chipColor = stroke
     val chipText = if (item.isRequired) R.string.permission_required else R.string.permission_optional

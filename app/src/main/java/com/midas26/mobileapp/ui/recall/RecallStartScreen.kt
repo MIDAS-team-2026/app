@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.recall
+﻿package com.midas26.mobileapp.ui.recall
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,8 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber50
-import com.midas26.mobileapp.ui.theme.Amber400
+import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
@@ -166,7 +166,7 @@ fun RecallStartScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = Amber50
+                color = Green50
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -184,7 +184,7 @@ fun RecallStartScreen(
                         Text(
                             text = "편한 자세로 진행하세요",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Amber400
+                            color = Green400
                         )
                     }
                 }

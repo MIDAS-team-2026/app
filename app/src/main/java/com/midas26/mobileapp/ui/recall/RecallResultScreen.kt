@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.recall
+﻿package com.midas26.mobileapp.ui.recall
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,8 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber400
-import com.midas26.mobileapp.ui.theme.Amber50
+import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
@@ -171,7 +171,7 @@ fun RecallResultScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(20.dp),
-                    color = Amber50
+                    color = Green50
                 ) {
                     Row(modifier = Modifier.padding(16.dp)) {
                         Text(text = "💬", fontSize = 22.sp)
@@ -221,7 +221,7 @@ fun RecallResultScreen(
 
 @Composable
 private fun DetailRow(item: RecallScore.DetailItem) {
-    val barColor = if (item.isWarning) Amber400 else Green400
+    val barColor = if (item.isWarning) Green400 else Green400
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),

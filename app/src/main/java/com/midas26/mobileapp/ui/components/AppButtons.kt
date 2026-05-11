@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.components
+﻿package com.midas26.mobileapp.ui.components
 
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth

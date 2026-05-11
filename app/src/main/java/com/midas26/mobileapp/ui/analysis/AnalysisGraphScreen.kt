@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.analysis
+﻿package com.midas26.mobileapp.ui.analysis
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,8 +42,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.platform.LocalDensity
-import com.midas26.mobileapp.ui.theme.Amber400
-import com.midas26.mobileapp.ui.theme.Amber50
+import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -337,8 +337,8 @@ private fun LineChart(
 private fun TrendRow(item: AnalysisItem) {
     val (bg, fg) = when (item.trend) {
         AnalysisItem.Trend.Up     -> Green50 to Green600
-        AnalysisItem.Trend.Steady -> Amber50 to Amber400
-        AnalysisItem.Trend.Down   -> Amber50 to Amber400
+        AnalysisItem.Trend.Steady -> Green50 to Green400
+        AnalysisItem.Trend.Down   -> Green50 to Green400
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),

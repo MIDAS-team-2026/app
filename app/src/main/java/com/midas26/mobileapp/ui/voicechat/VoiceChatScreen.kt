@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.voicechat
+﻿package com.midas26.mobileapp.ui.voicechat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement

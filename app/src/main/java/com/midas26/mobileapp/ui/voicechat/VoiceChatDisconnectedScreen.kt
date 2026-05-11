@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.voicechat
+﻿package com.midas26.mobileapp.ui.voicechat
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber50
+import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray600
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -59,7 +59,7 @@ fun VoiceChatDisconnectedScreen(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
-                    .background(Amber50),
+                    .background(Green50),
                 contentAlignment = Alignment.Center
             ) {
                 Text(text = "📡", fontSize = 44.sp)

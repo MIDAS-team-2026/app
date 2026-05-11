@@ -98,7 +98,7 @@ fun AppNavHost(
 
         composable(Routes.SignupRole) {
             SignupRoleScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.SignupRole) },
                 onNext = { role ->
                     navController.navigate(Routes.signupInfo(role))
                 }
@@ -118,7 +118,7 @@ fun AppNavHost(
                 ?: PrefsManager.ROLE_USER
             SignupInfoScreen(
                 role = role,
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
                 // 회원가입 완료 후 권한 요청 화면으로 이동
                 onComplete = {
                     navController.navigate(Routes.permission(role)) {
@@ -202,26 +202,26 @@ fun AppNavHost(
 
         composable(Routes.VoiceChat) {
             VoiceChatScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
                 onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) }
             )
         }
 
         composable(Routes.VoiceChatDisconnected) {
             VoiceChatDisconnectedScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected) },
                 onGoHome = {
                     navController.navigate(Routes.UserHome) {
                         popUpTo(Routes.UserHome) { inclusive = true }
                     }
                 },
-                onRetry = { navController.popBackStack() }
+                onRetry = { navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected) }
             )
         }
 
         composable(Routes.RecallStart) {
             RecallStartScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.RecallStart) },
                 onStart = {
                     navController.navigate(Routes.RecallQuestion) {
                         popUpTo(Routes.RecallStart) { inclusive = true }
@@ -232,7 +232,7 @@ fun AppNavHost(
 
         composable(Routes.RecallQuestion) {
             RecallQuestionScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.RecallQuestion) },
                 onFinishedAll = {
                     navController.navigate(Routes.RecallResult) {
                         popUpTo(Routes.RecallQuestion) { inclusive = true }
@@ -243,7 +243,7 @@ fun AppNavHost(
 
         composable(Routes.RecallResult) {
             RecallResultScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.RecallResult) },
                 onGoHome = {
                     navController.navigate(Routes.UserHome) {
                         popUpTo(Routes.UserHome) { inclusive = true }
@@ -267,14 +267,14 @@ fun AppNavHost(
 
         composable(Routes.AnalysisResult) {
             AnalysisResultScreen(
-                onBack = { navController.popBackStack() },
+                onBack = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
                 onShowGraph = { navController.navigate(Routes.AnalysisGraph) }
             )
         }
 
         composable(Routes.AnalysisGraph) {
             AnalysisGraphScreen(
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStackIfCurrent(Routes.AnalysisGraph) }
             )
         }
     }

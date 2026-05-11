@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.theme
+﻿package com.midas26.mobileapp.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -22,7 +22,7 @@ private val AppLightColorScheme = lightColorScheme(
     onSecondary = Green900,
     secondaryContainer = Green100,
     onSecondaryContainer = Green900,
-    tertiary = Amber400,
+    tertiary = Green400,
     background = BrandWhite,
     onBackground = Gray800,
     surface = BrandWhite,

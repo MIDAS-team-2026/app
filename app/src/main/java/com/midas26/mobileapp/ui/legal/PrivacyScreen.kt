@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.legal
+﻿package com.midas26.mobileapp.ui.legal
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -40,8 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber400
-import com.midas26.mobileapp.ui.theme.Amber50
+import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -210,7 +210,7 @@ private fun PrivacyRow(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = checked, accent = if (item.isRequired) Green400 else Amber400)
+            Checkbox(checked = checked, accent = if (item.isRequired) Green400 else Green400)
             Spacer(modifier = Modifier.size(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -229,7 +229,7 @@ private fun PrivacyRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (item.isRequired) Green50 else Amber50)
+                    .background(if (item.isRequired) Green50 else Green50)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -239,7 +239,7 @@ private fun PrivacyRow(
                         else R.string.permission_optional
                     ),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (item.isRequired) Green400 else Amber400,
+                    color = if (item.isRequired) Green400 else Green400,
                     fontWeight = FontWeight.SemiBold
                 )
             }

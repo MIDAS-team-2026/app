@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.home
+﻿package com.midas26.mobileapp.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -30,13 +31,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green100
+import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.Gray100
+import com.midas26.mobileapp.ui.theme.Gray200
+import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
 
@@ -310,26 +313,16 @@ private fun MenuGrid(
         modifier = modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        // 음성대화 — 회상과제 자리까지 가로 전체 차지
+        MenuCard(
+            emoji = "🎙️",
+            titleRes = R.string.menu_voice_chat,
+            badge = "N",
+            onClick = { onMenuClick(UserMenu.VoiceChat) },
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MenuCard(
-                emoji = "🎙️",
-                titleRes = R.string.menu_voice_chat,
-                badge = "N",
-                onClick = { onMenuClick(UserMenu.VoiceChat) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                emoji = "🧩",
-                titleRes = R.string.menu_recall,
-                onClick = { onMenuClick(UserMenu.Recall) },
-                modifier = Modifier.weight(1f)
-            )
-        }
+                .weight(1f)
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -426,7 +419,8 @@ internal fun BottomTabBar(
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = BrandWhite,
-        shadowElevation = 8.dp
+        shadowElevation = 0.dp,
+        border = BorderStroke(width = 1.dp, color = Gray200)
     ) {
         Row(
             modifier = Modifier

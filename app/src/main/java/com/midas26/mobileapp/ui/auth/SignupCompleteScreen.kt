@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.auth
+﻿package com.midas26.mobileapp.ui.auth
 
 import android.content.ClipData
 import android.content.ClipboardManager

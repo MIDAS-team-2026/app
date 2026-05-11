@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.analysis
+﻿package com.midas26.mobileapp.ui.analysis
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode

@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.onboarding
+﻿package com.midas26.mobileapp.ui.onboarding
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background

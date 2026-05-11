@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.analysis
+﻿package com.midas26.mobileapp.ui.analysis
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Amber400
+import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -233,7 +233,7 @@ fun AnalysisResultScreen(
 private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
     val accent = when (item.trend) {
         AnalysisItem.Trend.Up     -> Green600
-        AnalysisItem.Trend.Down   -> Amber400
+        AnalysisItem.Trend.Down   -> Green400
         AnalysisItem.Trend.Steady -> Gray400
     }
     Surface(
