@@ -47,53 +47,37 @@ fun GuardianHomeScreen(
     weeklyScore: Int = 75,
     voiceCheckDone: Boolean = true,
     recallCheckDone: Boolean = false,
-    onMenuClick: (GuardianMenu) -> Unit = {},
-    onTabClick: (TabId) -> Unit = {}
+    onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 한 화면 안에 모두 표시 (스크롤 없음 — 노년층 가독성 우선)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 72.dp)
-        ) {
-            GuardianHeader(
-                guardianName = guardianName,
-                linkedUserName = linkedUserName,
-                voiceCheckDone = voiceCheckDone,
-                recallCheckDone = recallCheckDone
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            GuardianScoreCard(score = weeklyScore)
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = stringResource(R.string.guardian_menu),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 24.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            GuardianMenuGrid(
-                onMenuClick = onMenuClick,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        BottomTabBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            tabs = guardianTabs,
-            selectedTab = GuardianHomeTab.Home,
-            onTabClick = onTabClick,
-            accent = GuardianAccentDark
+        GuardianHeader(
+            guardianName = guardianName,
+            linkedUserName = linkedUserName,
+            voiceCheckDone = voiceCheckDone,
+            recallCheckDone = recallCheckDone
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        GuardianScoreCard(score = weeklyScore)
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = stringResource(R.string.guardian_menu),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Gray400,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        GuardianMenuGrid(
+            onMenuClick = onMenuClick,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -379,9 +363,3 @@ private fun GuardianMenuCard(
     }
 }
 
-private val guardianTabs = listOf(
-    TabItem(GuardianHomeTab.Home,     "🏠", R.string.tab_home),
-    TabItem(GuardianHomeTab.Analysis, "📊", R.string.tab_analysis),
-    TabItem(GuardianHomeTab.Location, "📍", R.string.guardian_tab_location),
-    TabItem(GuardianHomeTab.Settings, "⚙️", R.string.menu_settings)
-)

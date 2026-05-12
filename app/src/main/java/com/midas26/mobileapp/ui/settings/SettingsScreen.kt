@@ -59,7 +59,8 @@ fun SettingsScreen(
     userName: String = "홍길동",
     onBack: () -> Unit = {},
     onLogout: () -> Unit = {},
-    onDeleteAccount: () -> Unit = {}
+    onDeleteAccount: () -> Unit = {},
+    onAccessibility: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val role = PrefsManager.from(context).getUserRole()
@@ -121,6 +122,12 @@ fun SettingsScreen(
                 SettingsRow(label = "프로필 편집", onClick = {})
                 HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(label = "비밀번호 변경", onClick = {})
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SettingsSection(title = "접근성") {
+                SettingsRow(label = "접근성 설정", onClick = onAccessibility)
             }
 
             Spacer(modifier = Modifier.height(12.dp))

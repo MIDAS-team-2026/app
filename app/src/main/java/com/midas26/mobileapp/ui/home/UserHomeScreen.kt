@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -50,54 +49,37 @@ fun UserHomeScreen(
     streakDays: Int = 4,
     weeklyChecks: List<Boolean> = listOf(true, true, true, true, true, false, false), // 월~일
     todayIndex: Int = 5, // 토요일이 오늘 (0=월)
-    onMenuClick: (UserMenu) -> Unit = {},
-    onTabClick: (TabId) -> Unit = {}
+    onMenuClick: (UserMenu) -> Unit = {}
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 한 화면 안에 모두 표시 (스크롤 없음 — 노년층 가독성 우선)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 72.dp) // 탭바 높이 확보
-        ) {
-            UserHomeHeader(
-                userName = userName,
-                streakDays = streakDays,
-                weeklyChecks = weeklyChecks,
-                todayIndex = todayIndex
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ScoreCard(score = weeklyScore)
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = stringResource(R.string.home_today_check),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 24.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            // 남은 공간을 메뉴 그리드가 채우도록 weight 사용
-            MenuGrid(
-                onMenuClick = onMenuClick,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        BottomTabBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            tabs = userTabs,
-            selectedTab = UserHomeTab.Home,
-            onTabClick = onTabClick,
-            accent = Green500
+        UserHomeHeader(
+            userName = userName,
+            streakDays = streakDays,
+            weeklyChecks = weeklyChecks,
+            todayIndex = todayIndex
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ScoreCard(score = weeklyScore)
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = stringResource(R.string.home_today_check),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Gray400,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        MenuGrid(
+            onMenuClick = onMenuClick,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -408,73 +390,6 @@ private fun MenuCard(
     }
 }
 
-@Composable
-internal fun BottomTabBar(
-    modifier: Modifier = Modifier,
-    tabs: List<TabItem>,
-    selectedTab: TabId,
-    onTabClick: (TabId) -> Unit,
-    accent: Color
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp,
-        border = BorderStroke(width = 1.dp, color = Gray200)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            tabs.forEach { tab ->
-                val selected = tab.id == selectedTab
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onTabClick(tab.id) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 24.dp, height = 4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(accent)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                    } else {
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-                    Text(text = tab.emoji, fontSize = 22.sp)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(tab.labelRes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (selected) accent else Gray400,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                }
-            }
-        }
-    }
-}
-
-// === 데이터 모델 / 자리표시자 ===
+// === 데이터 모델 ===
 
 enum class UserMenu { VoiceChat, Recall, Analysis, Settings }
-sealed interface TabId
-enum class UserHomeTab : TabId { Home, Chat, Analysis, Profile }
-enum class GuardianHomeTab : TabId { Home, Analysis, Location, Settings }
-
-internal data class TabItem(val id: TabId, val emoji: String, val labelRes: Int)
-
-private val userTabs = listOf(
-    TabItem(UserHomeTab.Home,     "🏠", R.string.tab_home),
-    TabItem(UserHomeTab.Chat,     "🎙️", R.string.tab_chat),
-    TabItem(UserHomeTab.Analysis, "📈", R.string.tab_analysis),
-    TabItem(UserHomeTab.Profile,  "👤", R.string.tab_profile)
-)
