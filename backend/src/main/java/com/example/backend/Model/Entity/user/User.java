@@ -60,6 +60,9 @@ public class User {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "fcm_token")
+    private String fcmToken;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<ChatSession> chatSessions = new ArrayList<>();
 

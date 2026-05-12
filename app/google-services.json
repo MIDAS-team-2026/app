@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "433559725804",
+    "project_id": "midas-8af06",
+    "storage_bucket": "midas-8af06.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:433559725804:android:448023446f87cdf24627c9",
+        "android_client_info": {
+          "package_name": "com.example.midas"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmdXYAtA-QiOSMIUCaLs2rVUSpedEbacg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:433559725804:android:cc6b93a96f91acb84627c9",
+        "android_client_info": {
+          "package_name": "com.midas26.mobileapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCmdXYAtA-QiOSMIUCaLs2rVUSpedEbacg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,9 +1,6 @@
 package com.example.backend.Controller;
 
-import com.example.backend.Model.DTO.ApiResponse;
-import com.example.backend.Model.DTO.LinkRequestDTO;
-import com.example.backend.Model.DTO.LoginDTO;
-import com.example.backend.Model.DTO.SignupDTO;
+import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -64,5 +61,11 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(500, "연동 처리 중 서버 오류가 발생했습니다."));
         }
+    }
+
+    @PostMapping("/fcm-token")
+    public ResponseEntity<ApiResponse<Void>> updateFcmToken(@RequestBody FcmTokenDTO dto) {
+        userService.updateFcmToken(dto.getUserId(), dto.getToken());
+        return ResponseEntity.ok(ApiResponse.success());
     }
 }

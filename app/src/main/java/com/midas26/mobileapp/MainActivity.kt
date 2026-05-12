@@ -1,6 +1,7 @@
 package com.midas26.mobileapp
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.google.firebase.messaging.FirebaseMessaging
 import com.midas26.mobileapp.ui.theme.MobileAppTheme
 
 class MainActivity : ComponentActivity() {
@@ -25,6 +27,14 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
+            }
+        }
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM_TOKEN", "토큰: $token")
+            } else {
+                Log.e("FCM_TOKEN", "토큰 가져오기 실패", task.exception)
             }
         }
     }

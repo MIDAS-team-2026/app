@@ -68,4 +68,12 @@ public class UserService {
                 .filter(u -> u.getPassword().equals(password))
                 .orElse(null);
     }
+
+    @Transactional
+    public void updateFcmToken(Integer userId, String token) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        user.setFcmToken(token); // 여기서 DB에 토큰이 저장됩니다.
+    }
 }

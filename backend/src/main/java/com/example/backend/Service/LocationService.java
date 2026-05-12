@@ -24,7 +24,6 @@ public class LocationService {
     private final UserLocationRepository userLocationRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
-
     @Transactional
     public void saveLocation(LocationDTO dto) {
         User user = userRepository.findById(dto.getUserId())
@@ -45,9 +44,7 @@ public class LocationService {
 
             // 반경 이탈 시 알림 발송
             if (distance > config.getSafeRadius()) {
-                notificationService.notifyAllProtectors(user,
-                        "안심구역 이탈 경보",
-                        user.getName() + " 님이 설정된 안심구역을 벗어났습니다. 현재 위치를 확인하세요.");
+                notificationService.notifyAllProtectors(user, "안심구역 이탈", user.getName() + "님이 구역을 벗어났습니다!");
             }
         }
     }
