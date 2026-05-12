@@ -23,6 +23,7 @@ public class LocationService {
     private final LocationRepository locationRepository;
     private final UserLocationRepository userLocationRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public void saveLocation(LocationDTO dto) {
@@ -33,8 +34,22 @@ public class LocationService {
         location.setUser(user);
         location.setLatitude(dto.getLatitude());
         location.setLongitude(dto.getLongitude());
-
         locationRepository.save(location);
+
+        UserLocation config = userLocationRepository.findById(dto.getUserId()).orElse(null);
+        if (config != null && config.getBaseLatitude() != null) {
+            double distance = calculateDistance(
+                    dto.getLatitude().doubleValue(), dto.getLongitude().doubleValue(),
+                    config.getBaseLatitude().doubleValue(), config.getBaseLongitude().doubleValue()
+            );
+
+            // 반경 이탈 시 알림 발송
+            if (distance > config.getSafeRadius()) {
+                notificationService.notifyAllProtectors(user,
+                        "안심구역 이탈 경보",
+                        user.getName() + " 님이 설정된 안심구역을 벗어났습니다. 현재 위치를 확인하세요.");
+            }
+        }
     }
 
     @Transactional
