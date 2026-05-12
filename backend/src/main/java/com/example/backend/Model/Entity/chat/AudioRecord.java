@@ -59,7 +59,7 @@ public class AudioRecord {
     @Column(name = "answer_role", length = 50)
     private String answerRole;
 
-    @Column(name = "audio_file_path")
+    @Column(name = "audio_file_path", length = 1000)
     private String audioFilePath;
 
     @Column(name = "audio_duration")
