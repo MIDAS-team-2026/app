@@ -39,11 +39,40 @@ class PrefsManager(context: Context) {
         prefs.edit().putString(KEY_ROLE, role).apply()
     }
 
+    // 사용자 코드
+    fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
+    fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
+
+    // 접근성 설정
+    fun getAccessibilityFontSize(): Int = prefs.getInt(KEY_FONT_SIZE, 1)
+    fun setAccessibilityFontSize(level: Int) { prefs.edit().putInt(KEY_FONT_SIZE, level).apply() }
+
+    fun getHighContrast(): Boolean = prefs.getBoolean(KEY_HIGH_CONTRAST, false)
+    fun setHighContrast(enabled: Boolean) { prefs.edit().putBoolean(KEY_HIGH_CONTRAST, enabled).apply() }
+
+    fun getTtsSpeed(): Float = prefs.getFloat(KEY_TTS_SPEED, 1.0f)
+    fun setTtsSpeed(speed: Float) { prefs.edit().putFloat(KEY_TTS_SPEED, speed).apply() }
+
+    fun getHapticFeedback(): Boolean = prefs.getBoolean(KEY_HAPTIC, true)
+    fun setHapticFeedback(enabled: Boolean) { prefs.edit().putBoolean(KEY_HAPTIC, enabled).apply() }
+
+    fun getLargeTouchArea(): Boolean = prefs.getBoolean(KEY_LARGE_TOUCH, false)
+    fun setLargeTouchArea(enabled: Boolean) { prefs.edit().putBoolean(KEY_LARGE_TOUCH, enabled).apply() }
+
     companion object {
         private const val PREF_NAME = "midas_prefs"
         private const val KEY_ONBOARDING = "seen_onboarding"
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_ROLE = "user_role"
+
+        private const val KEY_USER_CODE = "user_code"
+
+        // 접근성
+        private const val KEY_FONT_SIZE = "a11y_font_size"
+        private const val KEY_HIGH_CONTRAST = "a11y_high_contrast"
+        private const val KEY_TTS_SPEED = "a11y_tts_speed"
+        private const val KEY_HAPTIC = "a11y_haptic"
+        private const val KEY_LARGE_TOUCH = "a11y_large_touch"
 
         const val ROLE_USER = "user"
         const val ROLE_GUARDIAN = "guardian"

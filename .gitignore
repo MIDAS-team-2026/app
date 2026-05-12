@@ -9,6 +9,22 @@
 .cxx
 local.properties
 
+# Kotlin 컴파일러 데몬 에러 로그 (로컬 빌드 산출물)
+.kotlin/
+
+# 빌드 산출물
+*.apk
+*.aab
+*.ap_
+
+# 서명 설정 (민감 정보)
+keystore.properties
+*.keystore
+*.jks
+
 # 형섭 작업용
 private/
 /private/
+
+# Claude Code 내부 데이터 (worktree, 세션 등)
+.claude/

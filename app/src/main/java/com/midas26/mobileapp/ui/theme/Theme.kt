@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.theme
+﻿package com.midas26.mobileapp.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -13,30 +13,30 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val MidasLightColorScheme = lightColorScheme(
+private val AppLightColorScheme = lightColorScheme(
     primary = Green400,
-    onPrimary = MidasWhite,
+    onPrimary = BrandWhite,
     primaryContainer = Green50,
     onPrimaryContainer = Green900,
     secondary = Green200,
     onSecondary = Green900,
     secondaryContainer = Green100,
     onSecondaryContainer = Green900,
-    tertiary = Amber400,
-    background = MidasWhite,
+    tertiary = Green400,
+    background = BrandWhite,
     onBackground = Gray800,
-    surface = MidasWhite,
+    surface = BrandWhite,
     onSurface = Gray800,
     surfaceVariant = Gray50,
     onSurfaceVariant = Gray600,
     outline = Gray200,
     error = Red400,
-    onError = MidasWhite,
+    onError = BrandWhite,
     errorContainer = Red50,
     onErrorContainer = Red400
 )
 
-private val MidasDarkColorScheme = darkColorScheme(
+private val AppDarkColorScheme = darkColorScheme(
     primary = Green200,
     onPrimary = Green900,
     primaryContainer = Green600,
@@ -48,17 +48,17 @@ private val MidasDarkColorScheme = darkColorScheme(
     surface = Gray900,
     onSurface = Gray100,
     error = Red400,
-    onError = MidasWhite
+    onError = BrandWhite
 )
 
 /**
- * Midas 앱 전역 테마.
- * 기존 프로젝트와의 호환성을 위해 [MobileAppTheme] 이름을 유지합니다.
+ * 앱 전역 테마.
+ * 기존 프로젝트와의 호환성을 위해 [AppTheme] 이름을 유지합니다.
  *
  * 주의: 디자인 가이드(밝은 배경 + 라이트 상태바)에 맞추기 위해 dynamicColor 기본값은 false.
  */
 @Composable
-fun MobileAppTheme(
+fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
@@ -72,8 +72,8 @@ fun MobileAppTheme(
                 androidx.compose.material3.dynamicLightColorScheme(context)
             }
         }
-        darkTheme -> MidasDarkColorScheme
-        else -> MidasLightColorScheme
+        darkTheme -> AppDarkColorScheme
+        else -> AppLightColorScheme
     }
 
     val view = LocalView.current
@@ -92,10 +92,3 @@ fun MobileAppTheme(
     )
 }
 
-/** 새 코드에서 사용할 수 있는 별칭. */
-@Composable
-fun MidasTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
-    content: @Composable () -> Unit
-) = MobileAppTheme(darkTheme = darkTheme, dynamicColor = dynamicColor, content = content)

@@ -2,7 +2,7 @@ package com.midas26.mobileapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// === Midas Brand Palette ===
+// === Brand Palette ===
 // Primary Green
 val Green50 = Color(0xFFE8F5E4)
 val Green100 = Color(0xFFC2E2B9)
@@ -22,8 +22,13 @@ val Gray800 = Color(0xFF1F2937)
 val Gray900 = Color(0xFF111827)
 
 // Semantic
-val Amber50 = Color(0xFFFEF6E0)
+val Amber50  = Color(0xFFFEF6E0)
+val Amber100 = Color(0xFFFDE9A8)
+val Amber200 = Color(0xFFFBD57A)
 val Amber400 = Color(0xFFF5BF34)
+val Amber500 = Color(0xFFE6A800)
+val Amber600 = Color(0xFFCC8C00)
+val Amber900 = Color(0xFF7A5100)
 val Red400 = Color(0xFFEF4444)
 val Red50 = Color(0xFFFEF2F2)
 
@@ -33,8 +38,8 @@ val GuardianAccentDark = Color(0xFFC85E48)
 val GuardianAccentLight = Color(0xFFFEE5E0)
 
 // Base
-val MidasWhite = Color(0xFFFFFFFF)
-val MidasBlack = Color(0xFF000000)
+val BrandWhite = Color(0xFFFFFFFF)
+val BrandBlack = Color(0xFF000000)
 
 // Legacy (Material starter palette retained for compatibility)
 val Purple80 = Color(0xFFD0BCFF)

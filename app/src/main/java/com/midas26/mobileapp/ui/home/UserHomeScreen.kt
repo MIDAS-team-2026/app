@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.home
+﻿package com.midas26.mobileapp.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -30,14 +30,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green100
+import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.Gray100
+import com.midas26.mobileapp.ui.theme.Gray200
+import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.Gray800
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
 
 @Composable
@@ -47,54 +49,37 @@ fun UserHomeScreen(
     streakDays: Int = 4,
     weeklyChecks: List<Boolean> = listOf(true, true, true, true, true, false, false), // 월~일
     todayIndex: Int = 5, // 토요일이 오늘 (0=월)
-    onMenuClick: (UserMenu) -> Unit = {},
-    onTabClick: (TabId) -> Unit = {}
+    onMenuClick: (UserMenu) -> Unit = {}
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // 한 화면 안에 모두 표시 (스크롤 없음 — 노년층 가독성 우선)
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = 72.dp) // 탭바 높이 확보
-        ) {
-            UserHomeHeader(
-                userName = userName,
-                streakDays = streakDays,
-                weeklyChecks = weeklyChecks,
-                todayIndex = todayIndex
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ScoreCard(score = weeklyScore)
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = stringResource(R.string.home_today_check),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(start = 24.dp)
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            // 남은 공간을 메뉴 그리드가 채우도록 weight 사용
-            MenuGrid(
-                onMenuClick = onMenuClick,
-                modifier = Modifier.weight(1f)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        BottomTabBar(
-            modifier = Modifier.align(Alignment.BottomCenter),
-            tabs = userTabs,
-            selectedTab = UserHomeTab.Home,
-            onTabClick = onTabClick,
-            accent = Green500
+        UserHomeHeader(
+            userName = userName,
+            streakDays = streakDays,
+            weeklyChecks = weeklyChecks,
+            todayIndex = todayIndex
         )
+        Spacer(modifier = Modifier.height(16.dp))
+
+        ScoreCard(score = weeklyScore)
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = stringResource(R.string.home_today_check),
+            style = MaterialTheme.typography.bodyMedium,
+            color = Gray400,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 24.dp)
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        MenuGrid(
+            onMenuClick = onMenuClick,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
     }
 }
 
@@ -116,14 +101,14 @@ private fun UserHomeHeader(
                 .size(200.dp)
                 .offset(x = 240.dp, y = 20.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.15f))
+                .background(BrandWhite.copy(alpha = 0.15f))
         )
         Box(
             modifier = Modifier
                 .size(100.dp)
                 .offset(x = (-30).dp, y = 110.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.10f))
+                .background(BrandWhite.copy(alpha = 0.10f))
         )
 
         Column(
@@ -135,24 +120,24 @@ private fun UserHomeHeader(
             Text(
                 text = stringResource(R.string.home_hello),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "$userName ${stringResource(R.string.home_user_suffix)}",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = MidasWhite
+                color = BrandWhite
             )
             Spacer(modifier = Modifier.height(10.dp))
             Surface(
                 shape = RoundedCornerShape(20.dp),
-                color = MidasWhite.copy(alpha = 0.20f)
+                color = BrandWhite.copy(alpha = 0.20f)
             ) {
                 Text(
                     text = stringResource(R.string.home_streak),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MidasWhite,
+                    color = BrandWhite,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                 )
             }
@@ -174,13 +159,13 @@ private fun WeekStatusCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        color = MidasWhite.copy(alpha = 0.20f)
+        color = BrandWhite.copy(alpha = 0.20f)
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
             Text(
                 text = stringResource(R.string.home_week_status),
                 style = MaterialTheme.typography.bodySmall,
-                color = MidasWhite.copy(alpha = 0.9f)
+                color = BrandWhite.copy(alpha = 0.9f)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Row(
@@ -205,15 +190,15 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
         Text(
             text = dayLabel,
             style = MaterialTheme.typography.bodySmall,
-            color = MidasWhite.copy(alpha = 0.85f)
+            color = BrandWhite.copy(alpha = 0.85f)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Surface(
             modifier = Modifier.size(width = 30.dp, height = 24.dp),
             shape = RoundedCornerShape(12.dp),
-            color = if (isToday) MidasWhite
-            else if (checked) MidasWhite.copy(alpha = 0.4f)
-            else MidasWhite.copy(alpha = 0.15f)
+            color = if (isToday) BrandWhite
+            else if (checked) BrandWhite.copy(alpha = 0.4f)
+            else BrandWhite.copy(alpha = 0.15f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (isToday) {
@@ -225,7 +210,7 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
                         fontSize = 11.sp
                     )
                 } else if (checked) {
-                    Text(text = "✓", color = MidasWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text(text = "✓", color = BrandWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -239,7 +224,7 @@ private fun ScoreCard(score: Int) {
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Row(
@@ -310,26 +295,16 @@ private fun MenuGrid(
         modifier = modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
+        // 음성대화 — 회상과제 자리까지 가로 전체 차지
+        MenuCard(
+            emoji = "🎙️",
+            titleRes = R.string.menu_voice_chat,
+            badge = "N",
+            onClick = { onMenuClick(UserMenu.VoiceChat) },
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MenuCard(
-                emoji = "🎙️",
-                titleRes = R.string.menu_voice_chat,
-                badge = "N",
-                onClick = { onMenuClick(UserMenu.VoiceChat) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                emoji = "🧩",
-                titleRes = R.string.menu_recall,
-                onClick = { onMenuClick(UserMenu.Recall) },
-                modifier = Modifier.weight(1f)
-            )
-        }
+                .weight(1f)
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -367,7 +342,7 @@ private fun MenuCard(
             .fillMaxHeight()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
-        color = MidasWhite,
+        color = BrandWhite,
         shadowElevation = 2.dp
     ) {
         Box(modifier = Modifier.padding(12.dp)) {
@@ -405,7 +380,7 @@ private fun MenuCard(
                         Text(
                             text = badge,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MidasWhite,
+                            color = BrandWhite,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -415,72 +390,6 @@ private fun MenuCard(
     }
 }
 
-@Composable
-internal fun BottomTabBar(
-    modifier: Modifier = Modifier,
-    tabs: List<TabItem>,
-    selectedTab: TabId,
-    onTabClick: (TabId) -> Unit,
-    accent: Color
-) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        color = MidasWhite,
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            tabs.forEach { tab ->
-                val selected = tab.id == selectedTab
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable { onTabClick(tab.id) }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 24.dp, height = 4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(accent)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                    } else {
-                        Spacer(modifier = Modifier.height(6.dp))
-                    }
-                    Text(text = tab.emoji, fontSize = 22.sp)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(tab.labelRes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (selected) accent else Gray400,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                }
-            }
-        }
-    }
-}
-
-// === 데이터 모델 / 자리표시자 ===
+// === 데이터 모델 ===
 
 enum class UserMenu { VoiceChat, Recall, Analysis, Settings }
-sealed interface TabId
-enum class UserHomeTab : TabId { Home, Chat, Analysis, Profile }
-enum class GuardianHomeTab : TabId { Home, Analysis, Location, Settings }
-
-internal data class TabItem(val id: TabId, val emoji: String, val labelRes: Int)
-
-private val userTabs = listOf(
-    TabItem(UserHomeTab.Home,     "🏠", R.string.tab_home),
-    TabItem(UserHomeTab.Chat,     "🎙️", R.string.tab_chat),
-    TabItem(UserHomeTab.Analysis, "📈", R.string.tab_analysis),
-    TabItem(UserHomeTab.Profile,  "👤", R.string.tab_profile)
-)

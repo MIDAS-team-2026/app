@@ -1,4 +1,4 @@
-package com.midas26.mobileapp.ui.auth
+﻿package com.midas26.mobileapp.ui.auth
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.MidasWhite
+import com.midas26.mobileapp.ui.theme.BrandWhite
 
 @Composable
 fun SignupCompleteScreen(
@@ -55,14 +55,14 @@ fun SignupCompleteScreen(
                 .size(220.dp)
                 .offset(x = 230.dp, y = 80.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.18f))
+                .background(BrandWhite.copy(alpha = 0.18f))
         )
         Box(
             modifier = Modifier
                 .size(120.dp)
                 .offset(x = 30.dp, y = 200.dp)
                 .clip(CircleShape)
-                .background(MidasWhite.copy(alpha = 0.10f))
+                .background(BrandWhite.copy(alpha = 0.10f))
         )
 
         Column(
@@ -76,7 +76,7 @@ fun SignupCompleteScreen(
             Surface(
                 modifier = Modifier.size(120.dp),
                 shape = CircleShape,
-                color = MidasWhite.copy(alpha = 0.18f)
+                color = BrandWhite.copy(alpha = 0.18f)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(text = "🎉", fontSize = 64.sp)
@@ -87,7 +87,7 @@ fun SignupCompleteScreen(
             Text(
                 text = stringResource(R.string.signup_complete_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = MidasWhite,
+                color = BrandWhite,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center
             )
@@ -95,7 +95,7 @@ fun SignupCompleteScreen(
             Text(
                 text = stringResource(R.string.signup_complete_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MidasWhite.copy(alpha = 0.9f),
+                color = BrandWhite.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(32.dp))
@@ -104,7 +104,7 @@ fun SignupCompleteScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
-                color = MidasWhite.copy(alpha = 0.16f)
+                color = BrandWhite.copy(alpha = 0.16f)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -113,34 +113,34 @@ fun SignupCompleteScreen(
                     Text(
                         text = stringResource(R.string.signup_complete_code_label),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MidasWhite.copy(alpha = 0.9f)
+                        color = BrandWhite.copy(alpha = 0.9f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = userCode.toCharArray().joinToString(" "),
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MidasWhite
+                        color = BrandWhite
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = stringResource(R.string.signup_complete_code_desc),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MidasWhite.copy(alpha = 0.85f),
+                        color = BrandWhite.copy(alpha = 0.85f),
                         textAlign = TextAlign.Center
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(MidasWhite.copy(alpha = 0.20f))
+                            .background(BrandWhite.copy(alpha = 0.20f))
                             .clickable { copyToClipboard(context, userCode) }
                             .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
                         Text(
                             text = stringResource(R.string.btn_copy_code),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MidasWhite,
+                            color = BrandWhite,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -157,7 +157,7 @@ fun SignupCompleteScreen(
                 .height(64.dp)
                 .clickable(onClick = onGoHome),
             shape = RoundedCornerShape(16.dp),
-            color = MidasWhite
+            color = BrandWhite
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
