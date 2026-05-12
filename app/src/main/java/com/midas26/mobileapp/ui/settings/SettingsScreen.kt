@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +19,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.app.TimePickerDialog
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -32,13 +37,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -60,13 +68,18 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     onLogout: () -> Unit = {},
     onDeleteAccount: () -> Unit = {},
-    onAccessibility: () -> Unit = {}
+    onAccessibility: () -> Unit = {},
+    onProfileEdit: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val role = PrefsManager.from(context).getUserRole()
+    val prefs = PrefsManager.from(context)
+    val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
+    val userCode = prefs.getUserCode().ifEmpty { "842716" } // 백엔드 연동 전 임시 기본값
 
     var notificationEnabled by remember { mutableStateOf(true) }
+    var notifHour by remember { mutableIntStateOf(8) }
+    var notifMinute by remember { mutableIntStateOf(0) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -113,15 +126,14 @@ fun SettingsScreen(
 
             ProfileCard(
                 userName = userName,
-                role = if (isGuardian) "보호자" else "사용자"
+                role = if (isGuardian) "보호자" else "사용자",
+                userCode = userCode
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             SettingsSection(title = "계정") {
-                SettingsRow(label = "프로필 편집", onClick = {})
-                HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
-                SettingsRow(label = "비밀번호 변경", onClick = {})
+                SettingsRow(label = "프로필 편집", onClick = onProfileEdit)
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -139,6 +151,27 @@ fun SettingsScreen(
                     checked = notificationEnabled,
                     onCheckedChange = { notificationEnabled = it }
                 )
+                AnimatedVisibility(visible = notificationEnabled) {
+                    Column {
+                        HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                        NotifTimeRow(
+                            hour = notifHour,
+                            minute = notifMinute,
+                            onClick = {
+                                TimePickerDialog(
+                                    context,
+                                    { _, hour, minute ->
+                                        notifHour = hour
+                                        notifMinute = minute
+                                    },
+                                    notifHour,
+                                    notifMinute,
+                                    false
+                                ).show()
+                            }
+                        )
+                    }
+                }
                 HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(label = "앱 버전", trailingText = "1.0.0", onClick = null)
             }
@@ -208,8 +241,12 @@ private fun SettingsTopBar(onBack: () -> Unit) {
 @Composable
 private fun ProfileCard(
     userName: String,
-    role: String
+    role: String,
+    userCode: String
 ) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -219,7 +256,9 @@ private fun ProfileCard(
         shadowElevation = 2.dp
     ) {
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier
+                .padding(20.dp)
+                .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -246,7 +285,7 @@ private fun ProfileCard(
                     fontWeight = FontWeight.Bold,
                     color = Gray800
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Green50
@@ -257,6 +296,42 @@ private fun ProfileCard(
                         color = Green600,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .clickable {
+                        clipboardManager.setText(AnnotatedString(userCode))
+                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
+                    },
+                shape = RoundedCornerShape(12.dp),
+                color = Gray100
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "사용자 코드",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Gray400,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = userCode,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Gray600,
+                        letterSpacing = 2.sp
                     )
                 }
             }
@@ -410,4 +485,60 @@ private fun ConfirmDialog(
         containerColor = BrandWhite,
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+@Composable
+private fun NotifTimeRow(
+    hour: Int,
+    minute: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "알림 시간",
+            style = MaterialTheme.typography.bodyMedium,
+            color = Gray800,
+            fontWeight = FontWeight.Medium
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Green50
+            ) {
+                Text(
+                    text = formatNotifTime(hour, minute),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Green600,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                )
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Gray400,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+private fun formatNotifTime(hour: Int, minute: Int): String {
+    val period = if (hour < 12) "오전" else "오후"
+    val h = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    return "$period $h:${minute.toString().padStart(2, '0')}"
 }

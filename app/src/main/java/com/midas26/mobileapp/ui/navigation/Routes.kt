@@ -54,6 +54,7 @@ object Routes {
     // 설정
     const val Settings = "settings"
     const val AccessibilitySettings = "accessibility_settings"
+    const val ProfileEdit = "profile_edit"
 
     /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
     const val Home = UserHome

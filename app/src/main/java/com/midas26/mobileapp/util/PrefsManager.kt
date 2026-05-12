@@ -39,6 +39,10 @@ class PrefsManager(context: Context) {
         prefs.edit().putString(KEY_ROLE, role).apply()
     }
 
+    // 사용자 코드
+    fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
+    fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
+
     // 접근성 설정
     fun getAccessibilityFontSize(): Int = prefs.getInt(KEY_FONT_SIZE, 1)
     fun setAccessibilityFontSize(level: Int) { prefs.edit().putInt(KEY_FONT_SIZE, level).apply() }
@@ -60,6 +64,8 @@ class PrefsManager(context: Context) {
         private const val KEY_ONBOARDING = "seen_onboarding"
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_ROLE = "user_role"
+
+        private const val KEY_USER_CODE = "user_code"
 
         // 접근성
         private const val KEY_FONT_SIZE = "a11y_font_size"

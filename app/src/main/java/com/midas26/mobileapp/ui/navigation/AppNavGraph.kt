@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.navigation
 
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -37,6 +38,7 @@ import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
 import com.midas26.mobileapp.ui.recall.RecallResultScreen
 import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
+import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
@@ -59,7 +61,7 @@ private val mainRoutes = setOf(
     Routes.VoiceChat, Routes.VoiceChatDisconnected,
     Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
     Routes.AnalysisLoading, Routes.AnalysisResult, Routes.AnalysisGraph,
-    Routes.Settings, Routes.AccessibilitySettings
+    Routes.Settings, Routes.AccessibilitySettings, Routes.ProfileEdit
 )
 
 @Composable
@@ -87,6 +89,7 @@ fun AppNavHost(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0),
         bottomBar = {
             if (currentRoute in mainRoutes) {
                 AppBottomBar(
@@ -280,7 +283,14 @@ fun AppNavHost(
                         popUpTo(0) { inclusive = true }
                     }
                 },
-                onAccessibility = { navController.navigate(Routes.AccessibilitySettings) }
+                onAccessibility = { navController.navigate(Routes.AccessibilitySettings) },
+                onProfileEdit = { navController.navigate(Routes.ProfileEdit) }
+            )
+        }
+
+        composable(Routes.ProfileEdit) {
+            ProfileEditScreen(
+                onBack = { navController.popBackStackIfCurrent(Routes.ProfileEdit) }
             )
         }
 
