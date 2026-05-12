@@ -41,6 +41,15 @@ public class User {
     @Column(name = "connected_user_id")
     private Integer connectedUserId;
 
+    // 보호자 -> 환자
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_patient_id")
+    private User targetPatient;
+
+    // 환자 -> 보호자
+    @OneToMany(mappedBy = "targetPatient", cascade = CascadeType.ALL)
+    private List<User> protectors = new ArrayList<>();
+
     @Column(name = "age_group")
     private Integer ageGroup;
 
