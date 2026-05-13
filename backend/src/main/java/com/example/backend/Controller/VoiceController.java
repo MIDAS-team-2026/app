@@ -1,11 +1,14 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
+import com.example.backend.Model.DTO.VoiceResponseDTO;
 import com.example.backend.Service.VoiceService; // 서비스 변경
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/voice")
@@ -22,23 +25,24 @@ public class VoiceController {
      * @return 생성된 AudioRecord의 ID (recordId)
      */
     @PostMapping("/upload")
-    public ResponseEntity<ApiResponse<Long>> uploadVoice(
+    public ResponseEntity<ApiResponse<VoiceResponseDTO>> uploadVoice(
             @RequestParam("userId") Integer userId,
             @RequestParam("sessionId") Long sessionId,
             @RequestParam("file") MultipartFile file) {
+
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.status(400)
+                    .body(ApiResponse.fail(400, "파일이 비어있습니다."));
+        }
+
         try {
-            if (file.isEmpty()) {
-                return ResponseEntity.ok(ApiResponse.fail(400, "파일이 비어있습니다."));
-            }
+            VoiceResponseDTO response = voiceService.uploadAndSave(userId, sessionId, file);
 
-            // S3 업로드 + DB 저장 후 생성된 ID 반환
-            Long recordId = voiceService.uploadAndSave(userId, sessionId, file);
+            return ResponseEntity.ok(ApiResponse.success(response));
 
-            return ResponseEntity.ok(ApiResponse.success(recordId));
-
-        } catch (Exception e) {
+        } catch (IOException e) {
             return ResponseEntity.status(500)
-                    .body(ApiResponse.fail(500, "음성 처리 중 오류 발생: " + e.getMessage()));
+                    .body(ApiResponse.fail(500, "파일 업로드 중 오류가 발생했습니다: " + e.getMessage()));
         }
     }
 }
