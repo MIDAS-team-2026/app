@@ -1,5 +1,6 @@
 package com.example.backend.Service;
 
+import com.example.backend.Model.DTO.VoiceResponseDTO;
 import com.example.backend.Model.Entity.chat.AudioRecord;
 import com.example.backend.Model.Entity.chat.ChatSession;
 import com.example.backend.Model.Entity.user.User;
@@ -24,7 +25,7 @@ public class VoiceService {
     private final ChatSessionRepository chatSessionRepository;
 
     @Transactional
-    public Long uploadAndSave(Integer userId, Long sessionId, MultipartFile file) throws IOException {
+    public VoiceResponseDTO uploadAndSave(Integer userId, Long sessionId, MultipartFile file) throws IOException {
         String fileUrl = s3Service.uploadFile(file);
 
         User user = userRepository.findById(userId)
@@ -33,6 +34,7 @@ public class VoiceService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 세션입니다."));
 
         Integer nextTurn = audioRecordRepository.findMaxTurnOrderByChatSessionId(sessionId) + 1;
+
         AudioRecord record = new AudioRecord();
         record.setUser(user);
         record.setChatSession(session);
@@ -41,6 +43,13 @@ public class VoiceService {
         record.setTurnOrder(nextTurn);
         record.setRecordedAt(LocalDateTime.now());
 
-        return audioRecordRepository.save(record).getId();
+        AudioRecord savedRecord = audioRecordRepository.save(record);
+
+        return VoiceResponseDTO.builder()
+                .audioRecordId(savedRecord.getId())
+                .audioFilePath(savedRecord.getAudioFilePath())
+                .turnOrder(savedRecord.getTurnOrder())
+                .recordedAt(savedRecord.getRecordedAt())
+                .build();
     }
 }
