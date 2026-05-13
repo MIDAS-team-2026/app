@@ -75,7 +75,7 @@ fun AppBottomBar(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable { onTabClick(tab.id) }
+                        .clickable(enabled = !selected) { onTabClick(tab.id) }
                         .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
