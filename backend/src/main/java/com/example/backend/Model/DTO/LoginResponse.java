@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO; 
+package com.example.backend.Model.DTO;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,9 +9,9 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginDTO {
+public class LoginResponse {
     private String email;
-    private String password;
     private String token;
     private String role;
+    private Integer userId;
 }

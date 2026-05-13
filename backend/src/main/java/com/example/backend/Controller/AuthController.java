@@ -1,11 +1,9 @@
 package com.example.backend.Controller;
 
-import com.example.backend.Model.DTO.ApiResponse;
-import com.example.backend.Model.DTO.LinkRequestDTO;
-import com.example.backend.Model.DTO.LoginDTO;
-import com.example.backend.Model.DTO.SignupDTO;
+import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
+import com.example.backend.Util.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserService userService;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<User>> signup(@RequestBody SignupDTO signupDTO) {
@@ -42,7 +41,16 @@ public class AuthController {
         User user = userService.login(loginDTO.getEmail(), loginDTO.getPassword());
 
         if (user != null) {
-            return ResponseEntity.ok(ApiResponse.success(user));
+
+            String token = jwtTokenProvider.createToken(user.getEmail(), user.getRole());
+
+            LoginResponse loginDTO1 = new LoginResponse(
+                    user.getEmail(),
+                    token,
+                    user.getRole(),
+                    user.getId()
+            );
+            return ResponseEntity.ok(ApiResponse.success(loginDTO1));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.fail(401, "아이디 또는 비밀번호가 틀렸습니다."));
@@ -60,7 +68,6 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.fail(400, e.getMessage()));
         } catch (Exception e) {
-            // 기타 서버 에러
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(500, "연동 처리 중 서버 오류가 발생했습니다."));
         }
