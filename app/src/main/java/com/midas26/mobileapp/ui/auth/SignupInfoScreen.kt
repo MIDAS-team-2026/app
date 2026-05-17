@@ -1,7 +1,8 @@
-﻿package com.midas26.mobileapp.ui.auth
+package com.midas26.mobileapp.ui.auth
 
 import android.util.Patterns
 import androidx.compose.foundation.background
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,11 +21,14 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,19 +40,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun SignupInfoScreen(
     role: String,
     onBack: () -> Unit,
-    onComplete: () -> Unit
+    onComplete: () -> Unit,
+    viewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
 
@@ -61,6 +68,24 @@ fun SignupInfoScreen(
     var birthError by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var serverError by remember { mutableStateOf<String?>(null) }
+
+    val authState by viewModel.authState.collectAsState()
+    val isLoading = authState is AuthState.Loading
+
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.Success -> {
+                viewModel.resetState()
+                PrefsManager.from(context).saveUserRole(role)
+                onComplete()
+            }
+            is AuthState.Error -> {
+                serverError = (authState as AuthState.Error).message
+            }
+            else -> {}
+        }
+    }
 
     val errorRequired = stringResource(R.string.error_required)
     val errorEmailInvalid = stringResource(R.string.error_email_invalid)
@@ -111,7 +136,6 @@ fun SignupInfoScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 진행도 (2/2 단계: 모두 채워짐) — 두께 4dp→6dp 로 확대
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -149,7 +173,7 @@ fun SignupInfoScreen(
 
         AppOutlinedTextField(
             value = name,
-            onValueChange = { name = it; nameError = null },
+            onValueChange = { name = it; nameError = null; serverError = null },
             label = stringResource(R.string.hint_name),
             leadingIcon = Icons.Filled.Person,
             keyboardType = KeyboardType.Text,
@@ -168,7 +192,7 @@ fun SignupInfoScreen(
         )
         AppOutlinedTextField(
             value = email,
-            onValueChange = { email = it; emailError = null },
+            onValueChange = { email = it; emailError = null; serverError = null },
             label = stringResource(R.string.hint_email),
             leadingIcon = Icons.Filled.Email,
             keyboardType = KeyboardType.Email,
@@ -177,7 +201,7 @@ fun SignupInfoScreen(
         )
         AppOutlinedTextField(
             value = password,
-            onValueChange = { password = it; passwordError = null },
+            onValueChange = { password = it; passwordError = null; serverError = null },
             label = stringResource(R.string.hint_password),
             leadingIcon = Icons.Filled.Lock,
             isPassword = true,
@@ -186,18 +210,31 @@ fun SignupInfoScreen(
             errorText = passwordError
         )
 
+        if (serverError != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = serverError!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
-        AppPrimaryButton(
-            text = stringResource(R.string.btn_complete),
-            onClick = {
-                if (validate()) {
-                    // TODO: ViewModel로 회원가입 요청 연결 (role, name, birth, email, password)
-                    PrefsManager.from(context).saveUserRole(role)
-                    onComplete()
-                }
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Green500)
             }
-        )
+        } else {
+            AppPrimaryButton(
+                text = stringResource(R.string.btn_complete),
+                onClick = {
+                    if (validate()) {
+                        viewModel.signup(email.trim(), password, name.trim(), role)
+                    }
+                }
+            )
+        }
         Spacer(modifier = Modifier.height(48.dp))
     }
 }

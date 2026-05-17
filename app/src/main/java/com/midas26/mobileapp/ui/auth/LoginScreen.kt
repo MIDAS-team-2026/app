@@ -1,4 +1,4 @@
-﻿package com.midas26.mobileapp.ui.auth
+package com.midas26.mobileapp.ui.auth
 
 import android.util.Patterns
 import androidx.compose.foundation.background
@@ -19,11 +19,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +38,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
@@ -50,12 +54,30 @@ import com.midas26.mobileapp.ui.theme.BrandWhite
 fun LoginScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit,
-    onForgotPassword: () -> Unit = {}
+    onForgotPassword: () -> Unit = {},
+    viewModel: AuthViewModel = viewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var emailError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var serverError by remember { mutableStateOf<String?>(null) }
+
+    val authState by viewModel.authState.collectAsState()
+    val isLoading = authState is AuthState.Loading
+
+    LaunchedEffect(authState) {
+        when (authState) {
+            is AuthState.Success -> {
+                viewModel.resetState()
+                onNavigateToHome()
+            }
+            is AuthState.Error -> {
+                serverError = (authState as AuthState.Error).message
+            }
+            else -> {}
+        }
+    }
 
     val errorRequired = stringResource(R.string.error_required)
     val errorEmailInvalid = stringResource(R.string.error_email_invalid)
@@ -85,7 +107,7 @@ fun LoginScreen(
     ) {
         Spacer(modifier = Modifier.height(64.dp))
 
-        // 앱 아이콘 (56→72dp)
+        // 앱 아이콘
         Surface(
             modifier = Modifier.size(72.dp),
             shape = RoundedCornerShape(20.dp),
@@ -123,6 +145,7 @@ fun LoginScreen(
             onValueChange = {
                 email = it
                 emailError = null
+                serverError = null
             },
             label = stringResource(R.string.hint_email),
             leadingIcon = Icons.Filled.Email,
@@ -135,6 +158,7 @@ fun LoginScreen(
             onValueChange = {
                 password = it
                 passwordError = null
+                serverError = null
             },
             label = stringResource(R.string.hint_password),
             leadingIcon = Icons.Filled.Lock,
@@ -142,6 +166,16 @@ fun LoginScreen(
             imeAction = ImeAction.Done,
             errorText = passwordError
         )
+
+        // 서버 에러 메시지
+        if (serverError != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = serverError!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
 
         // 비밀번호 찾기
         Row(
@@ -156,15 +190,20 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // 로그인 버튼
-        AppPrimaryButton(
-            text = stringResource(R.string.btn_login),
-            onClick = {
-                if (validate()) {
-                    // TODO: ViewModel로 로그인 요청 연결
-                    onNavigateToHome()
-                }
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Green500)
             }
-        )
+        } else {
+            AppPrimaryButton(
+                text = stringResource(R.string.btn_login),
+                onClick = {
+                    if (validate()) {
+                        viewModel.login(email.trim(), password)
+                    }
+                }
+            )
+        }
         Spacer(modifier = Modifier.height(32.dp))
 
         // 구분선
