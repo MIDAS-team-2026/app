@@ -105,6 +105,7 @@ fun AccessibilitySettingsScreen(
                         onHighContrastChange(it)
                     }
                 )
+/*
                 HorizontalDivider(
                     color = Gray200,
                     thickness = 1.dp,
@@ -119,6 +120,7 @@ fun AccessibilitySettingsScreen(
                         prefs.setLargeTouchArea(it)
                     }
                 )
+*/
             }
 
             Spacer(modifier = Modifier.height(12.dp))
