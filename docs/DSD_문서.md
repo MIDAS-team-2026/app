@@ -126,7 +126,7 @@
         ↓
 [11] 종합 위험도 계산 모듈로 speech_score 전달
 
-```md
+```
 
 
 #### 3.1.5 Input / Process / Output
