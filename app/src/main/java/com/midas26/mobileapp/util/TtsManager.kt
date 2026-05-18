@@ -14,18 +14,19 @@ class TtsManager(context: Context) {
     private var doneCallback: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    private val tts = TextToSpeech(context.applicationContext) { status ->
-        initialized = status == TextToSpeech.SUCCESS
-        if (initialized) {
-            tts.language = Locale.KOREAN
-            pendingSpeech?.let { (text, onDone) ->
-                pendingSpeech = null
-                speakInternal(text, onDone)
-            }
-        }
-    }
+    private lateinit var tts: TextToSpeech
 
     init {
+        tts = TextToSpeech(context.applicationContext) { status ->
+            initialized = status == TextToSpeech.SUCCESS
+            if (initialized) {
+                tts.language = Locale.KOREAN
+                pendingSpeech?.let { (text, onDone) ->
+                    pendingSpeech = null
+                    speakInternal(text, onDone)
+                }
+            }
+        }
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}
             override fun onDone(utteranceId: String?) {
