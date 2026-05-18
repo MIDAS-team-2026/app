@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
@@ -52,7 +53,8 @@ import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun AccessibilitySettingsScreen(
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onFontSizeChange: (FontSizeLevel) -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
@@ -83,6 +85,7 @@ fun AccessibilitySettingsScreen(
                     onSelect = { level ->
                         fontSizeLevel = level
                         prefs.setAccessibilityFontSize(level)
+                        onFontSizeChange(FontSizeLevel.fromIndex(level))
                     }
                 )
             }

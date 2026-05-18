@@ -87,7 +87,7 @@ fun AppTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = Typography.scaled(LocalFontSizeScale.current),
         content = content
     )
 }
