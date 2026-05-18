@@ -242,7 +242,7 @@ private fun FontSizeSelector(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = label,
-                            fontSize = 11.sp,
+                            fontSize = previewSizes[index],
                             color = if (isSelected) Green600 else Gray400,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
