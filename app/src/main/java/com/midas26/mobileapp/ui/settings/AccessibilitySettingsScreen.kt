@@ -317,8 +317,8 @@ private fun TtsSpeedSelector(
                         )
                         Text(
                             text = option.desc,
-                            fontSize = 11.sp,
-                            color = if (isSelected) BrandWhite.copy(alpha = 0.8f) else Gray400
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isSelected) BrandWhite.copy(alpha = 0.8f) else AppColor.textTertiary
                         )
                     }
                 }
