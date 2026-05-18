@@ -56,6 +56,116 @@
 
 ### 3.1 음성 특징 분석 모듈
 
+#### 3.1.1 모듈 개요
+
+음성 특징 분석 모듈은 사용자가 Android App에서 녹음한 음성 데이터를 기반으로 발화 이상 징후를 분석하는 소프트웨어 모듈이다. 본 프로젝트는 별도의 하드웨어 장치를 사용하지 않으므로, 음성 데이터는 스마트폰 마이크를 통해 수집되며 서버에 저장된 음성 파일과 STT 변환 텍스트를 분석 대상으로 사용한다.
+
+본 모듈은 사용자의 음성에서 음성 길이, 음성 에너지, 무성음/잡음 비율, 음향적 변동성 등의 특징을 추출하고, 구음장애 또는 발화 이상 참고군과의 음향적 유사도를 기반으로 음성 이상 점수를 계산한다.
+
+현재 단계에서는 인지기능장애 전용 모델을 직접 학습하기보다는, 구음장애/발화 이상 참고군의 음향 특징을 기준 프로파일로 생성한 뒤 사용자 음성과의 거리 및 유사도를 계산하는 방식으로 구현한다. 이후 인지기능장애 음성 데이터셋이 확보되면 정상군, 경도인지장애, 치매 위험군 분류 모델로 확장할 수 있도록 설계한다.
+
+본 모듈에서 계산된 음성 기반 점수는 종합 위험도 계산 모듈에서 `speech_score`로 사용된다.
+
+#### 3.1.2 모듈 기능
+
+| 구분 | 내용 |
+|---|---|
+| 모듈명 | Speech Feature Analysis Module |
+| 주요 기능 | 사용자 음성에서 음향 특징을 추출하고 발화 이상 점수 계산 |
+| 입력 데이터 | 음성 파일 경로, 음성 길이, STT 변환 텍스트 |
+| 처리 방식 | 음향 특징 추출, 참고군 프로파일과의 거리 계산, 유사도 기반 점수화 |
+| 출력 데이터 | dysarthria_similarity_score, distance_from_reference, speech_abnormality_score, speech_abnormality_level |
+| 연동 테이블 | audio_records, risk_analysis_results |
+
+
+#### 3.1.3 분석 대상 특징
+
+음성 특징 분석 모듈에서 사용하는 주요 특징은 다음과 같다.
+
+| 특징명 | 설명 | 활용 목적 |
+|---|---|---|
+| audio_duration | 음성 파일 전체 길이 | 발화 지속 시간 확인 |
+| rms_mean | 음성 에너지 평균값 | 발화 강도 및 음성 크기 분석 |
+| rms_std | 음성 에너지 표준편차 | 발화 강도의 변동성 분석 |
+| zcr_mean | Zero Crossing Rate 평균값 | 음성의 잡음성, 무성음 비율 분석 |
+| zcr_std | Zero Crossing Rate 표준편차 | 발화 중 음향적 변화 정도 분석 |
+| spectral_centroid_mean | 스펙트럼 중심 평균값 | 음색 및 주파수 중심 분석 |
+| spectral_centroid_std | 스펙트럼 중심 표준편차 | 주파수 변화의 불안정성 분석 |
+| mfcc_mean | MFCC 평균값 | 음성의 음색적 특징 분석 |
+| mfcc_std | MFCC 표준편차 | 발음 및 음성 패턴의 변동성 분석 |
+| speech_rate_word | 초당 단어 수 | 발화 속도 분석 |
+| repetition_ratio | 반복 표현 비율 | 반복 발화 여부 분석 |
+| lexical_diversity | 어휘 다양도 | 언어 사용 다양성 분석 |
+
+음향 특징 중 `rms`, `zcr`, `spectral_centroid`, `mfcc`는 음성 파일 자체에서 추출하고, `speech_rate_word`, `repetition_ratio`, `lexical_diversity`는 STT 변환 텍스트와 음성 길이를 함께 이용하여 계산한다.
+
+#### 3.1.4 내부 동작 흐름
+
+음성 특징 분석 모듈의 내부 동작 흐름은 다음과 같다.
+
+```text
+[1] 사용자 음성 녹음
+        ↓
+[2] audio_records 테이블에 음성 파일 경로 및 기본 정보 저장
+        ↓
+[3] STT를 통해 음성을 텍스트로 변환
+        ↓
+[4] transcript_text 저장
+        ↓
+[5] 음성 파일 로드
+        ↓
+[6] RMS, ZCR, Spectral Centroid, MFCC 등 음향 특징 추출
+        ↓
+[7] STT 텍스트 기반 발화 속도, 반복 비율, 어휘 다양도 계산
+        ↓
+[8] 구음장애/발화 이상 참고군 프로파일과 거리 계산
+        ↓
+[9] dysarthria_similarity_score 계산
+        ↓
+[10] speech_abnormality_score 및 speech_abnormality_level 산출
+        ↓
+[11] 종합 위험도 계산 모듈로 speech_score 전달
+
+```md
+
+
+#### 3.1.5 Input / Process / Output
+
+##### Input
+
+| 입력값 | 설명 |
+|---|---|
+| record_id | 분석 대상 음성 기록 ID |
+| user_id | 사용자 ID |
+| session_id | 대화 세션 ID |
+| audio_file_path | 서버에 저장된 음성 파일 경로 |
+| audio_duration | 음성 파일 길이 |
+| transcript_text | STT를 통해 변환된 사용자 발화 텍스트 |
+| recorded_at | 녹음 생성 시각 |
+
+##### Process
+
+1. `record_id`를 기준으로 `audio_records` 테이블에서 음성 파일 경로와 STT 텍스트를 조회한다.
+2. 음성 파일을 로드하여 샘플링 레이트와 전체 길이를 확인한다.
+3. 음성 파일에서 RMS, ZCR, Spectral Centroid, MFCC 등의 음향 특징을 추출한다.
+4. STT 텍스트에서 단어 수, 글자 수, 어휘 다양도, 반복 표현 비율을 계산한다.
+5. 음성 길이와 단어 수를 이용하여 발화 속도를 계산한다.
+6. 사전에 생성한 구음장애/발화 이상 참고군 프로파일과 사용자 음성 특징 벡터 간의 거리를 계산한다.
+7. 거리값을 기반으로 `dysarthria_similarity_score`를 계산한다.
+8. 유사도 점수를 기준으로 `speech_abnormality_score`를 0~10점 범위로 변환한다.
+9. 최종 점수에 따라 `Low`, `Medium`, `High` 단계로 분류한다.
+10. 계산된 음성 점수는 종합 위험도 계산 모듈의 `speech_score`로 전달한다.
+
+##### Output
+
+| 출력값 | 설명 |
+|---|---|
+| dysarthria_similarity_score | 구음장애/발화 이상 참고군과의 음향적 유사도 |
+| distance_from_reference | 참고군 프로파일과 사용자 음성 특징 간 거리 |
+| speech_abnormality_score | 음성 이상 징후 점수 |
+| speech_abnormality_level | 음성 이상 단계 |
+| speech_score | 종합 위험도 계산에 사용되는 음성 기반 점수 |
+| analyzed_at | 분석 완료 시각 |
 ---
 
 ### 3.2 회상 일치도 분석 모듈
