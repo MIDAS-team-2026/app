@@ -21,6 +21,7 @@ import com.midas26.mobileapp.ui.navigation.AppNavHost
 import com.midas26.mobileapp.ui.theme.AppTheme
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.util.PrefsManager
 
 class MainActivity : ComponentActivity() {
@@ -40,8 +41,12 @@ fun AppRoot() {
     var fontSizeLevel by remember {
         mutableStateOf(FontSizeLevel.fromIndex(prefs.getAccessibilityFontSize()))
     }
+    var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
 
-    CompositionLocalProvider(LocalFontSizeScale provides fontSizeLevel) {
+    CompositionLocalProvider(
+        LocalFontSizeScale provides fontSizeLevel,
+        LocalHighContrast provides highContrast
+    ) {
         AppTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                 Box(
@@ -53,6 +58,10 @@ fun AppRoot() {
                         onFontSizeChange = { level ->
                             fontSizeLevel = level
                             prefs.setAccessibilityFontSize(level.ordinal)
+                        },
+                        onHighContrastChange = { enabled ->
+                            highContrast = enabled
+                            prefs.setHighContrast(enabled)
                         }
                     )
                 }

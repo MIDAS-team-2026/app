@@ -54,7 +54,8 @@ import com.midas26.mobileapp.util.PrefsManager
 @Composable
 fun AccessibilitySettingsScreen(
     onBack: () -> Unit = {},
-    onFontSizeChange: (FontSizeLevel) -> Unit = {}
+    onFontSizeChange: (FontSizeLevel) -> Unit = {},
+    onHighContrastChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
@@ -100,6 +101,7 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         highContrast = it
                         prefs.setHighContrast(it)
+                        onHighContrastChange(it)
                     }
                 )
                 HorizontalDivider(
