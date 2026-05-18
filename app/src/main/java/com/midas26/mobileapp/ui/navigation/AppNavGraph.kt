@@ -69,7 +69,8 @@ private val mainRoutes = setOf(
 fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
-    onHighContrastChange: (Boolean) -> Unit = {}
+    onHighContrastChange: (Boolean) -> Unit = {},
+    onHapticChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -301,7 +302,8 @@ fun AppNavHost(
             AccessibilitySettingsScreen(
                 onBack = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) },
                 onFontSizeChange = onFontSizeChange,
-                onHighContrastChange = onHighContrastChange
+                onHighContrastChange = onHighContrastChange,
+                onHapticChange = onHapticChange
             )
         }
 

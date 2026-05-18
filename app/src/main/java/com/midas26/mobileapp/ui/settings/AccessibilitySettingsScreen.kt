@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,13 +57,16 @@ import com.midas26.mobileapp.util.PrefsManager
 fun AccessibilitySettingsScreen(
     onBack: () -> Unit = {},
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
-    onHighContrastChange: (Boolean) -> Unit = {}
+    onHighContrastChange: (Boolean) -> Unit = {},
+    onHapticChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
 
     var fontSizeLevel by remember { mutableIntStateOf(prefs.getAccessibilityFontSize()) }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
+    var voiceChatEnabled by remember { mutableStateOf(prefs.getVoiceChatEnabled()) }
+    var tapToReplay by remember { mutableStateOf(prefs.getTapToReplay()) }
     var ttsSpeed by remember { mutableFloatStateOf(prefs.getTtsSpeed()) }
     var hapticFeedback by remember { mutableStateOf(prefs.getHapticFeedback()) }
     var largeTouchArea by remember { mutableStateOf(prefs.getLargeTouchArea()) }
@@ -105,6 +109,7 @@ fun AccessibilitySettingsScreen(
                         onHighContrastChange(it)
                     }
                 )
+/*
                 HorizontalDivider(
                     color = Gray200,
                     thickness = 1.dp,
@@ -119,18 +124,51 @@ fun AccessibilitySettingsScreen(
                         prefs.setLargeTouchArea(it)
                     }
                 )
+*/
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             AccessibilitySection(title = "음성 안내 (TTS)") {
-                TtsSpeedSelector(
-                    speed = ttsSpeed,
-                    onSpeedChange = { speed ->
-                        ttsSpeed = speed
-                        prefs.setTtsSpeed(speed)
+                AccessibilityToggleRow(
+                    label = "음성 대화 사용",
+                    description = "AI와 음성으로 대화하는 기능을 사용해요",
+                    checked = voiceChatEnabled,
+                    onCheckedChange = {
+                        voiceChatEnabled = it
+                        prefs.setVoiceChatEnabled(it)
                     }
                 )
+                AnimatedVisibility(visible = voiceChatEnabled) {
+                    Column {
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        TtsSpeedSelector(
+                            speed = ttsSpeed,
+                            onSpeedChange = { speed ->
+                                ttsSpeed = speed
+                                prefs.setTtsSpeed(speed)
+                            }
+                        )
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        AccessibilityToggleRow(
+                            label = "누르면 음성 재생하기",
+                            description = "대화내역을 누르면 다시 읽어 줘요",
+                            checked = tapToReplay,
+                            onCheckedChange = {
+                                tapToReplay = it
+                                prefs.setTapToReplay(it)
+                            }
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -143,6 +181,7 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         hapticFeedback = it
                         prefs.setHapticFeedback(it)
+                        onHapticChange(it)
                     }
                 )
             }
@@ -282,7 +321,7 @@ private fun TtsSpeedSelector(
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text(
-            text = "TTS 읽기 속도",
+            text = "음성 대화 속도",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = AppColor.textPrimary

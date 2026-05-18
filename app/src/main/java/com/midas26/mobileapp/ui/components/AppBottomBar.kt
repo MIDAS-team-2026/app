@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -33,10 +35,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 
 sealed interface TabId
 enum class UserHomeTab : TabId { Home, Chat, Analysis, Settings }
@@ -72,6 +73,8 @@ fun AppBottomBar(
         shadowElevation = 0.dp,
         border = BorderStroke(width = 1.dp, color = AppColor.divider)
     ) {
+        val haptic = LocalHapticFeedback.current
+        val hapticEnabled = LocalHapticEnabled.current
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -84,7 +87,10 @@ fun AppBottomBar(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .clickable(enabled = !selected) { onTabClick(tab.id) }
+                        .clickable(enabled = !selected) {
+                            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onTabClick(tab.id)
+                        }
                         .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {

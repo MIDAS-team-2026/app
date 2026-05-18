@@ -16,10 +16,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 
 /**
  * zip의 `Widget.App.Button.Primary` 스타일에 대응하는 Compose 버튼.
@@ -34,8 +37,13 @@ fun AppPrimaryButton(
     enabled: Boolean = true,
     leadingIcon: ImageVector? = null
 ) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
     Button(
-        onClick = onClick,
+        onClick = {
+            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
@@ -70,8 +78,13 @@ fun AppOutlineButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
     OutlinedButton(
-        onClick = onClick,
+        onClick = {
+            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
@@ -95,8 +108,13 @@ fun AppTextButton(
     modifier: Modifier = Modifier,
     content: (@Composable RowScope.() -> Unit)? = null
 ) {
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
     TextButton(
-        onClick = onClick,
+        onClick = {
+            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            onClick()
+        },
         modifier = modifier,
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
     ) {

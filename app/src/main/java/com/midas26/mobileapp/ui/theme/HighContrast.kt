@@ -5,6 +5,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 val LocalHighContrast = compositionLocalOf { false }
+val LocalHapticEnabled = compositionLocalOf { true }
 
 /**
  * 고대비 모드를 인식하는 앱 전용 색상 접근자.
