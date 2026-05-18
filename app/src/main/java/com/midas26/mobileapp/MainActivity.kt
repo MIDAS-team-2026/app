@@ -21,6 +21,7 @@ import com.midas26.mobileapp.ui.navigation.AppNavHost
 import com.midas26.mobileapp.ui.theme.AppTheme
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.util.PrefsManager
 
@@ -42,10 +43,12 @@ fun AppRoot() {
         mutableStateOf(FontSizeLevel.fromIndex(prefs.getAccessibilityFontSize()))
     }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
+    var hapticEnabled by remember { mutableStateOf(prefs.getHapticFeedback()) }
 
     CompositionLocalProvider(
         LocalFontSizeScale provides fontSizeLevel,
-        LocalHighContrast provides highContrast
+        LocalHighContrast provides highContrast,
+        LocalHapticEnabled provides hapticEnabled
     ) {
         AppTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -62,6 +65,10 @@ fun AppRoot() {
                         onHighContrastChange = { enabled ->
                             highContrast = enabled
                             prefs.setHighContrast(enabled)
+                        },
+                        onHapticChange = { enabled ->
+                            hapticEnabled = enabled
+                            prefs.setHapticFeedback(enabled)
                         }
                     )
                 }

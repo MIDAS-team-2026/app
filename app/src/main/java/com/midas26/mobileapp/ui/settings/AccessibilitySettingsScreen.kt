@@ -56,7 +56,8 @@ import com.midas26.mobileapp.util.PrefsManager
 fun AccessibilitySettingsScreen(
     onBack: () -> Unit = {},
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
-    onHighContrastChange: (Boolean) -> Unit = {}
+    onHighContrastChange: (Boolean) -> Unit = {},
+    onHapticChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
@@ -145,6 +146,7 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         hapticFeedback = it
                         prefs.setHapticFeedback(it)
+                        onHapticChange(it)
                     }
                 )
             }
