@@ -39,3 +39,542 @@
 ![앱 Flow Chart](./images/dsd/flowchart.png)
 
 **[그림] 앱 Flow Chart**
+
+
+
+
+
+
+
+## 3.3 AI 분석 모듈 설계
+
+### 3.3.1 음성 특징 분석 모듈
+
+---
+
+### 3.3.2 회상 일치도 분석 모듈
+
+#### 3.3.2.1 모듈 개요
+
+회상 일치도 분석 모듈은 사용자의 초기 답변 데이터와 이후 회상 답변 데이터를 비교하여 기억 유지 정도를 점수화하는 소프트웨어 모듈이다.
+
+본 모듈은 사용자의 일반 자유 발화에서 과거 기억을 임의로 추출하는 방식이 아니라, 사전에 정의된 회상 질문을 기반으로 초기 기준 답변을 저장하고, 이후 동일하거나 유사한 질문을 다시 제시하여 현재 답변과 비교하는 방식으로 동작한다.
+
+사용자의 음성 답변은 STT(Speech To Text) 처리를 통해 텍스트로 변환되며, 변환된 텍스트는 `audio_records.transcript_text`에 저장된다. 이후 Python AI 서버는 과거 답변과 현재 답변의 의미 유사도, 핵심 키워드 일치도, 질문 유형별 가중치를 이용하여 최종 회상 일치도 점수인 `final_recall_score`를 계산한다.
+
+계산된 회상 일치도 점수는 `recall_analysis_results` 테이블에 저장되며, 종합 위험도 계산 모듈에서 `recall_score`로 사용된다.
+
+---
+
+#### 3.3.2.2 모듈 기능
+
+| 구분 | 내용 |
+|---|---|
+| 모듈명 | Recall Analysis Module |
+| 주요 기능 | 과거 답변과 현재 답변을 비교하여 회상 일치도 점수 계산 |
+| 입력 데이터 | 현재 답변 텍스트, 과거 기준 답변, 회상 질문 ID, 핵심 키워드 |
+| 처리 방식 | 키워드 일치도 계산, 의미 유사도 계산, 질문 유형별 가중치 적용 |
+| 출력 데이터 | similarity_score, keyword_score, final_recall_score |
+| 저장 테이블 | recall_analysis_results |
+
+---
+
+#### 3.3.2.3 회상 질문 유형
+
+회상 질문은 질문의 성격에 따라 FACT, PREFERENCE, MEMORY, DAILY 유형으로 구분한다. 질문 유형에 따라 의미 유사도와 키워드 일치도의 중요도가 다르기 때문에 서로 다른 가중치를 적용한다.
+
+| 질문 유형 | 설명 | 예시 |
+|---|---|---|
+| FACT | 명확한 정답이 존재하는 사실 기반 질문 | 고향, 배우자 이름, 혈액형, 자녀 이름 |
+| PREFERENCE | 사용자의 선호 정보를 확인하는 질문 | 좋아하는 음식, 좋아하는 계절, 좋아하는 가수 |
+| MEMORY | 장기 기억 및 과거 경험을 확인하는 질문 | 첫 직장, 기억에 남는 여행, 과거 직업 경험 |
+| DAILY | 단기 기억 및 시간 지남력을 확인하는 질문 | 오늘 날짜, 오늘 식사, 현재 계절 |
+
+---
+
+#### 3.3.2.4 내부 동작 흐름
+
+회상 일치도 분석 모듈의 내부 동작 흐름은 다음과 같다.
+
+```text
+[1] 회상 질문 생성 또는 조회
+        ↓
+[2] 사용자 음성 답변 입력
+        ↓
+[3] STT를 통한 텍스트 변환
+        ↓
+[4] audio_records 테이블에 답변 텍스트 저장
+        ↓
+[5] 과거 기준 답변 조회
+        ↓
+[6] recall_keywords 기반 키워드 일치도 계산
+        ↓
+[7] Sentence-BERT 기반 의미 유사도 계산
+        ↓
+[8] 질문 유형별 가중치 적용
+        ↓
+[9] final_recall_score 계산
+        ↓
+[10] recall_analysis_results 테이블에 저장
+        ↓
+[11] 종합 위험도 계산 모듈로 전달
+```
+
+---
+
+#### 3.3.2.5 Input / Process / Output
+
+##### Input
+
+| 입력값 | 설명 |
+|---|---|
+| user_id | 분석 대상 사용자 ID |
+| recall_question_id | 회상 질문 ID |
+| current_record_id | 현재 회상 답변 녹음 기록 ID |
+| past_record_id | 비교 기준이 되는 과거 답변 녹음 기록 ID |
+| transcript_text | STT를 통해 변환된 현재 답변 텍스트 |
+| keyword_text | 회상 질문별 핵심 키워드 |
+| question_type | FACT, PREFERENCE, MEMORY, DAILY 중 하나의 질문 유형 |
+
+##### Process
+
+1. `recall_question_id`를 기준으로 회상 질문 정보를 조회한다.
+2. `current_record_id`를 기준으로 현재 답변 텍스트를 조회한다.
+3. `past_record_id`를 기준으로 과거 기준 답변 텍스트를 조회한다.
+4. `recall_keywords` 테이블에서 해당 질문의 핵심 키워드를 조회한다.
+5. 현재 답변에 핵심 키워드가 포함되어 있는지 확인하여 `keyword_score`를 계산한다.
+6. 과거 답변과 현재 답변을 Sentence-BERT 모델에 입력하여 의미 유사도인 `similarity_score`를 계산한다.
+7. 질문 유형에 따라 의미 유사도와 키워드 일치도의 가중치를 다르게 적용한다.
+8. 최종 회상 일치도 점수인 `final_recall_score`를 계산한다.
+9. 분석 결과를 `recall_analysis_results` 테이블에 저장한다.
+10. 최종 위험도 계산을 위해 `final_recall_score`를 종합 위험도 계산 모듈로 전달한다.
+
+##### Output
+
+| 출력값 | 설명 |
+|---|---|
+| similarity_score | 과거 답변과 현재 답변의 의미 유사도 점수 |
+| keyword_score | 핵심 키워드 일치도 점수 |
+| final_recall_score | 최종 회상 일치도 점수 |
+| analyzed_at | 회상 분석 완료 시각 |
+
+---
+
+#### 3.3.2.6 회상 점수 계산 알고리즘
+
+회상 일치도 점수는 의미 유사도 점수와 키워드 일치도 점수를 기반으로 계산한다.
+
+의미 유사도는 과거 답변과 현재 답변의 문장 의미가 얼마나 유사한지를 나타내며, 키워드 일치도는 질문별 핵심 키워드가 현재 답변에 얼마나 포함되어 있는지를 나타낸다.
+
+질문 유형에 따른 가중치는 다음과 같다.
+
+| 질문 유형 | 의미 유사도 가중치 | 키워드 일치도 가중치 | 적용 이유 |
+|---|---|---|---|
+| FACT | 20% | 80% | 정답 키워드가 중요하기 때문 |
+| PREFERENCE | 40% | 60% | 선호 정보는 키워드가 중요하지만 표현 차이도 고려해야 하기 때문 |
+| MEMORY | 60% | 40% | 장기 기억 답변은 표현 방식이 다양할 수 있기 때문 |
+| DAILY | 30% | 70% | 날짜, 식사, 계절 등 핵심 단어의 일치가 중요하기 때문 |
+
+최종 회상 일치도 점수 계산식은 다음과 같다.
+
+```text
+final_recall_score =
+(similarity_score × similarity_weight) +
+(keyword_score × keyword_weight)
+```
+
+예를 들어 FACT 유형 질문의 경우 다음과 같이 계산한다.
+
+```text
+final_recall_score =
+(similarity_score × 0.2) +
+(keyword_score × 0.8)
+```
+
+---
+
+#### 3.3.2.7 회상 점수 판정 기준
+
+계산된 `final_recall_score`는 다음 기준에 따라 회상 상태를 분류한다.
+
+| final_recall_score | 판정 단계 | 설명 |
+|---|---|---|
+| 80 이상 | 정상 | 과거 답변과 현재 답변의 일치도가 높은 상태 |
+| 50 이상 80 미만 | 주의 | 일부 기억 차이 또는 답변 불일치가 존재하는 상태 |
+| 50 미만 | 위험 | 과거 답변과 현재 답변의 차이가 큰 상태 |
+
+해당 판정 결과는 단독 진단 결과가 아니라 앱 내부 위험도 계산에 활용되는 보조 지표로 사용한다.
+
+---
+
+#### 3.3.2.8 관련 데이터베이스 구조
+
+##### recall_questions
+
+회상 질문 정보를 저장하는 테이블이다. 사용자별로 제시되는 회상 질문의 내용, 질문 유형, 카테고리 정보를 관리한다.
+
+| 속성 | 설명 |
+|---|---|
+| recall_question_id | 회상 질문 ID |
+| user_id | 사용자 ID |
+| question_text | AI가 사용자에게 제시한 질문 내용 |
+| question_type | 질문 유형 |
+| category | 질문 카테고리 |
+| created_at | 질문 생성 시각 |
+
+---
+
+##### recall_keywords
+
+회상 질문에 대한 핵심 키워드를 저장하는 테이블이다. 키워드 기반 일치도 계산 시 사용된다.
+
+| 속성 | 설명 |
+|---|---|
+| keyword_id | 키워드 ID |
+| recall_question_id | 회상 질문 ID |
+| keyword_text | 핵심 키워드 |
+
+---
+
+##### audio_records
+
+사용자의 음성 녹음 정보와 STT 변환 결과를 저장하는 테이블이다. 회상 분석에서는 과거 기준 답변과 현재 회상 답변을 모두 `audio_records`에 저장한 뒤 비교한다.
+
+| 속성 | 설명 |
+|---|---|
+| record_id | 녹음 기록 ID |
+| user_id | 사용자 ID |
+| session_id | 대화 세션 ID |
+| recall_question_id | 연결된 회상 질문 ID |
+| parent_record_id | 비교 대상이 되는 과거 기준 답변 ID |
+| answer_role | INITIAL 또는 RECALL |
+| audio_file_path | 음성 파일 저장 경로 |
+| transcript_text | STT 변환 결과 |
+| recorded_at | 녹음 생성 시각 |
+
+---
+
+##### recall_analysis_results
+
+과거 답변과 현재 답변을 비교한 회상 일치도 분석 결과를 저장하는 테이블이다.
+
+| 속성 | 설명 |
+|---|---|
+| recall_result_id | 회상 분석 결과 ID |
+| recall_question_id | 회상 질문 ID |
+| past_record_id | 비교 기준이 되는 초기 답변 record_id |
+| current_record_id | 현재 회상 답변 record_id |
+| similarity_score | 의미 유사도 점수 |
+| keyword_score | 핵심 키워드 일치도 점수 |
+| final_recall_score | 최종 회상 일치도 점수 |
+| analyzed_at | 분석 완료 시각 |
+
+---
+
+#### 3.3.2.9 회상 분석 API 인터페이스
+
+회상 일치도 분석은 앱 또는 백엔드 서버에서 AI 분석 서버로 요청하는 방식으로 수행한다.
+
+##### API Name
+
+```text
+POST /api/recall/analyze
+```
+
+##### Request Parameter
+
+| 이름 | 타입 | 설명 |
+|---|---|---|
+| user_id | BIGINT | 사용자 ID |
+| recall_question_id | BIGINT | 회상 질문 ID |
+| current_record_id | BIGINT | 현재 답변 record_id |
+| past_record_id | BIGINT | 과거 기준 답변 record_id |
+| transcript_text | TEXT | STT 변환 결과 텍스트 |
+
+##### Request Body 예시
+
+```json
+{
+  "user_id": 15,
+  "recall_question_id": 3,
+  "current_record_id": 105,
+  "past_record_id": 21,
+  "transcript_text": "제 고향은 대구입니다."
+}
+```
+
+##### Response Body 예시
+
+```json
+{
+  "similarity_score": 84.0,
+  "keyword_score": 91.0,
+  "final_recall_score": 88.2,
+  "recall_status": "normal"
+}
+```
+
+---
+
+#### 3.3.2.10 회상 분석 함수 명세
+
+##### compareRecallAnswer()
+
+| 항목 | 내용 |
+|---|---|
+| Name | compareRecallAnswer |
+| Input | past_text, current_text |
+| Process | 과거 답변과 현재 답변을 비교하여 의미 유사도를 계산한다. |
+| Output | similarity_score |
+
+---
+
+##### calculateKeywordScore()
+
+| 항목 | 내용 |
+|---|---|
+| Name | calculateKeywordScore |
+| Input | current_text, keyword_list |
+| Process | 현재 답변에 핵심 키워드가 포함되어 있는지 확인하여 키워드 일치도 점수를 계산한다. |
+| Output | keyword_score |
+
+---
+
+##### calculateRecallScore()
+
+| 항목 | 내용 |
+|---|---|
+| Name | calculateRecallScore |
+| Input | similarity_score, keyword_score, question_type |
+| Process | 질문 유형별 가중치를 적용하여 최종 회상 일치도 점수를 계산한다. |
+| Output | final_recall_score |
+
+---
+
+##### saveRecallResult()
+
+| 항목 | 내용 |
+|---|---|
+| Name | saveRecallResult |
+| Input | recall_question_id, past_record_id, current_record_id, similarity_score, keyword_score, final_recall_score |
+| Process | 회상 분석 결과를 recall_analysis_results 테이블에 저장한다. |
+| Output | 저장 성공 여부 |
+
+---
+
+#### 3.3.2.11 회상 분석 테스트 방안
+
+##### 기능 테스트
+
+| 테스트 항목 | 설명 | 기대 결과 |
+|---|---|---|
+| 회상 질문 조회 테스트 | recall_question_id로 질문 정보를 조회한다. | 질문 정보가 정상적으로 반환된다. |
+| 과거 답변 조회 테스트 | parent_record_id로 기준 답변을 조회한다. | 과거 답변 텍스트가 정상적으로 반환된다. |
+| STT 결과 저장 테스트 | 변환된 transcript_text를 저장한다. | audio_records에 텍스트가 저장된다. |
+| 키워드 일치도 테스트 | 현재 답변과 핵심 키워드를 비교한다. | keyword_score가 계산된다. |
+| 의미 유사도 테스트 | 과거 답변과 현재 답변의 의미 유사도를 계산한다. | similarity_score가 계산된다. |
+| 가중치 적용 테스트 | 질문 유형별 가중치를 적용한다. | 유형별 계산 결과가 다르게 산출된다. |
+| 최종 점수 저장 테스트 | 회상 분석 결과를 저장한다. | recall_analysis_results에 결과가 저장된다. |
+
+---
+
+### 3.3.3 종합 위험도 계산 모듈
+
+#### 3.3.3.1 모듈 개요
+
+종합 위험도 계산 모듈은 음성 특징 분석 결과, 텍스트 분석 결과, 회상 일치도 분석 결과를 종합하여 사용자의 최종 인지기능 저하 위험도를 계산하는 모듈이다.
+
+초기 버전에서는 규칙 기반 가중치 계산 방식을 사용한다. 이후 인지장애 음성 데이터, 구음장애 음성 데이터, 실제 앱 사용 데이터를 활용하여 정상군, 경도인지장애(MCI), 알츠하이머성 치매(AD) 분류 모델로 확장할 수 있도록 설계한다.
+
+본 모듈에서 계산된 결과는 `risk_analysis_results` 테이블에 저장되며, 앱 화면과 보호자 알림 기능에서 활용된다.
+
+---
+
+#### 3.3.3.2 모듈 기능
+
+| 구분 | 내용 |
+|---|---|
+| 모듈명 | Risk Scoring Module |
+| 주요 기능 | 음성 점수, 텍스트 점수, 회상 점수를 종합하여 최종 위험도 산출 |
+| 입력 데이터 | speech_score, text_score, recall_score |
+| 처리 방식 | 가중치 기반 점수 계산 |
+| 출력 데이터 | final_risk_score, risk_level |
+| 저장 테이블 | risk_analysis_results |
+
+---
+
+#### 3.3.3.3 내부 동작 흐름
+
+```text
+[1] speech_analysis_results에서 speech_score 수신
+        ↓
+[2] text_analysis_results에서 text_score 수신
+        ↓
+[3] recall_analysis_results에서 recall_score 수신
+        ↓
+[4] 각 점수에 가중치 적용
+        ↓
+[5] final_risk_score 계산
+        ↓
+[6] risk_level 분류
+        ↓
+[7] risk_analysis_results 테이블에 저장
+        ↓
+[8] 앱 또는 보호자 화면에 결과 전달
+```
+
+---
+
+#### 3.3.3.4 Input / Process / Output
+
+##### Input
+
+| 입력값 | 설명 |
+|---|---|
+| session_id | 분석 대상 대화 세션 ID |
+| speech_score | 음성 특징 기반 점수 |
+| text_score | 텍스트 언어 특징 기반 점수 |
+| recall_score | 회상 일치도 기반 점수 |
+
+##### Process
+
+1. 대화 세션 단위로 음성 분석 결과를 조회한다.
+2. 대화 세션 단위로 텍스트 분석 결과를 조회한다.
+3. 회상 분석 결과에서 회상 일치도 점수를 조회한다.
+4. 각 점수에 사전에 정의된 가중치를 적용한다.
+5. 최종 위험도 점수인 `final_risk_score`를 계산한다.
+6. 계산된 점수를 기준으로 `risk_level`을 분류한다.
+7. 결과를 `risk_analysis_results` 테이블에 저장한다.
+
+##### Output
+
+| 출력값 | 설명 |
+|---|---|
+| final_risk_score | 최종 위험도 점수 |
+| risk_level | 위험도 단계 |
+| analyzed_at | 위험도 분석 완료 시각 |
+
+---
+
+#### 3.3.3.5 위험도 계산 방식
+
+초기 버전에서는 다음과 같은 규칙 기반 가중치 계산 방식을 사용한다.
+
+```text
+final_risk_score =
+(0.4 × recall_score) +
+(0.35 × speech_score) +
+(0.25 × text_score)
+```
+
+회상 일치도는 사용자의 기억 유지 여부를 직접적으로 반영하므로 가장 높은 가중치를 부여한다. 음성 특징은 발화 속도, 침묵 시간, 발음 안정성 등의 변화를 반영하며, 텍스트 특징은 어휘 다양성, 반복 단어 비율, 문장 일관성 등을 반영한다.
+
+---
+
+#### 3.3.3.6 위험도 단계 분류
+
+| final_risk_score | risk_level | 설명 |
+|---|---|---|
+| 0 이상 40 미만 | low | 인지기능 저하 위험이 낮은 상태 |
+| 40 이상 70 미만 | medium | 지속적인 관찰이 필요한 상태 |
+| 70 이상 100 이하 | high | 보호자 확인 및 추가 점검이 필요한 상태 |
+
+---
+
+#### 3.3.3.7 관련 데이터베이스 구조
+
+##### risk_analysis_results
+
+최종 AI 위험도 분석 결과를 저장하는 테이블이다.
+
+| 속성 | 설명 |
+|---|---|
+| risk_result_id | 위험도 분석 결과 ID |
+| session_id | 분석 대상 세션 ID |
+| speech_score | 음성 특징 기반 점수 |
+| text_score | 텍스트 특징 기반 점수 |
+| recall_score | 회상 일치도 기반 점수 |
+| final_risk_score | 최종 위험도 점수 |
+| risk_level | 위험도 단계 |
+| analyzed_at | 위험도 분석 완료 시각 |
+
+---
+
+#### 3.3.3.8 위험도 분석 API 인터페이스
+
+##### API Name
+
+```text
+GET /api/risk/result/{session_id}
+```
+
+##### Response Body 예시
+
+```json
+{
+  "session_id": 10,
+  "speech_score": 72.0,
+  "text_score": 81.0,
+  "recall_score": 65.0,
+  "final_risk_score": 71.0,
+  "risk_level": "high",
+  "analyzed_at": "2026-05-18T15:30:00"
+}
+```
+
+---
+
+#### 3.3.3.9 위험도 계산 함수 명세
+
+##### calculateRiskScore()
+
+| 항목 | 내용 |
+|---|---|
+| Name | calculateRiskScore |
+| Input | speech_score, text_score, recall_score |
+| Process | 각 분석 점수에 가중치를 적용하여 final_risk_score를 계산한다. |
+| Output | final_risk_score |
+
+---
+
+##### classifyRiskLevel()
+
+| 항목 | 내용 |
+|---|---|
+| Name | classifyRiskLevel |
+| Input | final_risk_score |
+| Process | 최종 위험도 점수를 기준으로 low, medium, high 단계를 분류한다. |
+| Output | risk_level |
+
+---
+
+##### saveRiskResult()
+
+| 항목 | 내용 |
+|---|---|
+| Name | saveRiskResult |
+| Input | session_id, speech_score, text_score, recall_score, final_risk_score, risk_level |
+| Process | 종합 위험도 분석 결과를 risk_analysis_results 테이블에 저장한다. |
+| Output | 저장 성공 여부 |
+
+---
+
+#### 3.3.3.10 위험도 계산 테스트 방안
+
+| 테스트 항목 | 설명 | 기대 결과 |
+|---|---|---|
+| 점수 입력 테스트 | speech_score, text_score, recall_score를 입력한다. | 입력값이 정상적으로 전달된다. |
+| 가중치 계산 테스트 | 각 점수에 가중치를 적용한다. | final_risk_score가 계산된다. |
+| 위험 단계 분류 테스트 | final_risk_score를 기준으로 risk_level을 분류한다. | low, medium, high 중 하나로 분류된다. |
+| 결과 저장 테스트 | 계산 결과를 DB에 저장한다. | risk_analysis_results에 저장된다. |
+| 결과 조회 테스트 | session_id로 위험도 결과를 조회한다. | 앱 또는 보호자 화면에서 결과를 확인할 수 있다. |
+
+---
+
+### 3.3.4 AI 분석 모듈 확장 방향
+
+초기 구현에서는 회상 일치도, 음성 특징, 텍스트 특징을 규칙 기반 가중치 방식으로 종합하여 위험도를 계산한다.
+
+향후에는 인지장애 음성 데이터셋과 구음장애 음성 데이터셋을 활용하여 정상군, 경도인지장애(MCI), 알츠하이머성 치매(AD)를 분류하는 AI 모델로 확장할 수 있다.
+
+또한 앱 사용자의 장기 사용 데이터를 누적하여 시간 경과에 따른 회상 점수 변화, 음성 특징 변화, 텍스트 특징 변화를 추적하고 개인별 위험도 기준을 보정하는 방식으로 개선할 수 있다.
