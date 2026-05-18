@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -125,7 +124,8 @@ fun VoiceChatScreen(
 
         // 하단 영역 — 상태별 분기
         when (state) {
-            is VoiceChatState.Idle      -> IdleBottom(onMicClick = viewModel::startRecording)
+            is VoiceChatState.Idle,
+            is VoiceChatState.Playing   -> IdleBottom(onMicClick = viewModel::startRecording)
             is VoiceChatState.Recording -> RecordingBottom(
                 seconds = viewModel.recordingSeconds,
                 onStopClick = viewModel::stopRecording
@@ -136,10 +136,6 @@ fun VoiceChatScreen(
                 onRetry = viewModel::retryRecording,
                 onReplaySource = { /* 더미: 음성 다시 듣기 — 백엔드 연동 시 구현 */ },
                 onEdit = { /* 더미: 텍스트 수정 화면 — 추후 구현 */ }
-            )
-            is VoiceChatState.Playing   -> PlayingBottom(
-                onReplay = viewModel::replayLastAi,
-                onAnswer = viewModel::finishPlaying
             )
         }
     }
@@ -279,28 +275,3 @@ private fun ReviewingBottom(
     }
 }
 
-@Composable
-private fun PlayingBottom(
-    onReplay: () -> Unit,
-    onAnswer: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        SttSecondaryButton(
-            label = "다시 듣기",
-            leadingIcon = Icons.AutoMirrored.Filled.VolumeUp,
-            onClick = onReplay,
-            modifier = Modifier.weight(1f)
-        )
-        Box(modifier = Modifier.weight(1f)) {
-            AppPrimaryButton(
-                text = "답변하기",
-                onClick = onAnswer
-            )
-        }
-    }
-}
