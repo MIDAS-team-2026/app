@@ -53,6 +53,12 @@ class PrefsManager(context: Context) {
     fun getTtsSpeed(): Float = prefs.getFloat(KEY_TTS_SPEED, 1.0f)
     fun setTtsSpeed(speed: Float) { prefs.edit().putFloat(KEY_TTS_SPEED, speed).apply() }
 
+    fun getVoiceChatEnabled(): Boolean = prefs.getBoolean(KEY_VOICE_CHAT_ENABLED, true)
+    fun setVoiceChatEnabled(enabled: Boolean) { prefs.edit().putBoolean(KEY_VOICE_CHAT_ENABLED, enabled).apply() }
+
+    fun getTapToReplay(): Boolean = prefs.getBoolean(KEY_TAP_TO_REPLAY, true)
+    fun setTapToReplay(enabled: Boolean) { prefs.edit().putBoolean(KEY_TAP_TO_REPLAY, enabled).apply() }
+
     fun getHapticFeedback(): Boolean = prefs.getBoolean(KEY_HAPTIC, true)
     fun setHapticFeedback(enabled: Boolean) { prefs.edit().putBoolean(KEY_HAPTIC, enabled).apply() }
 
@@ -73,6 +79,8 @@ class PrefsManager(context: Context) {
         private const val KEY_TTS_SPEED = "a11y_tts_speed"
         private const val KEY_HAPTIC = "a11y_haptic"
         private const val KEY_LARGE_TOUCH = "a11y_large_touch"
+        private const val KEY_VOICE_CHAT_ENABLED = "a11y_voice_chat_enabled"
+        private const val KEY_TAP_TO_REPLAY = "a11y_tap_to_replay"
 
         const val ROLE_USER = "user"
         const val ROLE_GUARDIAN = "guardian"
