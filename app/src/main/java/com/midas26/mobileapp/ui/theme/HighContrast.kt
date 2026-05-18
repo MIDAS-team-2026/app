@@ -7,6 +7,9 @@ import androidx.compose.ui.graphics.Color
 val LocalHighContrast = compositionLocalOf { false }
 val LocalHapticEnabled = compositionLocalOf { true }
 
+// null = TTS 비활성화 상태
+val LocalTtsManager = compositionLocalOf<com.midas26.mobileapp.util.TtsManager?> { null }
+
 /**
  * 고대비 모드를 인식하는 앱 전용 색상 접근자.
  * 모든 화면에서 hardcoded 색상 대신 이 객체를 사용하면

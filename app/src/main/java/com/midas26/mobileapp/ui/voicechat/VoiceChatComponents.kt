@@ -41,16 +41,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
+import com.midas26.mobileapp.ui.theme.Green100
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
-import com.midas26.mobileapp.ui.theme.AppColor
 
 /**
  * 음성 대화 화면 상단 앱바 — ← + "음성 대화" + 우측 시간(옵션).
@@ -128,7 +126,8 @@ fun AiAvatar(size: Dp = 44.dp) {
 @Composable
 fun ChatBubble(
     message: ChatMessage,
-    faded: Boolean = false
+    faded: Boolean = false,
+    onTap: (() -> Unit)? = null
 ) {
     if (message.from == Sender.AI) {
         Row(
@@ -144,8 +143,10 @@ fun ChatBubble(
                     topStart = 6.dp, topEnd = 20.dp,
                     bottomStart = 20.dp, bottomEnd = 20.dp
                 ),
-                color = Green50,
-                modifier = Modifier.weight(1f, fill = false)
+                color = if (message.isSpeaking) Green100 else Green50,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
             ) {
                 if (message.isLoading) {
                     LoadingDots()

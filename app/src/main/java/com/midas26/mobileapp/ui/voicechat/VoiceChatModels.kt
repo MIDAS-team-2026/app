@@ -66,6 +66,10 @@ class VoiceChatViewModel : ViewModel() {
     private var _recordingSeconds by mutableStateOf(0)
     val recordingSeconds: Int get() = _recordingSeconds
 
+    // TTS 재생 트리거 — 값이 바뀔 때마다 Screen이 TTS를 실행
+    private var _speakTrigger by mutableStateOf(0)
+    val speakTrigger: Int get() = _speakTrigger
+
     private var timerJob: Job? = null
 
     /** 미리 정해진 STT 결과 시퀀스 — 녹음할 때마다 순차적으로 사용. */
@@ -127,6 +131,7 @@ class VoiceChatViewModel : ViewModel() {
             _messages.add(ChatMessage(Sender.AI, reply, isSpeaking = true))
             sttIndex += 1
             _state = VoiceChatState.Playing
+            _speakTrigger++
         }
     }
 
@@ -140,7 +145,7 @@ class VoiceChatViewModel : ViewModel() {
         _state = VoiceChatState.Idle
     }
 
-    /** "다시 듣기" — 단순히 다시 Playing 상태로. */
+    /** "다시 듣기" — 마지막 AI 메시지를 다시 재생. */
     fun replayLastAi() {
         if (_messages.lastOrNull()?.from != Sender.AI) return
         val last = _messages.last()
@@ -148,6 +153,17 @@ class VoiceChatViewModel : ViewModel() {
             _messages[_messages.lastIndex] = last.copy(isSpeaking = true)
         }
         _state = VoiceChatState.Playing
+        _speakTrigger++
+    }
+
+    /** 말풍선 탭 시 해당 AI 메시지 재생 (누르면 음성 재생하기). */
+    fun speakMessage(index: Int) {
+        val msg = _messages.getOrNull(index) ?: return
+        if (msg.from != Sender.AI || msg.isLoading) return
+        _messages.replaceAll { it.copy(isSpeaking = false) }
+        _messages[index] = msg.copy(isSpeaking = true)
+        _state = VoiceChatState.Playing
+        _speakTrigger++
     }
 
     override fun onCleared() {

@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -24,17 +24,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.Gray200
+import com.midas26.mobileapp.ui.theme.LocalTtsManager
+import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.util.PrefsManager
 
 /**
  * 음성 대화 통합 화면.
@@ -54,6 +54,21 @@ fun VoiceChatScreen(
     val state = viewModel.state
     val messages = viewModel.messages
     val faded = state is VoiceChatState.Recording || state is VoiceChatState.Reviewing
+
+    val ttsManager = LocalTtsManager.current
+    val prefs = PrefsManager.from(LocalContext.current)
+    val tapToReplay = prefs.getTapToReplay()
+
+    // TTS 재생 — speakTrigger가 바뀔 때마다 현재 isSpeaking 메시지를 읽어줌
+    LaunchedEffect(viewModel.speakTrigger) {
+        val speaking = messages.lastOrNull { it.isSpeaking } ?: return@LaunchedEffect
+        ttsManager?.speak(speaking.text) { viewModel.finishPlaying() }
+    }
+
+    // 녹음 시작 시 TTS 즉시 중단
+    LaunchedEffect(state) {
+        if (state is VoiceChatState.Recording) ttsManager?.stop()
+    }
 
     val listState = rememberLazyListState()
     LaunchedEffect(messages.size) {
@@ -89,8 +104,15 @@ fun VoiceChatScreen(
             state = listState,
             verticalArrangement = Arrangement.Top
         ) {
-            items(visibleMessages) { msg ->
-                ChatBubble(message = msg, faded = faded)
+            itemsIndexed(visibleMessages) { visibleIndex, msg ->
+                val realIndex = messages.indexOf(msg)
+                ChatBubble(
+                    message = msg,
+                    faded = faded,
+                    onTap = if (tapToReplay && msg.from == Sender.AI && !msg.isLoading && realIndex >= 0) {
+                        { viewModel.speakMessage(realIndex) }
+                    } else null
+                )
             }
         }
 

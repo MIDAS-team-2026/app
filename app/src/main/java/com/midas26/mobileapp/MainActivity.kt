@@ -23,20 +23,32 @@ import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
+import com.midas26.mobileapp.ui.theme.LocalTtsManager
 import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.util.TtsManager
 
 class MainActivity : ComponentActivity() {
+
+    private lateinit var ttsManager: TtsManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val prefs = PrefsManager.from(this)
+        ttsManager = TtsManager(this).apply { setSpeed(prefs.getTtsSpeed()) }
         enableEdgeToEdge()
         setContent {
-            AppRoot()
+            AppRoot(ttsManager = if (prefs.getVoiceChatEnabled()) ttsManager else null)
         }
+    }
+
+    override fun onDestroy() {
+        ttsManager.shutdown()
+        super.onDestroy()
     }
 }
 
 @Composable
-fun AppRoot() {
+fun AppRoot(ttsManager: TtsManager? = null) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
     var fontSizeLevel by remember {
@@ -48,7 +60,8 @@ fun AppRoot() {
     CompositionLocalProvider(
         LocalFontSizeScale provides fontSizeLevel,
         LocalHighContrast provides highContrast,
-        LocalHapticEnabled provides hapticEnabled
+        LocalHapticEnabled provides hapticEnabled,
+        LocalTtsManager provides ttsManager
     ) {
         AppTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
