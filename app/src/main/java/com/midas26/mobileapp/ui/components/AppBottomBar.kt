@@ -36,6 +36,7 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.AppColor
 
 sealed interface TabId
 enum class UserHomeTab : TabId { Home, Chat, Analysis, Settings }
@@ -69,7 +70,7 @@ fun AppBottomBar(
         modifier = modifier.fillMaxWidth(),
         color = BrandWhite,
         shadowElevation = 0.dp,
-        border = BorderStroke(width = 1.dp, color = Gray200)
+        border = BorderStroke(width = 1.dp, color = AppColor.divider)
     ) {
         Row(
             modifier = Modifier
@@ -101,14 +102,14 @@ fun AppBottomBar(
                     Icon(
                         imageVector = tab.icon,
                         contentDescription = null,
-                        tint = if (selected) accent else Gray400,
+                        tint = if (selected) accent else AppColor.textTertiary,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = stringResource(tab.labelRes),
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (selected) accent else Gray400,
+                        color = if (selected) accent else AppColor.textTertiary,
                         fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                     )
                 }

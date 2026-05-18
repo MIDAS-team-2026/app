@@ -47,6 +47,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun ProfileEditScreen(
@@ -110,14 +111,14 @@ fun ProfileEditScreen(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "뒤로가기",
-                        tint = Gray800
+                        tint = AppColor.textPrimary
                     )
                 }
                 Text(
                     text = "프로필 편집",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     modifier = Modifier.align(Alignment.Center)
                 )
                 TextButton(
@@ -131,7 +132,7 @@ fun ProfileEditScreen(
                 ) {
                     Text(
                         text = "저장",
-                        color = Green400,
+                        color = AppColor.accent,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.bodyLarge
                     )
@@ -161,7 +162,7 @@ fun ProfileEditScreen(
                             text = name.take(1).ifEmpty { "?" },
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Green600
+                            color = AppColor.accentDark
                         )
                     }
                 }
@@ -202,7 +203,7 @@ fun ProfileEditScreen(
                         imeAction = ImeAction.Next
                     )
                     HorizontalDivider(
-                        color = Gray200,
+                        color = AppColor.divider,
                         thickness = 1.dp,
                         modifier = Modifier.padding(bottom = 16.dp)
                     )
@@ -264,7 +265,7 @@ private fun ProfileSection(
         Text(
             text = title,
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )

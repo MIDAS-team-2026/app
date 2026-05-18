@@ -40,6 +40,7 @@ import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
+import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
@@ -66,7 +67,9 @@ private val mainRoutes = setOf(
 
 @Composable
 fun AppNavHost(
-    navController: NavHostController = rememberNavController()
+    navController: NavHostController = rememberNavController(),
+    onFontSizeChange: (FontSizeLevel) -> Unit = {},
+    onHighContrastChange: (Boolean) -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -296,7 +299,9 @@ fun AppNavHost(
 
         composable(Routes.AccessibilitySettings) {
             AccessibilitySettingsScreen(
-                onBack = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) }
+                onBack = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) },
+                onFontSizeChange = onFontSizeChange,
+                onHighContrastChange = onHighContrastChange
             )
         }
 

@@ -45,6 +45,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun AnalysisResultScreen(
@@ -160,7 +161,7 @@ fun AnalysisResultScreen(
                             Text(
                                 text = viewModel.scoreDeltaText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Green600,
+                                color = AppColor.accentDark,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
@@ -207,7 +208,7 @@ fun AnalysisResultScreen(
                     Icon(
                         imageVector = Icons.Default.Celebration,
                         contentDescription = null,
-                        tint = Green600,
+                        tint = AppColor.accentDark,
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.size(12.dp))
@@ -215,14 +216,14 @@ fun AnalysisResultScreen(
                         Text(
                             text = "오늘의 코멘트",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Green600,
+                            color = AppColor.accentDark,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = viewModel.comment,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Gray800
+                            color = AppColor.textPrimary
                         )
                     }
                 }
@@ -239,29 +240,29 @@ fun AnalysisResultScreen(
 @Composable
 private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
     val accent = when (item.trend) {
-        AnalysisItem.Trend.Up     -> Green600
-        AnalysisItem.Trend.Down   -> Green400
-        AnalysisItem.Trend.Steady -> Gray400
+        AnalysisItem.Trend.Up     -> AppColor.accentDark
+        AnalysisItem.Trend.Down   -> AppColor.accent
+        AnalysisItem.Trend.Steady -> AppColor.textTertiary
     }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Gray200)
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = item.icon,
                     contentDescription = null,
-                    tint = Gray400,
+                    tint = AppColor.textTertiary,
                     modifier = Modifier.size(18.dp)
                 )
                 Spacer(modifier = Modifier.size(6.dp))
                 Text(
                     text = item.label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400,
+                    color = AppColor.textTertiary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -269,7 +270,7 @@ private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
             Text(
                 text = item.valueText,
                 fontSize = 28.sp,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(2.dp))

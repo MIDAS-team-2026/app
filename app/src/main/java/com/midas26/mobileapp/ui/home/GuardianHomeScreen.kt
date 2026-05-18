@@ -40,6 +40,7 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.GuardianAccentLight
@@ -75,7 +76,7 @@ fun GuardianHomeScreen(
         Text(
             text = stringResource(R.string.guardian_menu),
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 24.dp)
         )
@@ -248,7 +249,7 @@ private fun GuardianScoreCard(score: Int) {
                     Text(
                         text = stringResource(R.string.home_week_score_label),
                         style = MaterialTheme.typography.titleMedium,
-                        color = Gray800,
+                        color = AppColor.textPrimary,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -269,7 +270,7 @@ private fun GuardianScoreCard(score: Int) {
                 Text(
                     text = stringResource(R.string.guardian_score_normal),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
         }
@@ -370,7 +371,7 @@ private fun GuardianMenuCard(
             Text(
                 text = stringResource(titleRes),
                 style = MaterialTheme.typography.titleMedium,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         }

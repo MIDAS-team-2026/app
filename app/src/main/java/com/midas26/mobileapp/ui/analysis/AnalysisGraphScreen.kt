@@ -52,6 +52,7 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Green900
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun AnalysisGraphScreen(
@@ -84,14 +85,14 @@ fun AnalysisGraphScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
             Text(
                 text = "추이 그래프",
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f).padding(start = 4.dp)
             )
@@ -99,7 +100,7 @@ fun AnalysisGraphScreen(
                 Icon(
                     imageVector = Icons.Filled.Share,
                     contentDescription = "보호자에게 공유",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -126,7 +127,7 @@ fun AnalysisGraphScreen(
                     TrendRange.MONTH -> "최근 30일 인지 점수"
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
+                color = AppColor.textTertiary,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -134,7 +135,7 @@ fun AnalysisGraphScreen(
                 Text(
                     text = "%.1f".format(viewModel.graphAverage),
                     fontSize = 32.sp,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.size(8.dp))
@@ -142,7 +143,7 @@ fun AnalysisGraphScreen(
                     Text(
                         text = viewModel.graphAverageDeltaText,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
@@ -165,7 +166,7 @@ fun AnalysisGraphScreen(
             Text(
                 text = "항목별 추이",
                 style = MaterialTheme.typography.titleMedium,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(12.dp))
@@ -208,7 +209,7 @@ private fun RangeTabs(
                         Text(
                             text = label,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (isSelected) Gray800 else Gray400,
+                            color = if (isSelected) AppColor.textPrimary else AppColor.textTertiary,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )
                     }
@@ -326,7 +327,7 @@ private fun LineChart(
                 Text(
                     text = p.dayLabel,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
         }
@@ -359,7 +360,7 @@ private fun TrendRow(item: AnalysisItem) {
             Text(
                 text = item.label,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.weight(1f)
             )

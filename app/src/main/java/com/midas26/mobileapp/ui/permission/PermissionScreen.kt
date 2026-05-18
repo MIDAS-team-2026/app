@@ -46,6 +46,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 private data class PermissionItem(
     val icon: ImageVector,
@@ -105,7 +106,7 @@ fun PermissionScreen(
                     Icon(
                         imageVector = Icons.Default.Lock,
                         contentDescription = null,
-                        tint = Green400,
+                        tint = AppColor.accent,
                         modifier = Modifier.size(40.dp)
                     )
                 }
@@ -114,14 +115,14 @@ fun PermissionScreen(
             Text(
                 text = stringResource(R.string.permission_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = stringResource(R.string.permission_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400
+                color = AppColor.textTertiary
             )
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -171,7 +172,7 @@ private fun PermissionRow(item: PermissionItem) {
                     Icon(
                         imageVector = item.icon,
                         contentDescription = null,
-                        tint = Green400,
+                        tint = AppColor.accent,
                         modifier = Modifier.size(26.dp)
                     )
                 }
@@ -181,14 +182,14 @@ private fun PermissionRow(item: PermissionItem) {
                 Text(
                     text = stringResource(item.titleRes),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stringResource(item.descRes),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
             // 우측 칩

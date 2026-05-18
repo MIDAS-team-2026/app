@@ -39,6 +39,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 /**
  * 보호자에게 공유하기 — Material3 ModalBottomSheet.
@@ -63,7 +64,7 @@ fun ShareToGuardianSheet(
                     .padding(top = 12.dp, bottom = 8.dp)
                     .size(width = 44.dp, height = 5.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Gray200)
+                    .background(AppColor.divider)
             )
         }
     ) {
@@ -76,14 +77,14 @@ fun ShareToGuardianSheet(
             Text(
                 text = "보호자에게 공유",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = "오늘의 분석 결과를 전달할까요?",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400
+                color = AppColor.textTertiary
             )
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -107,7 +108,7 @@ fun ShareToGuardianSheet(
                         Icon(
                             imageVector = viewModel.guardian.icon,
                             contentDescription = null,
-                            tint = Green600,
+                            tint = AppColor.accentDark,
                             modifier = Modifier.size(28.dp)
                         )
                     }
@@ -116,20 +117,20 @@ fun ShareToGuardianSheet(
                         Text(
                             text = viewModel.guardian.name,
                             style = MaterialTheme.typography.titleMedium,
-                            color = Gray800,
+                            color = AppColor.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = viewModel.guardian.relationLabel,
                             style = MaterialTheme.typography.bodySmall,
-                            color = Green600,
+                            color = AppColor.accentDark,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = Green600,
+                        tint = AppColor.accentDark,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -161,13 +162,13 @@ fun ShareToGuardianSheet(
                         .clickable(onClick = onDismiss),
                     shape = RoundedCornerShape(16.dp),
                     color = BrandWhite,
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Gray200)
+                    border = androidx.compose.foundation.BorderStroke(2.dp, AppColor.divider)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = "취소",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Gray400,
+                            color = AppColor.textTertiary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -194,7 +195,7 @@ private fun ShareOptionRow(
         color = if (selected) Green50 else BrandWhite,
         border = androidx.compose.foundation.BorderStroke(
             width = if (selected) 2.dp else 1.5.dp,
-            color = if (selected) Green400 else Gray200
+            color = if (selected) AppColor.accent else AppColor.divider
         )
     ) {
         Row(
@@ -206,7 +207,7 @@ private fun ShareOptionRow(
                 modifier = Modifier.size(28.dp),
                 shape = RoundedCornerShape(8.dp),
                 color = if (selected) Green400 else BrandWhite,
-                border = androidx.compose.foundation.BorderStroke(2.dp, if (selected) Green400 else Gray200)
+                border = androidx.compose.foundation.BorderStroke(2.dp, if (selected) AppColor.accent else AppColor.divider)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     if (selected) {
@@ -224,13 +225,13 @@ private fun ShareOptionRow(
                 Text(
                     text = option.label,
                     style = MaterialTheme.typography.titleMedium,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = option.description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
         }

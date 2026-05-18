@@ -39,6 +39,7 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun SignupCompleteScreen(
@@ -171,7 +172,7 @@ fun SignupCompleteScreen(
                 Text(
                     text = stringResource(R.string.btn_go_home),
                     style = MaterialTheme.typography.labelLarge,
-                    color = Green600,
+                    color = AppColor.accentDark,
                     fontWeight = FontWeight.Bold
                 )
             }

@@ -50,6 +50,7 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.ui.theme.AppColor
 
 /**
  * 음성 대화 화면 상단 앱바 — ← + "음성 대화" + 우측 시간(옵션).
@@ -75,7 +76,7 @@ fun VoiceChatTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -83,7 +84,7 @@ fun VoiceChatTopBar(
             Text(
                 text = "음성 대화",
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -91,7 +92,7 @@ fun VoiceChatTopBar(
                 Text(
                     text = rightLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400,
+                    color = AppColor.textTertiary,
                     modifier = Modifier.padding(end = 16.dp)
                 )
             }
@@ -153,7 +154,7 @@ fun ChatBubble(
                         Text(
                             text = message.text,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (faded) Gray400 else Gray800,
+                            color = if (faded) AppColor.textTertiary else AppColor.textPrimary,
                             fontWeight = FontWeight.Medium
                         )
                         if (message.isSpeaking) {
@@ -236,7 +237,7 @@ private fun SpeakingIndicator() {
         Text(
             text = "AI가 말하고 있어요...",
             style = MaterialTheme.typography.bodySmall,
-            color = Green600,
+            color = AppColor.accentDark,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -387,7 +388,7 @@ fun RecordingTimer(seconds: Int) {
         text = "$mm:$ss",
         fontSize = 48.sp,
         fontWeight = FontWeight.Bold,
-        color = Gray800
+        color = AppColor.textPrimary
     )
 }
 
@@ -410,7 +411,7 @@ fun SttQuoteCard(text: String) {
             Text(
                 text = text,
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
@@ -432,7 +433,7 @@ fun SttSecondaryButton(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = BrandWhite,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Gray200)
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,7 +441,7 @@ fun SttSecondaryButton(
                     Icon(
                         imageVector = leadingIcon,
                         contentDescription = null,
-                        tint = Gray400,
+                        tint = AppColor.textTertiary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.size(6.dp))
@@ -448,7 +449,7 @@ fun SttSecondaryButton(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400,
+                    color = AppColor.textTertiary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -474,7 +475,7 @@ fun WideSecondaryButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = Gray400,
+                color = AppColor.textTertiary,
                 fontWeight = FontWeight.SemiBold
             )
         }

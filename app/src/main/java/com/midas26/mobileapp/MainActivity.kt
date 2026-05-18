@@ -9,10 +9,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import com.midas26.mobileapp.ui.navigation.AppNavHost
 import com.midas26.mobileapp.ui.theme.AppTheme
+import com.midas26.mobileapp.ui.theme.FontSizeLevel
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import com.midas26.mobileapp.ui.theme.LocalHighContrast
+import com.midas26.mobileapp.util.PrefsManager
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -26,15 +36,35 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AppRoot() {
-    AppTheme {
-        Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-            // NavHost 자체는 화면을 채우고 시스템 인셋은 각 화면에서 처리
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
-                AppNavHost()
+    val context = LocalContext.current
+    val prefs = PrefsManager.from(context)
+    var fontSizeLevel by remember {
+        mutableStateOf(FontSizeLevel.fromIndex(prefs.getAccessibilityFontSize()))
+    }
+    var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
+
+    CompositionLocalProvider(
+        LocalFontSizeScale provides fontSizeLevel,
+        LocalHighContrast provides highContrast
+    ) {
+        AppTheme {
+            Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
+                    AppNavHost(
+                        onFontSizeChange = { level ->
+                            fontSizeLevel = level
+                            prefs.setAccessibilityFontSize(level.ordinal)
+                        },
+                        onHighContrastChange = { enabled ->
+                            highContrast = enabled
+                            prefs.setHighContrast(enabled)
+                        }
+                    )
+                }
             }
         }
     }

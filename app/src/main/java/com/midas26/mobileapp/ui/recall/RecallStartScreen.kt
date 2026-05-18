@@ -40,6 +40,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Green900
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 /**
  * 회상 과제 시작 화면 (A2).
@@ -155,7 +156,7 @@ fun RecallStartScreen(
                     Text(
                         text = "오늘의 과제",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Gray400,
+                        color = AppColor.textTertiary,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -182,7 +183,7 @@ fun RecallStartScreen(
                     Icon(
                         imageVector = Icons.Default.Timer,
                         contentDescription = null,
-                        tint = Green400,
+                        tint = AppColor.accent,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.size(10.dp))
@@ -190,13 +191,13 @@ fun RecallStartScreen(
                         Text(
                             text = "소요 시간 약 3-5분이에요",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Gray800,
+                            color = AppColor.textPrimary,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = "편한 자세로 진행하세요",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Green400
+                            color = AppColor.accent
                         )
                     }
                 }
@@ -231,7 +232,7 @@ private fun TodayTaskRow(num: Int, label: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Medium
         )
     }
