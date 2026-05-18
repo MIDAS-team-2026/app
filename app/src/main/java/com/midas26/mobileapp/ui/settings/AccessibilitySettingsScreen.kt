@@ -321,7 +321,7 @@ private fun TtsSpeedSelector(
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text(
-            text = "TTS 읽기 속도",
+            text = "음성 대화 속도",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
             color = AppColor.textPrimary
