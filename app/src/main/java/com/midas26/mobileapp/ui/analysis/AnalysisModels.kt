@@ -1,14 +1,22 @@
 package com.midas26.mobileapp.ui.analysis
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 
 /** 분석 항목 한 줄 (B2 의 4 항목 카드 / B3 의 항목별 추이 공용). */
 data class AnalysisItem(
-    val emoji: String,
+    val icon: ImageVector,
     val label: String,
     val valueText: String,    // 예: "정상", "82%", "1.4s"
     val trendText: String,    // 예: "▲ 안정적", "▲ +5%", "─ 유지"
@@ -35,7 +43,7 @@ data class ShareOption(
 data class GuardianInfo(
     val name: String,
     val relationLabel: String,   // "아들 · 연결됨"
-    val emoji: String = "👨"
+    val icon: ImageVector = Icons.Default.Person
 )
 
 /**
@@ -61,10 +69,10 @@ class AnalysisViewModel : ViewModel() {
 
     /** B2 4 항목. */
     val todayItems: List<AnalysisItem> = listOf(
-        AnalysisItem("🗣️", "발화 속도",  "정상",   "▲ 안정적", AnalysisItem.Trend.Steady),
-        AnalysisItem("📚", "어휘 다양성", "82%",   "▲ +5%",   AnalysisItem.Trend.Up),
-        AnalysisItem("🧠", "기억 일치도", "78%",   "─ 유지",   AnalysisItem.Trend.Steady),
-        AnalysisItem("⚡", "반응 속도",  "1.4s",   "▲ 빨라짐", AnalysisItem.Trend.Up)
+        AnalysisItem(Icons.Default.RecordVoiceOver, "발화 속도",  "정상",   "▲ 안정적", AnalysisItem.Trend.Steady),
+        AnalysisItem(Icons.AutoMirrored.Filled.MenuBook,         "어휘 다양성", "82%",   "▲ +5%",   AnalysisItem.Trend.Up),
+        AnalysisItem(Icons.Default.Psychology,       "기억 일치도", "78%",   "─ 유지",   AnalysisItem.Trend.Steady),
+        AnalysisItem(Icons.Default.Speed,            "반응 속도",  "1.4s",   "▲ 빨라짐", AnalysisItem.Trend.Up)
     )
 
     /** B2 코멘트. */
@@ -109,9 +117,9 @@ class AnalysisViewModel : ViewModel() {
 
     /** B3 항목별 추이 (B2 와 일부 항목 다를 수 있음). */
     val trendItems: List<AnalysisItem> = listOf(
-        AnalysisItem("🗣️", "발화 속도",  "정상", "▲ +8%",  AnalysisItem.Trend.Up),
-        AnalysisItem("📚", "어휘 다양성", "82%", "▲ +5%",  AnalysisItem.Trend.Up),
-        AnalysisItem("🧠", "기억 일치도", "78%", "─ 유지",  AnalysisItem.Trend.Steady)
+        AnalysisItem(Icons.Default.RecordVoiceOver, "발화 속도",  "정상", "▲ +8%",  AnalysisItem.Trend.Up),
+        AnalysisItem(Icons.AutoMirrored.Filled.MenuBook,         "어휘 다양성", "82%", "▲ +5%",  AnalysisItem.Trend.Up),
+        AnalysisItem(Icons.Default.Psychology,       "기억 일치도", "78%", "─ 유지",  AnalysisItem.Trend.Steady)
     )
 
     /** B4 보호자 정보. */

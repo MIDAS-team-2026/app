@@ -1,8 +1,14 @@
 package com.midas26.mobileapp.ui.recall
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Abc
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -13,7 +19,7 @@ import kotlinx.coroutines.launch
 data class RecallQuestion(
     val number: Int,
     val total: Int,
-    val categoryEmoji: String,
+    val categoryIcon: ImageVector,
     val category: String,
     val text: String,
     val hint: String?
@@ -53,31 +59,31 @@ class RecallViewModel : ViewModel() {
     val questions: List<RecallQuestion> = listOf(
         RecallQuestion(
             number = 1, total = 5,
-            categoryEmoji = "📅", category = "어제 대화 회상",
+            categoryIcon = Icons.Default.CalendarToday, category = "어제 대화 회상",
             text = "어제 어떤 일이 있었는지\n기억나시는 대로 말씀해주세요",
             hint = "어제 누구와 어디서 무엇을\n하셨는지 떠올려보세요"
         ),
         RecallQuestion(
             number = 2, total = 5,
-            categoryEmoji = "📅", category = "어제 대화 회상",
+            categoryIcon = Icons.Default.CalendarToday, category = "어제 대화 회상",
             text = "어제 어떤 음식을\n드셨다고 말씀하셨죠?",
             hint = "어제 점심 시간에 대화하셨어요.\n가족 분과 함께 드신 메뉴였습니다."
         ),
         RecallQuestion(
             number = 3, total = 5,
-            categoryEmoji = "🔤", category = "단어/장소 기억",
+            categoryIcon = Icons.Default.Abc, category = "단어/장소 기억",
             text = "오늘 아침에 들으신\n세 단어를 기억하시나요?",
             hint = "사과, 자동차, 우산 — 비슷한 발음의\n단어가 떠오를 수 있어요"
         ),
         RecallQuestion(
             number = 4, total = 5,
-            categoryEmoji = "📍", category = "단어/장소 기억",
+            categoryIcon = Icons.Default.LocationOn, category = "단어/장소 기억",
             text = "어제 다녀오신\n장소가 어디였나요?",
             hint = "어제 오후에 외출하셨어요.\n병원, 공원, 시장 중 한 곳이었습니다."
         ),
         RecallQuestion(
             number = 5, total = 5,
-            categoryEmoji = "⏰", category = "시간/날짜 인지",
+            categoryIcon = Icons.Default.Timer, category = "시간/날짜 인지",
             text = "오늘은 몇 월 며칠\n무슨 요일인가요?",
             hint = "달력을 보지 않고\n천천히 떠올려보세요"
         )

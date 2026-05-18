@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Elderly
+import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -32,9 +34,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Gray200
@@ -113,7 +115,7 @@ fun SignupRoleScreen(
         Spacer(modifier = Modifier.height(44.dp))
 
         RoleCard(
-            emoji = "🧓",
+            icon = Icons.Default.Elderly,
             title = stringResource(R.string.signup_role_user),
             description = stringResource(R.string.signup_role_user_desc),
             selected = selectedRole == PrefsManager.ROLE_USER,
@@ -121,7 +123,7 @@ fun SignupRoleScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
         RoleCard(
-            emoji = "👨‍👧",
+            icon = Icons.Default.FamilyRestroom,
             title = stringResource(R.string.signup_role_guardian),
             description = stringResource(R.string.signup_role_guardian_desc),
             selected = selectedRole == PrefsManager.ROLE_GUARDIAN,
@@ -140,7 +142,7 @@ fun SignupRoleScreen(
 
 @Composable
 private fun RoleCard(
-    emoji: String,
+    icon: ImageVector,
     title: String,
     description: String,
     selected: Boolean,
@@ -176,7 +178,12 @@ private fun RoleCard(
                 modifier = Modifier.size(64.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(text = emoji, fontSize = 44.sp)
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) Green400 else Gray400,
+                    modifier = Modifier.size(44.dp)
+                )
             }
             Spacer(modifier = Modifier.width(20.dp))
             Column(modifier = Modifier.weight(1f)) {

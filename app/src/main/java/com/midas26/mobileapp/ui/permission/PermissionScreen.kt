@@ -15,6 +15,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,7 +48,7 @@ import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 
 private data class PermissionItem(
-    val emoji: String,
+    val icon: ImageVector,
     val titleRes: Int,
     val descRes: Int,
     val isRequired: Boolean
@@ -51,10 +59,10 @@ fun PermissionScreen(
     onNext: () -> Unit
 ) {
     val items = listOf(
-        PermissionItem("🎙️", R.string.permission_mic, R.string.permission_mic_desc, true),
-        PermissionItem("📍", R.string.permission_location, R.string.permission_location_desc, false),
-        PermissionItem("🔔", R.string.permission_notification, R.string.permission_notification_desc, false),
-        PermissionItem("📂", R.string.permission_storage, R.string.permission_storage_desc, false)
+        PermissionItem(Icons.Default.Mic,           R.string.permission_mic,          R.string.permission_mic_desc,          true),
+        PermissionItem(Icons.Default.LocationOn,    R.string.permission_location,     R.string.permission_location_desc,     false),
+        PermissionItem(Icons.Default.Notifications, R.string.permission_notification, R.string.permission_notification_desc, false),
+        PermissionItem(Icons.Default.Folder,        R.string.permission_storage,      R.string.permission_storage_desc,      false)
     )
 
     Column(
@@ -94,7 +102,12 @@ fun PermissionScreen(
                 shadowElevation = 4.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = "🔒", fontSize = 44.sp)
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = Green400,
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(14.dp))
@@ -155,7 +168,12 @@ private fun PermissionRow(item: PermissionItem) {
                 color = BrandWhite
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = item.emoji, fontSize = 30.sp)
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        tint = Green400,
+                        modifier = Modifier.size(26.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.size(14.dp))

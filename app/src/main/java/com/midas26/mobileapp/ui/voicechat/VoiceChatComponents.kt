@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -292,9 +295,9 @@ fun Waveform(
 }
 
 /**
- * 큰 마이크 / 정지 버튼 (160dp 외곽 + 152dp 내부 원).
- * - mode = Idle    : 외곽 Green400, 내부 Green600, 🎙️
- * - mode = Stop    : 빨간 원 + ⏹
+ * 큰 마이크 / 정지 버튼 (160dp 외곽 + 132dp 내부 원).
+ * - mode = Mic  : 외곽 Green400, 내부 Green600, Mic 아이콘
+ * - mode = Stop : 빨간 원 + Stop 아이콘
  */
 @Composable
 fun BigActionButton(
@@ -303,17 +306,17 @@ fun BigActionButton(
 ) {
     val outerColor: Color
     val innerColor: Color
-    val iconText: String
+    val icon: ImageVector
     when (mode) {
         BigActionMode.Mic -> {
             outerColor = Green400
             innerColor = Green600
-            iconText = "🎙️"
+            icon = Icons.Default.Mic
         }
         BigActionMode.Stop -> {
             outerColor = Red400.copy(alpha = 0.18f)
             innerColor = Red400
-            iconText = "⏹"
+            icon = Icons.Default.Stop
         }
     }
     Box(
@@ -331,7 +334,12 @@ fun BigActionButton(
                 .background(innerColor),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = iconText, color = BrandWhite, fontSize = 64.sp)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = BrandWhite,
+                modifier = Modifier.size(52.dp)
+            )
         }
     }
 }
@@ -415,7 +423,8 @@ fun SttQuoteCard(text: String) {
 fun SttSecondaryButton(
     label: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    leadingIcon: ImageVector? = null
 ) {
     Surface(
         modifier = modifier
@@ -426,12 +435,23 @@ fun SttSecondaryButton(
         border = androidx.compose.foundation.BorderStroke(1.5.dp, Gray200)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (leadingIcon != null) {
+                    Icon(
+                        imageVector = leadingIcon,
+                        contentDescription = null,
+                        tint = Gray400,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.size(6.dp))
+                }
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Gray400,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }

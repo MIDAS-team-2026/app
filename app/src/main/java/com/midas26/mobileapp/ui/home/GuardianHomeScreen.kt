@@ -17,6 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -285,13 +292,13 @@ private fun GuardianMenuGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             GuardianMenuCard(
-                emoji = "📊",
+                icon = Icons.Default.BarChart,
                 titleRes = R.string.guardian_menu_analysis,
                 onClick = { onMenuClick(GuardianMenu.Analysis) },
                 modifier = Modifier.weight(1f)
             )
             GuardianMenuCard(
-                emoji = "📍",
+                icon = Icons.Default.LocationOn,
                 titleRes = R.string.guardian_menu_location,
                 onClick = { onMenuClick(GuardianMenu.Location) },
                 modifier = Modifier.weight(1f)
@@ -304,16 +311,17 @@ private fun GuardianMenuGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             GuardianMenuCard(
-                emoji = "📋",
+                icon = Icons.AutoMirrored.Filled.Assignment,
                 titleRes = R.string.guardian_menu_info,
                 onClick = { onMenuClick(GuardianMenu.Info) },
                 modifier = Modifier.weight(1f)
             )
             GuardianMenuCard(
-                emoji = "⚙️",
+                icon = Icons.Default.Settings,
                 titleRes = R.string.menu_settings,
                 onClick = { onMenuClick(GuardianMenu.Settings) },
                 accent = Gray100,
+                iconTint = Gray400,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -322,11 +330,12 @@ private fun GuardianMenuGrid(
 
 @Composable
 private fun GuardianMenuCard(
-    emoji: String,
+    icon: ImageVector,
     titleRes: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = GuardianAccentLight
+    accent: Color = GuardianAccentLight,
+    iconTint: Color = GuardianAccentDark
 ) {
     Surface(
         modifier = modifier
@@ -349,7 +358,12 @@ private fun GuardianMenuCard(
                 color = accent
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = emoji, fontSize = 44.sp)
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(36.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(10.dp))

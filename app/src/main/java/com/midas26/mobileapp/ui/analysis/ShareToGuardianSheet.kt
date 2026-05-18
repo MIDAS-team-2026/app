@@ -104,7 +104,12 @@ fun ShareToGuardianSheet(
                             .background(BrandWhite),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = viewModel.guardian.emoji, fontSize = 24.sp)
+                        Icon(
+                            imageVector = viewModel.guardian.icon,
+                            contentDescription = null,
+                            tint = Green600,
+                            modifier = Modifier.size(28.dp)
+                        )
                     }
                     Spacer(modifier = Modifier.size(14.dp))
                     Column(modifier = Modifier.weight(1f)) {

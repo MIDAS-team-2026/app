@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -174,7 +175,12 @@ fun RecallResultScreen(
                     color = Green50
                 ) {
                     Row(modifier = Modifier.padding(16.dp)) {
-                        Text(text = "💬", fontSize = 22.sp)
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.Chat,
+                            contentDescription = null,
+                            tint = Green600,
+                            modifier = Modifier.size(22.dp)
+                        )
                         Spacer(modifier = Modifier.size(10.dp))
                         Text(
                             text = score.note,
