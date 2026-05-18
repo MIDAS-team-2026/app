@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -133,13 +135,24 @@ fun RecallQuestionScreen(
                 shape = CircleShape,
                 color = Green50
             ) {
-                Text(
-                    text = "${q.categoryEmoji} ${q.category}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Green600,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = q.categoryIcon,
+                        contentDescription = null,
+                        tint = Green600,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.size(5.dp))
+                    Text(
+                        text = q.category,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Green600,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -240,7 +253,12 @@ private fun HintCard(hint: String) {
         color = Green50
     ) {
         Row(modifier = Modifier.padding(20.dp)) {
-            Text(text = "💡", fontSize = 22.sp)
+            Icon(
+                imageVector = Icons.Default.Lightbulb,
+                contentDescription = null,
+                tint = Green600,
+                modifier = Modifier.size(22.dp)
+            )
             Spacer(modifier = Modifier.size(10.dp))
             Column {
                 Text(
@@ -291,7 +309,12 @@ private fun SmallMicButton(
                         .background(BrandWhite)
                 )
             } else {
-                Text(text = "🎙️", color = BrandWhite, fontSize = 40.sp)
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = BrandWhite,
+                    modifier = Modifier.size(36.dp)
+                )
             }
         }
     }

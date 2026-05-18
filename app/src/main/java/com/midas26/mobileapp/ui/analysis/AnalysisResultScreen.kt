@@ -16,7 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -202,7 +204,12 @@ fun AnalysisResultScreen(
                 color = Green50
             ) {
                 Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.Top) {
-                    Text(text = "🎉", fontSize = 24.sp)
+                    Icon(
+                        imageVector = Icons.Default.Celebration,
+                        contentDescription = null,
+                        tint = Green600,
+                        modifier = Modifier.size(24.dp)
+                    )
                     Spacer(modifier = Modifier.size(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
@@ -223,7 +230,7 @@ fun AnalysisResultScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            AppPrimaryButton(text = "📈  그래프로 보기", onClick = onShowGraph)
+            AppPrimaryButton(text = "그래프로 보기", leadingIcon = Icons.AutoMirrored.Filled.TrendingUp, onClick = onShowGraph)
             Spacer(modifier = Modifier.height(20.dp))
         }
     }
@@ -244,7 +251,12 @@ private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = item.emoji, fontSize = 18.sp)
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = Gray400,
+                    modifier = Modifier.size(18.dp)
+                )
                 Spacer(modifier = Modifier.size(6.dp))
                 Text(
                     text = item.label,

@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -227,12 +230,14 @@ private fun ReviewingBottom(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SttSecondaryButton(
-                label = "🔊  다시 듣기",
+                label = "다시 듣기",
+                leadingIcon = Icons.AutoMirrored.Filled.VolumeUp,
                 onClick = onReplaySource,
                 modifier = Modifier.weight(1f)
             )
             SttSecondaryButton(
-                label = "✏️  수정하기",
+                label = "수정하기",
+                leadingIcon = Icons.Default.Edit,
                 onClick = onEdit,
                 modifier = Modifier.weight(1f)
             )
@@ -263,7 +268,8 @@ private fun PlayingBottom(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         SttSecondaryButton(
-            label = "🔊  다시 듣기",
+            label = "다시 듣기",
+            leadingIcon = Icons.AutoMirrored.Filled.VolumeUp,
             onClick = onReplay,
             modifier = Modifier.weight(1f)
         )

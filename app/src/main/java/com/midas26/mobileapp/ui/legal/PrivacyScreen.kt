@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -114,7 +115,12 @@ fun PrivacyScreen(
                 shadowElevation = 4.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(text = "🔐", fontSize = 50.sp)
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = BrandWhite,
+                        modifier = Modifier.size(44.dp)
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(20.dp))

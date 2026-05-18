@@ -17,6 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -297,7 +303,7 @@ private fun MenuGrid(
     ) {
         // 음성대화 — 회상과제 자리까지 가로 전체 차지
         MenuCard(
-            emoji = "🎙️",
+            icon = Icons.Default.Mic,
             titleRes = R.string.menu_voice_chat,
             badge = "N",
             onClick = { onMenuClick(UserMenu.VoiceChat) },
@@ -312,16 +318,17 @@ private fun MenuGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             MenuCard(
-                emoji = "📊",
+                icon = Icons.Default.BarChart,
                 titleRes = R.string.menu_analysis,
                 onClick = { onMenuClick(UserMenu.Analysis) },
                 modifier = Modifier.weight(1f)
             )
             MenuCard(
-                emoji = "⚙️",
+                icon = Icons.Default.Settings,
                 titleRes = R.string.menu_settings,
                 onClick = { onMenuClick(UserMenu.Settings) },
                 accent = Gray100,
+                iconTint = Gray400,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -330,12 +337,13 @@ private fun MenuGrid(
 
 @Composable
 private fun MenuCard(
-    emoji: String,
+    icon: ImageVector,
     titleRes: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     badge: String? = null,
-    accent: Color = Green50
+    accent: Color = Green50,
+    iconTint: Color = Green600
 ) {
     Surface(
         modifier = modifier
@@ -357,7 +365,12 @@ private fun MenuCard(
                     color = accent
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(text = emoji, fontSize = 44.sp)
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(36.dp)
+                        )
                     }
                 }
                 Spacer(modifier = Modifier.height(10.dp))

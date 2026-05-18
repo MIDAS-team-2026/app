@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Extension
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -110,7 +112,12 @@ fun RecallStartScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(text = "🧩", fontSize = 56.sp)
+                    Icon(
+                        imageVector = Icons.Default.Extension,
+                        contentDescription = null,
+                        tint = BrandWhite,
+                        modifier = Modifier.size(56.dp)
+                    )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         text = "기억 점검을\n시작할까요?",
@@ -172,7 +179,12 @@ fun RecallStartScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(text = "⏱️", fontSize = 22.sp)
+                    Icon(
+                        imageVector = Icons.Default.Timer,
+                        contentDescription = null,
+                        tint = Green400,
+                        modifier = Modifier.size(22.dp)
+                    )
                     Spacer(modifier = Modifier.size(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
