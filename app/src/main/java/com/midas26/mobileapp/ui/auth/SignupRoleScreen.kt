@@ -43,6 +43,7 @@ import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
@@ -72,7 +73,7 @@ fun SignupRoleScreen(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "뒤로가기",
-                tint = Gray800,
+                tint = AppColor.textPrimary,
                 modifier = Modifier.size(28.dp)
             )
         }
@@ -102,14 +103,14 @@ fun SignupRoleScreen(
         Text(
             text = stringResource(R.string.signup_step_1_of_2),
             style = MaterialTheme.typography.labelMedium,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(28.dp))
 
         Text(
             text = stringResource(R.string.signup_title_1),
             style = MaterialTheme.typography.headlineSmall,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(44.dp))
@@ -181,7 +182,7 @@ private fun RoleCard(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = if (selected) Green400 else Gray400,
+                    tint = if (selected) AppColor.accent else AppColor.textTertiary,
                     modifier = Modifier.size(44.dp)
                 )
             }
@@ -204,7 +205,7 @@ private fun RoleCard(
                 Icon(
                     imageVector = Icons.Filled.CheckCircle,
                     contentDescription = null,
-                    tint = Green400,
+                    tint = AppColor.accent,
                     modifier = Modifier.size(32.dp)
                 )
             } else {

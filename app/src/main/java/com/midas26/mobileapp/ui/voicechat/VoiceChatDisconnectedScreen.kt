@@ -36,6 +36,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun VoiceChatDisconnectedScreen(
@@ -67,7 +68,7 @@ fun VoiceChatDisconnectedScreen(
                 Icon(
                     imageVector = Icons.Default.WifiOff,
                     contentDescription = null,
-                    tint = Green600,
+                    tint = AppColor.accentDark,
                     modifier = Modifier.size(44.dp)
                 )
             }
@@ -75,14 +76,14 @@ fun VoiceChatDisconnectedScreen(
             Text(
                 text = "연결이 끊겼어요",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = "네트워크 상태를 확인하고\n다시 시도해주세요",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray600,
+                color = AppColor.textSecondary,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(24.dp))
@@ -96,14 +97,14 @@ fun VoiceChatDisconnectedScreen(
                     Text(
                         text = "자동 저장됨",
                         style = MaterialTheme.typography.titleMedium,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = "녹음한 음성은 안전하게\n저장되었어요. 연결되면 자동으로\n분석이 이어집니다.",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Gray600
+                        color = AppColor.textSecondary
                     )
                 }
             }
@@ -123,13 +124,13 @@ fun VoiceChatDisconnectedScreen(
                     .clickable(onClick = onGoHome),
                 shape = RoundedCornerShape(16.dp),
                 color = BrandWhite,
-                border = androidx.compose.foundation.BorderStroke(2.dp, com.midas26.mobileapp.ui.theme.Gray200)
+                border = androidx.compose.foundation.BorderStroke(2.dp, AppColor.divider)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         text = "홈으로",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold
                     )
                 }

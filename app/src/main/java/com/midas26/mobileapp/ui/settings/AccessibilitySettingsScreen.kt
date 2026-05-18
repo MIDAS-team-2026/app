@@ -49,6 +49,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -168,14 +169,14 @@ private fun AccessibilityTopBar(onBack: () -> Unit) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800
+                    tint = AppColor.textPrimary
                 )
             }
             Text(
                 text = "접근성 설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Gray800
+                color = AppColor.textPrimary
             )
         }
     }
@@ -190,7 +191,7 @@ private fun AccessibilitySection(
         Text(
             text = title,
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
@@ -256,7 +257,7 @@ private fun FontSizeSelector(
         Text(
             text = "미리보기: 오늘도 좋은 하루 보내세요.",
             fontSize = previewSizes[selectedLevel],
-            color = Gray800,
+            color = AppColor.textPrimary,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
@@ -284,12 +285,12 @@ private fun TtsSpeedSelector(
             text = "TTS 읽기 속도",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = Gray800
+            color = AppColor.textPrimary
         )
         Text(
             text = "음성 안내의 말하는 속도를 조절해요",
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
         )
         Row(
@@ -343,14 +344,14 @@ private fun AccessibilityToggleRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Gray400
+                color = AppColor.textTertiary
             )
         }
         Switch(
@@ -358,7 +359,7 @@ private fun AccessibilityToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BrandWhite,
-                checkedTrackColor = Green400,
+                checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
                 uncheckedTrackColor = Gray200
             )

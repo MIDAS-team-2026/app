@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 
@@ -78,7 +79,7 @@ fun SplashScreen(
                         Icon(
                             imageVector = Icons.Filled.Psychology,
                             contentDescription = null,
-                            tint = Green400,
+                            tint = AppColor.accent,
                             modifier = Modifier.size(72.dp)
                         )
                     }

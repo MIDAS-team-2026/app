@@ -47,6 +47,7 @@ import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.BrandWhite
 
@@ -128,14 +129,14 @@ fun LoginScreen(
         Text(
             text = stringResource(R.string.login_title),
             style = MaterialTheme.typography.headlineSmall,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
             text = stringResource(R.string.login_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(40.dp))
 
@@ -215,19 +216,19 @@ fun LoginScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(1.dp)
-                    .background(Gray200)
+                    .background(AppColor.divider)
             )
             Text(
                 text = stringResource(R.string.login_or),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400,
+                color = AppColor.textTertiary,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(1.dp)
-                    .background(Gray200)
+                    .background(AppColor.divider)
             )
         }
         Spacer(modifier = Modifier.height(20.dp))
@@ -243,7 +244,7 @@ fun LoginScreen(
             Text(
                 text = stringResource(R.string.login_no_account),
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400
+                color = AppColor.textTertiary
             )
             AppTextButton(
                 text = stringResource(R.string.btn_signup),

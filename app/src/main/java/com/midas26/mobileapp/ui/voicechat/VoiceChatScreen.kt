@@ -34,6 +34,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.ui.theme.AppColor
 
 /**
  * 음성 대화 통합 화면.
@@ -72,7 +73,7 @@ fun VoiceChatScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
 
         // 채팅 영역 — Reviewing 상태에선 마지막 AI 한 줄만 보여 인용 카드에 집중
@@ -97,7 +98,7 @@ fun VoiceChatScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
 
         // 하단 영역 — 상태별 분기
@@ -135,7 +136,7 @@ private fun IdleBottom(onMicClick: () -> Unit) {
         Text(
             text = "버튼을 눌러 말씀해 주세요",
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(12.dp))
         Waveform(
@@ -186,7 +187,7 @@ private fun RecordingBottom(seconds: Int, onStopClick: () -> Unit) {
         Text(
             text = "버튼을 눌러 녹음을 중지하세요",
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(12.dp))
     }
@@ -209,14 +210,14 @@ private fun ReviewingBottom(
         Text(
             text = "이렇게 말씀하셨나요?",
             style = MaterialTheme.typography.titleLarge,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = "다르면 아래 버튼을 눌러주세요",
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(12.dp))
 
