@@ -9,7 +9,7 @@ import org.springframework.stereotype.Service;
 public class NotificationService {
     // TODO: FCM(Firebase) 연결 로직 추가
     public void sendToProtector(User protector, String title, String content) {
-        log.info("알림 발송 대상: [{}], 제목: {}, 내용: {}", protector.getEmail(), title, content);
+        log.info("알림 발송 대상: [{}], 제목: {}, 내용: {}", protector.getPhone(), title, content);
     }
 
     // 환자와 연결된 모든 보호자에게 알림 발송

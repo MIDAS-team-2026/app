@@ -27,8 +27,8 @@ public class AiAnalysisService {
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
         AudioRecord record = audioRecordRepository.findById(dto.getRecordId())
-                .orElseThrow(() -> new IllegalArgumentException("녹음 기록을 찾을 수 없습니다."));
 
+                .orElseThrow(() -> new IllegalArgumentException("녹음 기록을 찾을 수 없습니다."));
         record.setTranscriptText(dto.getTranscriptText());
         // 여기에 SpeechAnalysisResult, TextAnalysisResult 저장 로직 추가 가능
     }
@@ -36,9 +36,18 @@ public class AiAnalysisService {
     @Transactional
     public void saveRecallResult(RecallAnalysisDTO dto) {
         RecallAnalysisResult result = new RecallAnalysisResult();
-        result.setRecallQuestion(recallQuestionRepository.findById(dto.getRecallQuestionId()).orElseThrow());
-        result.setPastRecord(audioRecordRepository.findById(dto.getPastRecordId()).orElseThrow());
-        result.setCurrentRecord(audioRecordRepository.findById(dto.getCurrentRecordId()).orElseThrow());
+
+        result.setRecallQuestion(recallQuestionRepository.findById(dto.getRecallQuestionId())
+                .orElseThrow(() -> new IllegalArgumentException("질문을 찾을 수 없습니다: " + dto.getRecallQuestionId())));
+
+        // 첫 질문이라 pastRecordId가 null이거나 0으로 들어올 경우를 대비해 방어 로직 추가
+        if (dto.getPastRecordId() != null && dto.getPastRecordId() > 0) {
+            audioRecordRepository.findById(dto.getPastRecordId())
+                    .ifPresent(result::setPastRecord);
+        }
+
+        result.setCurrentRecord(audioRecordRepository.findById(dto.getCurrentRecordId())
+                .orElseThrow(() -> new IllegalArgumentException("현재 녹음 기록을 찾을 수 없습니다: " + dto.getCurrentRecordId())));
 
         result.setSimilarityScore(dto.getSimilarityScore());
         result.setKeywordScore(dto.getKeywordScore());
