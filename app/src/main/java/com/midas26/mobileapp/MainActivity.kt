@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
         ttsManager = TtsManager(this).apply { setSpeed(prefs.getTtsSpeed()) }
         enableEdgeToEdge()
         setContent {
-            AppRoot(ttsManager = if (prefs.getVoiceChatEnabled()) ttsManager else null)
+            AppRoot(ttsManager = ttsManager)
         }
     }
 
@@ -56,12 +56,13 @@ fun AppRoot(ttsManager: TtsManager? = null) {
     }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
     var hapticEnabled by remember { mutableStateOf(prefs.getHapticFeedback()) }
+    var voiceChatEnabled by remember { mutableStateOf(prefs.getVoiceChatEnabled()) }
 
     CompositionLocalProvider(
         LocalFontSizeScale provides fontSizeLevel,
         LocalHighContrast provides highContrast,
         LocalHapticEnabled provides hapticEnabled,
-        LocalTtsManager provides ttsManager
+        LocalTtsManager provides if (voiceChatEnabled) ttsManager else null
     ) {
         AppTheme {
             Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -82,6 +83,15 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                         onHapticChange = { enabled ->
                             hapticEnabled = enabled
                             prefs.setHapticFeedback(enabled)
+                        },
+                        onSpeedChange = { speed ->
+                            ttsManager?.setSpeed(speed)
+                        },
+                        onVoiceChatEnabledChange = { enabled ->
+                            voiceChatEnabled = enabled
+                        },
+                        onPreviewTts = {
+                            ttsManager?.speak("안녕하세요. 이 속도로 음성이 재생됩니다.")
                         }
                     )
                 }

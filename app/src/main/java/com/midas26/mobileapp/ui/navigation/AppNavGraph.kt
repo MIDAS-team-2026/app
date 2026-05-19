@@ -70,7 +70,10 @@ fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
-    onHapticChange: (Boolean) -> Unit = {}
+    onHapticChange: (Boolean) -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
+    onVoiceChatEnabledChange: (Boolean) -> Unit = {},
+    onPreviewTts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -303,7 +306,10 @@ fun AppNavHost(
                 onBack = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) },
                 onFontSizeChange = onFontSizeChange,
                 onHighContrastChange = onHighContrastChange,
-                onHapticChange = onHapticChange
+                onHapticChange = onHapticChange,
+                onSpeedChange = onSpeedChange,
+                onVoiceChatEnabledChange = onVoiceChatEnabledChange,
+                onPreviewTts = onPreviewTts
             )
         }
 

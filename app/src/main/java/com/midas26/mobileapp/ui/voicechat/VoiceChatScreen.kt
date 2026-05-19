@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -67,6 +68,14 @@ fun VoiceChatScreen(
     // 녹음 시작 시 TTS 즉시 중단
     LaunchedEffect(state) {
         if (state is VoiceChatState.Recording) ttsManager?.stop()
+    }
+
+    // 화면 벗어날 때 TTS 중단 및 재생 상태 초기화
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsManager?.stop()
+            viewModel.finishPlaying()
+        }
     }
 
     val listState = rememberLazyListState()

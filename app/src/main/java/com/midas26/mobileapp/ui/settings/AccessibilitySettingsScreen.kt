@@ -58,7 +58,10 @@ fun AccessibilitySettingsScreen(
     onBack: () -> Unit = {},
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
-    onHapticChange: (Boolean) -> Unit = {}
+    onHapticChange: (Boolean) -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
+    onVoiceChatEnabledChange: (Boolean) -> Unit = {},
+    onPreviewTts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
@@ -137,6 +140,7 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         voiceChatEnabled = it
                         prefs.setVoiceChatEnabled(it)
+                        onVoiceChatEnabledChange(it)
                     }
                 )
                 AnimatedVisibility(visible = voiceChatEnabled) {
@@ -151,7 +155,9 @@ fun AccessibilitySettingsScreen(
                             onSpeedChange = { speed ->
                                 ttsSpeed = speed
                                 prefs.setTtsSpeed(speed)
-                            }
+                                onSpeedChange(speed)
+                            },
+                            onPreview = onPreviewTts
                         )
                         HorizontalDivider(
                             color = AppColor.divider,
@@ -309,7 +315,8 @@ private fun FontSizeSelector(
 @Composable
 private fun TtsSpeedSelector(
     speed: Float,
-    onSpeedChange: (Float) -> Unit
+    onSpeedChange: (Float) -> Unit,
+    onPreview: () -> Unit = {}
 ) {
     data class SpeedOption(val value: Float, val label: String, val desc: String)
 
@@ -362,6 +369,23 @@ private fun TtsSpeedSelector(
                     }
                 }
             }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Gray100)
+                .clickable { onPreview() }
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "▶  미리 듣기",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = AppColor.textSecondary
+            )
         }
     }
 }
