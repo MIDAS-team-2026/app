@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
+import com.midas26.mobileapp.ui.theme.Gray200
+import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Green100
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
@@ -304,15 +306,16 @@ fun Waveform(
 @Composable
 fun BigActionButton(
     mode: BigActionMode,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     val outerColor: Color
     val innerColor: Color
     val icon: ImageVector
     when (mode) {
         BigActionMode.Mic -> {
-            outerColor = Green400
-            innerColor = Green600
+            outerColor = if (enabled) Green400 else Gray200
+            innerColor = if (enabled) Green600 else Gray400
             icon = Icons.Default.Mic
         }
         BigActionMode.Stop -> {
@@ -326,7 +329,7 @@ fun BigActionButton(
             .size(160.dp)
             .clip(CircleShape)
             .background(outerColor)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(

@@ -15,13 +15,19 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,7 +59,7 @@ fun VoiceChatScreen(
 ) {
     val state = viewModel.state
     val messages = viewModel.messages
-    val faded = state is VoiceChatState.Recording || state is VoiceChatState.Reviewing
+    val faded = state is VoiceChatState.Recording || state is VoiceChatState.Processing || state is VoiceChatState.Reviewing
 
     val ttsManager = LocalTtsManager.current
     val prefs = PrefsManager.from(LocalContext.current)
@@ -79,7 +85,8 @@ fun VoiceChatScreen(
     }
 
     val listState = rememberLazyListState()
-    LaunchedEffect(messages.size) {
+    val lastMessage = messages.lastOrNull()
+    LaunchedEffect(messages.size, lastMessage?.isLoading, lastMessage?.text) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
     }
 
@@ -117,7 +124,8 @@ fun VoiceChatScreen(
                 ChatBubble(
                     message = msg,
                     faded = faded,
-                    onTap = if (tapToReplay && msg.from == Sender.AI && !msg.isLoading && realIndex >= 0) {
+                    onTap = if (tapToReplay && msg.from == Sender.AI && !msg.isLoading && realIndex >= 0
+                            && state !is VoiceChatState.Reviewing && state !is VoiceChatState.Waiting) {
                         { viewModel.speakMessage(realIndex) }
                     } else null
                 )
@@ -133,18 +141,22 @@ fun VoiceChatScreen(
 
         // 하단 영역 — 상태별 분기
         when (state) {
-            is VoiceChatState.Idle,
-            is VoiceChatState.Playing   -> IdleBottom(onMicClick = viewModel::startRecording)
+            is VoiceChatState.Idle -> IdleBottom(onMicClick = viewModel::startRecording)
+            is VoiceChatState.Waiting -> IdleBottom(enabled = false, onMicClick = {})
+            is VoiceChatState.Playing -> IdleBottom(onMicClick = {
+                ttsManager?.stop()
+                viewModel.finishPlaying()
+                viewModel.startRecording()
+            })
+            is VoiceChatState.Processing -> ProcessingBottom()
             is VoiceChatState.Recording -> RecordingBottom(
                 seconds = viewModel.recordingSeconds,
                 onStopClick = viewModel::stopRecording
             )
             is VoiceChatState.Reviewing -> ReviewingBottom(
                 sttText = state.sttText,
-                onSend = viewModel::sendStt,
-                onRetry = viewModel::retryRecording,
-                onReplaySource = { /* 더미: 음성 다시 듣기 — 백엔드 연동 시 구현 */ },
-                onEdit = { /* 더미: 텍스트 수정 화면 — 추후 구현 */ }
+                onSend = viewModel::sendText,
+                onRetry = viewModel::retryRecording
             )
         }
     }
@@ -153,7 +165,7 @@ fun VoiceChatScreen(
 // ---- 상태별 하단 ----
 
 @Composable
-private fun IdleBottom(onMicClick: () -> Unit) {
+private fun IdleBottom(onMicClick: () -> Unit, enabled: Boolean = true) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -161,7 +173,7 @@ private fun IdleBottom(onMicClick: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "버튼을 눌러 말씀해 주세요",
+            text = if (enabled) "버튼을 눌러 말씀해 주세요" else "AI가 답변을 준비 중이에요",
             style = MaterialTheme.typography.bodyMedium,
             color = AppColor.textTertiary
         )
@@ -175,8 +187,41 @@ private fun IdleBottom(onMicClick: () -> Unit) {
             animated = false
         )
         Spacer(modifier = Modifier.height(16.dp))
-        BigActionButton(mode = BigActionMode.Mic, onClick = onMicClick)
+        BigActionButton(mode = BigActionMode.Mic, onClick = onMicClick, enabled = enabled)
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun ProcessingBottom() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "음성을 인식하고 있어요",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = AppColor.textPrimary
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "잠시만 기다려 주세요",
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppColor.textTertiary
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Waveform(
+            barColor = Gray200,
+            barCount = 13,
+            maxBarHeight = 40.dp,
+            barWidth = 12.dp,
+            modifier = Modifier.height(56.dp),
+            animated = true
+        )
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -223,11 +268,17 @@ private fun RecordingBottom(seconds: Int, onStopClick: () -> Unit) {
 @Composable
 private fun ReviewingBottom(
     sttText: String,
-    onSend: () -> Unit,
-    onRetry: () -> Unit,
-    onReplaySource: () -> Unit,
-    onEdit: () -> Unit
+    onSend: (String) -> Unit,
+    onRetry: () -> Unit
 ) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editedText by remember(sttText) { mutableStateOf(sttText) }
+    val focusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(isEditing) {
+        if (isEditing) focusRequester.requestFocus()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -235,47 +286,57 @@ private fun ReviewingBottom(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "이렇게 말씀하셨나요?",
+            text = if (isEditing) "직접 수정해 주세요" else "이렇게 말씀하셨나요?",
             style = MaterialTheme.typography.titleLarge,
             color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = "다르면 아래 버튼을 눌러주세요",
+            text = if (isEditing) "수정 후 전송하기를 눌러주세요" else "다르면 아래 버튼을 눌러주세요",
             style = MaterialTheme.typography.bodyMedium,
             color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        SttQuoteCard(text = sttText)
+        if (isEditing) {
+            OutlinedTextField(
+                value = editedText,
+                onValueChange = { editedText = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .focusRequester(focusRequester),
+                textStyle = MaterialTheme.typography.bodyLarge,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = AppColor.accent,
+                    unfocusedBorderColor = AppColor.divider
+                ),
+                singleLine = false,
+                minLines = 2
+            )
+        } else {
+            SttQuoteCard(text = sttText)
+        }
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
+        SttSecondaryButton(
+            label = if (isEditing) "취소" else "수정하기",
+            leadingIcon = Icons.Default.Edit,
+            onClick = {
+                if (isEditing) { editedText = sttText }
+                isEditing = !isEditing
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SttSecondaryButton(
-                label = "다시 듣기",
-                leadingIcon = Icons.AutoMirrored.Filled.VolumeUp,
-                onClick = onReplaySource,
-                modifier = Modifier.weight(1f)
-            )
-            SttSecondaryButton(
-                label = "수정하기",
-                leadingIcon = Icons.Default.Edit,
-                onClick = onEdit,
-                modifier = Modifier.weight(1f)
-            )
-        }
+                .padding(horizontal = 20.dp)
+        )
         Spacer(modifier = Modifier.height(14.dp))
 
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             AppPrimaryButton(
                 text = "전송하기",
-                onClick = onSend
+                onClick = { onSend(editedText) }
             )
             Spacer(modifier = Modifier.height(10.dp))
             WideSecondaryButton(label = "다시 녹음하기", onClick = onRetry)
