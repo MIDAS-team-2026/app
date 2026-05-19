@@ -22,11 +22,11 @@ class AuthViewModel : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
 
-    fun login(email: String, password: String) {
+    fun login(phone: String, password: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
-                val response = RetrofitClient.instance.login(LoginRequest(email, password))
+                val response = RetrofitClient.instance.login(LoginRequest(phone, password))
                 if (response.isSuccessful && response.body()?.data != null) {
                     _authState.value = AuthState.Success(response.body()!!.data!!)
                 } else {
@@ -38,12 +38,12 @@ class AuthViewModel : ViewModel() {
         }
     }
 
-    fun signup(email: String, password: String, name: String, role: String) {
+    fun signup(phone: String, password: String, name: String, role: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
             try {
                 val response = RetrofitClient.instance.signup(
-                    SignupRequest(email, password, name, role, null, null)
+                    SignupRequest(phone, password, name, role, null, null)
                 )
                 if (response.isSuccessful && response.body()?.data != null) {
                     _authState.value = AuthState.Success(response.body()!!.data!!)
