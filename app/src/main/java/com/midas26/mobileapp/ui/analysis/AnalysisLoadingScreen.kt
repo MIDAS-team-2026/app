@@ -44,6 +44,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 import kotlinx.coroutines.delay
 
 @Composable
@@ -70,7 +71,7 @@ fun AnalysisLoadingScreen(
         Text(
             text = "결과를 분석하고\n있어요",
             fontSize = 28.sp,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             lineHeight = 38.sp
@@ -79,7 +80,7 @@ fun AnalysisLoadingScreen(
         Text(
             text = "발화 속도, 어휘 다양성, 기억\n일치도를 종합 점검 중입니다",
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400,
+            color = AppColor.textTertiary,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(36.dp))
@@ -134,7 +135,7 @@ private fun SpinningRing() {
             Icon(
                 imageVector = Icons.Default.BarChart,
                 contentDescription = null,
-                tint = Green400,
+                tint = AppColor.accent,
                 modifier = Modifier.size(56.dp)
             )
         }
@@ -166,7 +167,7 @@ private fun ProgressItem(label: String, done: Boolean) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = if (done) Gray800 else Gray400,
+            color = if (done) AppColor.textPrimary else AppColor.textTertiary,
             fontWeight = if (done) FontWeight.SemiBold else FontWeight.Medium
         )
     }

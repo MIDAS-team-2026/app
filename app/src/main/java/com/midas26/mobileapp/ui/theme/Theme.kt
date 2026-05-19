@@ -36,6 +36,29 @@ private val AppLightColorScheme = lightColorScheme(
     onErrorContainer = Red400
 )
 
+private val AppHighContrastColorScheme = lightColorScheme(
+    primary = Green600,
+    onPrimary = BrandWhite,
+    primaryContainer = Green100,
+    onPrimaryContainer = Green900,
+    secondary = Green500,
+    onSecondary = BrandWhite,
+    secondaryContainer = Green100,
+    onSecondaryContainer = Green900,
+    tertiary = Green600,
+    background = BrandWhite,
+    onBackground = BrandBlack,
+    surface = BrandWhite,
+    onSurface = BrandBlack,
+    surfaceVariant = Gray100,
+    onSurfaceVariant = Gray800,
+    outline = Gray600,
+    error = Red400,
+    onError = BrandWhite,
+    errorContainer = Red50,
+    onErrorContainer = Red400
+)
+
 private val AppDarkColorScheme = darkColorScheme(
     primary = Green200,
     onPrimary = Green900,
@@ -63,6 +86,7 @@ fun AppTheme(
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val highContrast = LocalHighContrast.current
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
@@ -73,6 +97,7 @@ fun AppTheme(
             }
         }
         darkTheme -> AppDarkColorScheme
+        highContrast -> AppHighContrastColorScheme
         else -> AppLightColorScheme
     }
 
@@ -87,7 +112,7 @@ fun AppTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = Typography.scaled(LocalFontSizeScale.current),
         content = content
     )
 }

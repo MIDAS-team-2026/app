@@ -42,6 +42,7 @@ import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Green900
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.voicechat.RecordingTimer
 import com.midas26.mobileapp.ui.voicechat.Waveform
 
@@ -103,21 +104,21 @@ fun RecallQuestionScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
             Text(
                 text = "회상 과제",
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = "${q.number} / ${q.total}",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Gray400,
+                color = AppColor.textTertiary,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(end = 16.dp)
             )
@@ -142,14 +143,14 @@ fun RecallQuestionScreen(
                     Icon(
                         imageVector = q.categoryIcon,
                         contentDescription = null,
-                        tint = Green600,
+                        tint = AppColor.accentDark,
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.size(5.dp))
                     Text(
                         text = q.category,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -160,7 +161,7 @@ fun RecallQuestionScreen(
             Text(
                 text = q.text,
                 fontSize = if (isRecording) 22.sp else 30.sp,
-                color = if (isRecording) Gray600 else Gray800,
+                color = if (isRecording) AppColor.textSecondary else AppColor.textPrimary,
                 fontWeight = if (isRecording) FontWeight.Medium else FontWeight.Bold,
                 lineHeight = if (isRecording) 30.sp else 40.sp
             )
@@ -170,7 +171,7 @@ fun RecallQuestionScreen(
                 Text(
                     text = "기억나는 대로 천천히 말씀해주세요.\n정확하지 않아도 괜찮아요.",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
                 if (q.hint != null) {
                     Spacer(modifier = Modifier.height(20.dp))
@@ -231,7 +232,7 @@ fun RecallQuestionScreen(
                 text = if (isRecording) "버튼을 눌러 녹음을 중지하세요"
                        else "버튼을 눌러 답변해주세요",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400
+                color = AppColor.textTertiary
             )
             Spacer(modifier = Modifier.height(12.dp))
             SmallMicButton(
@@ -256,7 +257,7 @@ private fun HintCard(hint: String) {
             Icon(
                 imageVector = Icons.Default.Lightbulb,
                 contentDescription = null,
-                tint = Green600,
+                tint = AppColor.accentDark,
                 modifier = Modifier.size(22.dp)
             )
             Spacer(modifier = Modifier.size(10.dp))
@@ -264,7 +265,7 @@ private fun HintCard(hint: String) {
                 Text(
                     text = "힌트",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Green600,
+                    color = AppColor.accentDark,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(6.dp))

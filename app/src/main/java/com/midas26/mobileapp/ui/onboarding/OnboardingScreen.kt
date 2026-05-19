@@ -44,6 +44,7 @@ import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.launch
 
@@ -127,7 +128,7 @@ fun OnboardingScreen(
                         .height(12.dp)
                         .width(width)
                         .clip(if (isActive) RoundedCornerShape(6.dp) else CircleShape)
-                        .background(if (isActive) Green400 else Gray200)
+                        .background(if (isActive) AppColor.accent else AppColor.divider)
                 )
             }
         }
@@ -169,7 +170,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
                 Icon(
                     imageVector = page.icon,
                     contentDescription = null,
-                    tint = Green400,
+                    tint = AppColor.accent,
                     modifier = Modifier.size(128.dp)
                 )
             }
@@ -178,7 +179,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         Text(
             text = stringResource(page.titleRes),
             style = MaterialTheme.typography.headlineSmall,
-            color = Gray800,
+            color = AppColor.textPrimary,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 8.dp)
         )
@@ -186,7 +187,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         Text(
             text = stringResource(page.descRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400,
+            color = AppColor.textTertiary,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp)
         )

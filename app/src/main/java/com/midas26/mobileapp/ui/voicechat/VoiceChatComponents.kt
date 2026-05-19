@@ -41,14 +41,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
+import com.midas26.mobileapp.ui.theme.Green100
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
 
 /**
@@ -75,7 +76,7 @@ fun VoiceChatTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -83,7 +84,7 @@ fun VoiceChatTopBar(
             Text(
                 text = "음성 대화",
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -91,7 +92,7 @@ fun VoiceChatTopBar(
                 Text(
                     text = rightLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400,
+                    color = AppColor.textTertiary,
                     modifier = Modifier.padding(end = 16.dp)
                 )
             }
@@ -127,7 +128,8 @@ fun AiAvatar(size: Dp = 44.dp) {
 @Composable
 fun ChatBubble(
     message: ChatMessage,
-    faded: Boolean = false
+    faded: Boolean = false,
+    onTap: (() -> Unit)? = null
 ) {
     if (message.from == Sender.AI) {
         Row(
@@ -143,8 +145,10 @@ fun ChatBubble(
                     topStart = 6.dp, topEnd = 20.dp,
                     bottomStart = 20.dp, bottomEnd = 20.dp
                 ),
-                color = Green50,
-                modifier = Modifier.weight(1f, fill = false)
+                color = if (message.isSpeaking) Green100 else Green50,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
             ) {
                 if (message.isLoading) {
                     LoadingDots()
@@ -153,7 +157,7 @@ fun ChatBubble(
                         Text(
                             text = message.text,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (faded) Gray400 else Gray800,
+                            color = if (faded) AppColor.textTertiary else AppColor.textPrimary,
                             fontWeight = FontWeight.Medium
                         )
                         if (message.isSpeaking) {
@@ -236,7 +240,7 @@ private fun SpeakingIndicator() {
         Text(
             text = "AI가 말하고 있어요...",
             style = MaterialTheme.typography.bodySmall,
-            color = Green600,
+            color = AppColor.accentDark,
             fontWeight = FontWeight.SemiBold
         )
     }
@@ -302,15 +306,16 @@ fun Waveform(
 @Composable
 fun BigActionButton(
     mode: BigActionMode,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     val outerColor: Color
     val innerColor: Color
     val icon: ImageVector
     when (mode) {
         BigActionMode.Mic -> {
-            outerColor = Green400
-            innerColor = Green600
+            outerColor = if (enabled) Green400 else Gray200
+            innerColor = if (enabled) Green600 else Gray400
             icon = Icons.Default.Mic
         }
         BigActionMode.Stop -> {
@@ -324,7 +329,7 @@ fun BigActionButton(
             .size(160.dp)
             .clip(CircleShape)
             .background(outerColor)
-            .clickable(onClick = onClick),
+            .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Box(
@@ -387,7 +392,7 @@ fun RecordingTimer(seconds: Int) {
         text = "$mm:$ss",
         fontSize = 48.sp,
         fontWeight = FontWeight.Bold,
-        color = Gray800
+        color = AppColor.textPrimary
     )
 }
 
@@ -410,7 +415,7 @@ fun SttQuoteCard(text: String) {
             Text(
                 text = text,
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
@@ -432,7 +437,7 @@ fun SttSecondaryButton(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(14.dp),
         color = BrandWhite,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, Gray200)
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -440,7 +445,7 @@ fun SttSecondaryButton(
                     Icon(
                         imageVector = leadingIcon,
                         contentDescription = null,
-                        tint = Gray400,
+                        tint = AppColor.textTertiary,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.size(6.dp))
@@ -448,7 +453,7 @@ fun SttSecondaryButton(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Gray400,
+                    color = AppColor.textTertiary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -474,7 +479,7 @@ fun WideSecondaryButton(
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
-                color = Gray400,
+                color = AppColor.textTertiary,
                 fontWeight = FontWeight.SemiBold
             )
         }

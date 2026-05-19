@@ -47,6 +47,7 @@ import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.util.PrefsManager
 
@@ -130,7 +131,7 @@ fun SignupInfoScreen(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "뒤로가기",
-                tint = Gray800,
+                tint = AppColor.textPrimary,
                 modifier = Modifier.size(28.dp)
             )
         }
@@ -159,14 +160,14 @@ fun SignupInfoScreen(
         Text(
             text = stringResource(R.string.signup_step_2_of_2),
             style = MaterialTheme.typography.labelMedium,
-            color = Gray400
+            color = AppColor.textTertiary
         )
         Spacer(modifier = Modifier.height(28.dp))
 
         Text(
             text = stringResource(R.string.signup_title_2),
             style = MaterialTheme.typography.headlineSmall,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold
         )
         Spacer(modifier = Modifier.height(40.dp))

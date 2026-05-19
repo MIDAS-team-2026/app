@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
@@ -48,17 +50,26 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun AccessibilitySettingsScreen(
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    onFontSizeChange: (FontSizeLevel) -> Unit = {},
+    onHighContrastChange: (Boolean) -> Unit = {},
+    onHapticChange: (Boolean) -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
+    onVoiceChatEnabledChange: (Boolean) -> Unit = {},
+    onPreviewTts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
 
     var fontSizeLevel by remember { mutableIntStateOf(prefs.getAccessibilityFontSize()) }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
+    var voiceChatEnabled by remember { mutableStateOf(prefs.getVoiceChatEnabled()) }
+    var tapToReplay by remember { mutableStateOf(prefs.getTapToReplay()) }
     var ttsSpeed by remember { mutableFloatStateOf(prefs.getTtsSpeed()) }
     var hapticFeedback by remember { mutableStateOf(prefs.getHapticFeedback()) }
     var largeTouchArea by remember { mutableStateOf(prefs.getLargeTouchArea()) }
@@ -83,6 +94,7 @@ fun AccessibilitySettingsScreen(
                     onSelect = { level ->
                         fontSizeLevel = level
                         prefs.setAccessibilityFontSize(level)
+                        onFontSizeChange(FontSizeLevel.fromIndex(level))
                     }
                 )
             }
@@ -97,8 +109,10 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         highContrast = it
                         prefs.setHighContrast(it)
+                        onHighContrastChange(it)
                     }
                 )
+/*
                 HorizontalDivider(
                     color = Gray200,
                     thickness = 1.dp,
@@ -113,18 +127,54 @@ fun AccessibilitySettingsScreen(
                         prefs.setLargeTouchArea(it)
                     }
                 )
+*/
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             AccessibilitySection(title = "음성 안내 (TTS)") {
-                TtsSpeedSelector(
-                    speed = ttsSpeed,
-                    onSpeedChange = { speed ->
-                        ttsSpeed = speed
-                        prefs.setTtsSpeed(speed)
+                AccessibilityToggleRow(
+                    label = "음성 대화 사용",
+                    description = "AI와 음성으로 대화하는 기능을 사용해요",
+                    checked = voiceChatEnabled,
+                    onCheckedChange = {
+                        voiceChatEnabled = it
+                        prefs.setVoiceChatEnabled(it)
+                        onVoiceChatEnabledChange(it)
                     }
                 )
+                AnimatedVisibility(visible = voiceChatEnabled) {
+                    Column {
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        TtsSpeedSelector(
+                            speed = ttsSpeed,
+                            onSpeedChange = { speed ->
+                                ttsSpeed = speed
+                                prefs.setTtsSpeed(speed)
+                                onSpeedChange(speed)
+                            },
+                            onPreview = onPreviewTts
+                        )
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        AccessibilityToggleRow(
+                            label = "누르면 음성 재생하기",
+                            description = "대화내역을 누르면 다시 읽어 줘요",
+                            checked = tapToReplay,
+                            onCheckedChange = {
+                                tapToReplay = it
+                                prefs.setTapToReplay(it)
+                            }
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -137,6 +187,7 @@ fun AccessibilitySettingsScreen(
                     onCheckedChange = {
                         hapticFeedback = it
                         prefs.setHapticFeedback(it)
+                        onHapticChange(it)
                     }
                 )
             }
@@ -163,14 +214,14 @@ private fun AccessibilityTopBar(onBack: () -> Unit) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800
+                    tint = AppColor.textPrimary
                 )
             }
             Text(
                 text = "접근성 설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Gray800
+                color = AppColor.textPrimary
             )
         }
     }
@@ -185,7 +236,7 @@ private fun AccessibilitySection(
         Text(
             text = title,
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
@@ -239,7 +290,7 @@ private fun FontSizeSelector(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = label,
-                            fontSize = 11.sp,
+                            fontSize = previewSizes[index],
                             color = if (isSelected) Green600 else Gray400,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
@@ -251,7 +302,7 @@ private fun FontSizeSelector(
         Text(
             text = "미리보기: 오늘도 좋은 하루 보내세요.",
             fontSize = previewSizes[selectedLevel],
-            color = Gray800,
+            color = AppColor.textPrimary,
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
@@ -264,7 +315,8 @@ private fun FontSizeSelector(
 @Composable
 private fun TtsSpeedSelector(
     speed: Float,
-    onSpeedChange: (Float) -> Unit
+    onSpeedChange: (Float) -> Unit,
+    onPreview: () -> Unit = {}
 ) {
     data class SpeedOption(val value: Float, val label: String, val desc: String)
 
@@ -276,15 +328,15 @@ private fun TtsSpeedSelector(
 
     Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
         Text(
-            text = "TTS 읽기 속도",
+            text = "음성 대화 속도",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
-            color = Gray800
+            color = AppColor.textPrimary
         )
         Text(
             text = "음성 안내의 말하는 속도를 조절해요",
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             modifier = Modifier.padding(top = 2.dp, bottom = 16.dp)
         )
         Row(
@@ -311,12 +363,29 @@ private fun TtsSpeedSelector(
                         )
                         Text(
                             text = option.desc,
-                            fontSize = 11.sp,
-                            color = if (isSelected) BrandWhite.copy(alpha = 0.8f) else Gray400
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isSelected) BrandWhite.copy(alpha = 0.8f) else AppColor.textTertiary
                         )
                     }
                 }
             }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Gray100)
+                .clickable { onPreview() }
+                .padding(vertical = 12.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "▶  미리 듣기",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = AppColor.textSecondary
+            )
         }
     }
 }
@@ -338,14 +407,14 @@ private fun AccessibilityToggleRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Gray400
+                color = AppColor.textTertiary
             )
         }
         Switch(
@@ -353,7 +422,7 @@ private fun AccessibilityToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BrandWhite,
-                checkedTrackColor = Green400,
+                checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
                 uncheckedTrackColor = Gray200
             )

@@ -41,6 +41,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun RecallResultScreen(
@@ -68,14 +69,14 @@ fun RecallResultScreen(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800,
+                    tint = AppColor.textPrimary,
                     modifier = Modifier.size(28.dp)
                 )
             }
             Text(
                 text = "회상 결과",
                 style = MaterialTheme.typography.titleLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -102,12 +103,12 @@ fun RecallResultScreen(
                                 text = score.total.toString(),
                                 fontSize = 44.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Green600
+                                color = AppColor.accentDark
                             )
                             Text(
                                 text = "일치도 %",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Green600,
+                                color = AppColor.accentDark,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
@@ -125,7 +126,7 @@ fun RecallResultScreen(
                     Text(
                         text = if (score.isNormal) "✓ 정상 범위" else "주의 필요",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
                     )
@@ -138,7 +139,7 @@ fun RecallResultScreen(
                 Text(
                     text = if (score.isNormal) "기억력이 잘 유지되고 있어요!" else "기억력 점검을 자주 해보세요",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -149,13 +150,13 @@ fun RecallResultScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 color = BrandWhite,
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, Gray200)
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         text = "상세 분석",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Gray400,
+                        color = AppColor.textTertiary,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(14.dp))
@@ -178,14 +179,14 @@ fun RecallResultScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Chat,
                             contentDescription = null,
-                            tint = Green600,
+                            tint = AppColor.accentDark,
                             modifier = Modifier.size(22.dp)
                         )
                         Spacer(modifier = Modifier.size(10.dp))
                         Text(
                             text = score.note,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = Gray800
+                            color = AppColor.textPrimary
                         )
                     }
                 }
@@ -205,13 +206,13 @@ fun RecallResultScreen(
                         .clickable(onClick = onGoHome),
                     shape = RoundedCornerShape(16.dp),
                     color = BrandWhite,
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Gray200)
+                    border = androidx.compose.foundation.BorderStroke(2.dp, AppColor.divider)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
                             text = "홈으로",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Green600,
+                            color = AppColor.accentDark,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -236,7 +237,7 @@ private fun DetailRow(item: RecallScore.DetailItem) {
             Text(
                 text = item.label,
                 style = MaterialTheme.typography.bodyLarge,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 modifier = Modifier.weight(1f)
             )
             Text(

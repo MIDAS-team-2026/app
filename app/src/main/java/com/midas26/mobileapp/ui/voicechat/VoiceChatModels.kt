@@ -38,7 +38,9 @@ data class ChatMessage(
 sealed interface VoiceChatState {
     data object Idle : VoiceChatState
     data object Recording : VoiceChatState
+    data object Processing : VoiceChatState           // STT 처리 중
     data class Reviewing(val sttText: String) : VoiceChatState
+    data object Waiting : VoiceChatState              // AI 응답 대기 중
     data object Playing : VoiceChatState
 }
 
@@ -65,6 +67,10 @@ class VoiceChatViewModel : ViewModel() {
 
     private var _recordingSeconds by mutableStateOf(0)
     val recordingSeconds: Int get() = _recordingSeconds
+
+    // TTS 재생 트리거 — 값이 바뀔 때마다 Screen이 TTS를 실행
+    private var _speakTrigger by mutableStateOf(0)
+    val speakTrigger: Int get() = _speakTrigger
 
     private var timerJob: Job? = null
 
@@ -99,34 +105,47 @@ class VoiceChatViewModel : ViewModel() {
         if (_state !is VoiceChatState.Recording) return
         timerJob?.cancel()
         timerJob = null
-        val stt = cannedStt[sttIndex.coerceAtMost(cannedStt.lastIndex)]
-        _state = VoiceChatState.Reviewing(sttText = stt)
+        _state = VoiceChatState.Processing
+        viewModelScope.launch {
+            delay(1500)
+            val stt = cannedStt[sttIndex.coerceAtMost(cannedStt.lastIndex)]
+            _state = VoiceChatState.Reviewing(sttText = stt)
+        }
     }
 
     fun retryRecording() {
         if (_state !is VoiceChatState.Reviewing) return
-        _state = VoiceChatState.Idle
+        _state = VoiceChatState.Recording
+        _recordingSeconds = 0
+        timerJob = viewModelScope.launch {
+            while (true) {
+                delay(1000)
+                _recordingSeconds += 1
+            }
+        }
     }
 
     fun sendStt() {
         val current = _state as? VoiceChatState.Reviewing ?: return
-        // 사용자 메시지 추가
-        _messages.add(ChatMessage(Sender.USER, current.sttText))
-        // AI 입력 중 표시
+        sendText(current.sttText)
+    }
+
+    fun sendText(text: String) {
+        if (_state !is VoiceChatState.Reviewing) return
+        _messages.add(ChatMessage(Sender.USER, text))
         val loadingMsg = ChatMessage(Sender.AI, "", isLoading = true)
         _messages.add(loadingMsg)
-        _state = VoiceChatState.Idle  // 일단 idle 로 두되 곧 Playing 으로 전환
+        _state = VoiceChatState.Waiting
 
         viewModelScope.launch {
             delay(1500)
-            // loading 메시지 제거 + 실제 답변 추가
             val idx = _messages.indexOf(loadingMsg)
             if (idx >= 0) _messages.removeAt(idx)
-            val reply = cannedAiReplies.getOrNull(sttIndex)
-                ?: cannedAiReplies.last()
+            val reply = cannedAiReplies.getOrNull(sttIndex) ?: cannedAiReplies.last()
             _messages.add(ChatMessage(Sender.AI, reply, isSpeaking = true))
             sttIndex += 1
             _state = VoiceChatState.Playing
+            _speakTrigger++
         }
     }
 
@@ -140,7 +159,7 @@ class VoiceChatViewModel : ViewModel() {
         _state = VoiceChatState.Idle
     }
 
-    /** "다시 듣기" — 단순히 다시 Playing 상태로. */
+    /** "다시 듣기" — 마지막 AI 메시지를 다시 재생. */
     fun replayLastAi() {
         if (_messages.lastOrNull()?.from != Sender.AI) return
         val last = _messages.last()
@@ -148,6 +167,17 @@ class VoiceChatViewModel : ViewModel() {
             _messages[_messages.lastIndex] = last.copy(isSpeaking = true)
         }
         _state = VoiceChatState.Playing
+        _speakTrigger++
+    }
+
+    /** 말풍선 탭 시 해당 AI 메시지 재생 (누르면 음성 재생하기). */
+    fun speakMessage(index: Int) {
+        val msg = _messages.getOrNull(index) ?: return
+        if (msg.from != Sender.AI || msg.isLoading) return
+        _messages.replaceAll { it.copy(isSpeaking = false) }
+        _messages[index] = msg.copy(isSpeaking = true)
+        _state = VoiceChatState.Playing
+        _speakTrigger++
     }
 
     override fun onCleared() {

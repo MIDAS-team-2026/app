@@ -47,6 +47,7 @@ import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun UserHomeScreen(
@@ -76,7 +77,7 @@ fun UserHomeScreen(
         Text(
             text = stringResource(R.string.home_today_check),
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 24.dp)
         )
@@ -211,7 +212,7 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
                     Text(
                         text = "오늘",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
@@ -247,7 +248,7 @@ private fun ScoreCard(score: Int) {
                         Text(
                             text = score.toString(),
                             fontSize = 28.sp,
-                            color = Green600,
+                            color = AppColor.accentDark,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
@@ -264,7 +265,7 @@ private fun ScoreCard(score: Int) {
                     Text(
                         text = stringResource(R.string.home_week_score_label),
                         style = MaterialTheme.typography.titleMedium,
-                        color = Gray800,
+                        color = AppColor.textPrimary,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -275,7 +276,7 @@ private fun ScoreCard(score: Int) {
                         Text(
                             text = stringResource(R.string.home_score_normal),
                             style = MaterialTheme.typography.bodySmall,
-                            color = Green600,
+                            color = AppColor.accentDark,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                         )
@@ -285,7 +286,7 @@ private fun ScoreCard(score: Int) {
                 Text(
                     text = stringResource(R.string.home_score_diff),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
         }
@@ -377,7 +378,7 @@ private fun MenuCard(
                 Text(
                     text = stringResource(titleRes),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }

@@ -52,6 +52,7 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.AppColor
 
 private data class PrivacyItem(
     val titleRes: Int,
@@ -127,7 +128,7 @@ fun PrivacyScreen(
             Text(
                 text = stringResource(R.string.privacy_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.height(28.dp))
@@ -210,7 +211,7 @@ private fun PrivacyRow(
             .clickable(onClick = onToggle),
         shape = RoundedCornerShape(16.dp),
         color = BrandWhite,
-        border = BorderStroke(1.5.dp, Gray200)
+        border = BorderStroke(1.5.dp, AppColor.divider)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -222,14 +223,14 @@ private fun PrivacyRow(
                 Text(
                     text = stringResource(item.titleRes),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Gray800,
+                    color = AppColor.textPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = stringResource(item.descRes),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Gray400
+                    color = AppColor.textTertiary
                 )
             }
             Box(
@@ -262,7 +263,7 @@ private fun Checkbox(
         modifier = Modifier.size(36.dp),
         shape = RoundedCornerShape(10.dp),
         color = if (checked) accent else BrandWhite,
-        border = BorderStroke(2.dp, if (checked) accent else Gray200)
+        border = BorderStroke(2.dp, if (checked) accent else AppColor.divider)
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (checked) {

@@ -60,6 +60,7 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -153,7 +154,7 @@ fun SettingsScreen(
                 )
                 AnimatedVisibility(visible = notificationEnabled) {
                     Column {
-                        HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                         NotifTimeRow(
                             hour = notifHour,
                             minute = notifMinute,
@@ -172,7 +173,7 @@ fun SettingsScreen(
                         )
                     }
                 }
-                HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(label = "앱 버전", trailingText = "1.0.0", onClick = null)
             }
 
@@ -180,9 +181,9 @@ fun SettingsScreen(
 
             SettingsSection(title = "지원") {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
-                HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(label = "이용 약관", onClick = {})
-                HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(label = "문의하기", onClick = {})
             }
 
@@ -194,7 +195,7 @@ fun SettingsScreen(
                     labelColor = Gray800,
                     onClick = { showLogoutDialog = true }
                 )
-                HorizontalDivider(color = Gray200, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
                 SettingsRow(
                     label = "회원탈퇴",
                     labelColor = Red400,
@@ -225,14 +226,14 @@ private fun SettingsTopBar(onBack: () -> Unit) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = Gray800
+                    tint = AppColor.textPrimary
                 )
             }
             Text(
                 text = "설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = Gray800
+                color = AppColor.textPrimary
             )
         }
     }
@@ -271,7 +272,7 @@ private fun ProfileCard(
                         text = userName.take(1),
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Green600
+                        color = AppColor.accentDark
                     )
                 }
             }
@@ -283,7 +284,7 @@ private fun ProfileCard(
                     text = userName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Gray800
+                    color = AppColor.textPrimary
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Surface(
@@ -293,7 +294,7 @@ private fun ProfileCard(
                     Text(
                         text = role,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
@@ -322,7 +323,7 @@ private fun ProfileCard(
                     Text(
                         text = "사용자 코드",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Gray400,
+                        color = AppColor.textTertiary,
                         fontWeight = FontWeight.Medium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -330,7 +331,7 @@ private fun ProfileCard(
                         text = userCode,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Gray600,
+                        color = AppColor.textSecondary,
                         letterSpacing = 2.sp
                     )
                 }
@@ -348,7 +349,7 @@ private fun SettingsSection(
         Text(
             text = title,
             style = MaterialTheme.typography.bodySmall,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
@@ -389,13 +390,13 @@ private fun SettingsRow(
             Text(
                 text = trailingText,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray400
+                color = AppColor.textTertiary
             )
         } else if (showArrow) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Gray400,
+                tint = AppColor.textTertiary,
                 modifier = Modifier.size(20.dp)
             )
         }
@@ -419,14 +420,14 @@ private fun SettingsToggleRow(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray800,
+                color = AppColor.textPrimary,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
-                color = Gray400
+                color = AppColor.textTertiary
             )
         }
         Switch(
@@ -434,7 +435,7 @@ private fun SettingsToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BrandWhite,
-                checkedTrackColor = Green400,
+                checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
                 uncheckedTrackColor = Gray200
             )
@@ -458,14 +459,14 @@ private fun ConfirmDialog(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = Gray800
+                color = AppColor.textPrimary
             )
         },
         text = {
             Text(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Gray600
+                color = AppColor.textSecondary
             )
         },
         confirmButton = {
@@ -479,7 +480,7 @@ private fun ConfirmDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(text = "취소", color = Gray400)
+                Text(text = "취소", color = AppColor.textTertiary)
             }
         },
         containerColor = BrandWhite,
@@ -504,7 +505,7 @@ private fun NotifTimeRow(
         Text(
             text = "알림 시간",
             style = MaterialTheme.typography.bodyMedium,
-            color = Gray800,
+            color = AppColor.textPrimary,
             fontWeight = FontWeight.Medium
         )
         Row(
@@ -519,14 +520,14 @@ private fun NotifTimeRow(
                     text = formatNotifTime(hour, minute),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = Green600,
+                    color = AppColor.accentDark,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                 )
             }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = Gray400,
+                tint = AppColor.textTertiary,
                 modifier = Modifier.size(20.dp)
             )
         }
