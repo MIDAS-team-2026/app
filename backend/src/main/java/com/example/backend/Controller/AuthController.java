@@ -21,7 +21,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<User>> signup(@RequestBody SignupDTO signupDTO) {
         try {
             User user = new User();
-            user.setEmail(signupDTO.getEmail());
+            user.setPhone(signupDTO.getPhone());
             user.setPassword(signupDTO.getPassword());
             user.setName(signupDTO.getName());
             user.setRole(signupDTO.getRole());
@@ -38,14 +38,14 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<?>> login(@RequestBody LoginDTO loginDTO) {
-        User user = userService.login(loginDTO.getEmail(), loginDTO.getPassword());
+        User user = userService.login(loginDTO.getPhone(), loginDTO.getPassword());
 
         if (user != null) {
 
-            String token = jwtTokenProvider.createToken(user.getEmail(), user.getRole());
+            String token = jwtTokenProvider.createToken(user.getPhone(), user.getRole());
 
             LoginResponse loginDTO1 = new LoginResponse(
-                    user.getEmail(),
+                    user.getPhone(),
                     token,
                     user.getRole(),
                     user.getId()

@@ -18,12 +18,12 @@ public class UserService {
     public User register(User dto) {
 
         // 중복 체크
-        if (userRepository.existsByEmail(dto.getEmail())) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+        if (userRepository.existsByPhone(dto.getPhone())) {
+            throw new IllegalArgumentException("이미 사용 중인 전화번호입니다.");
         }
 
         User user = new User();
-        user.setEmail(dto.getEmail());
+        user.setPhone(dto.getPhone());
         user.setName(dto.getName());
         user.setRole(dto.getRole());
         user.setPassword(dto.getPassword());
@@ -63,8 +63,8 @@ public class UserService {
     }
 
     // 로그인
-    public User login(String email, String password) {
-        return userRepository.findByEmail(email)
+    public User login(String phone, String password) {
+        return userRepository.findByPhone(phone)
                 .filter(u -> u.getPassword().equals(password))
                 .orElse(null);
     }
