@@ -73,6 +73,12 @@ object Routes {
     const val ResetPassword = "reset_password/{$ResetPasswordArgPhone}"
     fun resetPassword(phone: String) = "reset_password/$phone"
 
+    // 회원탈퇴
+    const val Withdraw = "withdraw"
+    const val WithdrawVerifyArgPhone = "phone"
+    const val WithdrawVerify = "withdraw_verify/{$WithdrawVerifyArgPhone}"
+    fun withdrawVerify(phone: String) = "withdraw_verify/$phone"
+
     /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
     const val Home = UserHome
 }

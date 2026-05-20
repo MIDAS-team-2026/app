@@ -88,7 +88,6 @@ fun SettingsScreen(
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
-    var showDeleteDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
 
@@ -114,20 +113,6 @@ fun SettingsScreen(
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }
-        )
-    }
-
-    if (showDeleteDialog) {
-        ConfirmDialog(
-            title = "회원탈퇴",
-            message = "탈퇴하면 모든 데이터가 삭제되며\n복구할 수 없어요. 정말 탈퇴하시겠어요?",
-            confirmText = "탈퇴하기",
-            isDestructive = true,
-            onConfirm = {
-                PrefsManager.from(context).clearToken()
-                onDeleteAccount()
-            },
-            onDismiss = { showDeleteDialog = false }
         )
     }
 
@@ -234,8 +219,7 @@ fun SettingsScreen(
                 SettingsRow(
                     label = "회원탈퇴",
                     labelColor = Red400,
-                    showArrow = false,
-                    onClick = { showDeleteDialog = true }
+                    onClick = onDeleteAccount
                 )
             }
 

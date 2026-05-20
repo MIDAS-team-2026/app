@@ -85,6 +85,20 @@ public class AuthController {
         }
     }
 
+    @PostMapping("/withdraw")
+    public ResponseEntity<ApiResponse<?>> withdraw(@RequestBody ForgotPasswordDTO dto) {
+        try {
+            userService.deleteUser(dto.getPhone());
+            return ResponseEntity.ok(ApiResponse.success(null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(500, "탈퇴 처리 중 오류가 발생했습니다."));
+        }
+    }
+
     @PostMapping("/link")
     public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {
         try {

@@ -44,6 +44,8 @@ import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
+import com.midas26.mobileapp.ui.settings.WithdrawScreen
+import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
@@ -361,9 +363,7 @@ fun AppNavHost(
                     }
                 },
                 onDeleteAccount = {
-                    navController.navigate(Routes.Login) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    navController.navigate(Routes.Withdraw)
                 },
                 onAccessibility = { navController.navigate(Routes.AccessibilitySettings) },
                 onProfileEdit = { navController.navigate(Routes.ProfileEdit) }
@@ -375,6 +375,35 @@ fun AppNavHost(
                 initialName = PrefsManager.from(context).getUserName(),
                 initialPhone = PrefsManager.from(context).getUserPhone(),
                 onBack = { navController.popBackStackIfCurrent(Routes.ProfileEdit) }
+            )
+        }
+
+        composable(Routes.Withdraw) {
+            WithdrawScreen(
+                phone = PrefsManager.from(context).getUserPhone(),
+                onBack = { navController.popBackStackIfCurrent(Routes.Withdraw) },
+                onSendCode = {
+                    val phone = PrefsManager.from(context).getUserPhone()
+                    navController.navigate(Routes.withdrawVerify(phone))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.WithdrawVerify,
+            arguments = listOf(
+                navArgument(Routes.WithdrawVerifyArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.WithdrawVerifyArgPhone) ?: ""
+            WithdrawVerifyScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onWithdrawn = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
 

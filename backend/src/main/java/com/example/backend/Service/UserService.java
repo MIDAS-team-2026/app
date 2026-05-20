@@ -102,6 +102,14 @@ public class UserService {
         user.setPassword(newPassword);
     }
 
+    // 회원 탈퇴
+    @Transactional
+    public void deleteUser(String phone) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        userRepository.delete(user);
+    }
+
     // 로그인
     public User login(String phone, String password) {
         return userRepository.findByPhone(phone)
