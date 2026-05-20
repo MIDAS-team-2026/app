@@ -17,8 +17,11 @@ import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
+import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
 import com.midas26.mobileapp.ui.auth.PhoneVerificationScreen
+import com.midas26.mobileapp.ui.auth.ResetPasswordScreen
 import com.midas26.mobileapp.ui.auth.SignupCompleteScreen
 import com.midas26.mobileapp.ui.auth.SignupInfoScreen
 import com.midas26.mobileapp.ui.auth.SignupRoleScreen
@@ -175,6 +178,54 @@ fun AppNavHost(
                 },
                 onNavigateToSignup = {
                     navController.navigate(Routes.SignupRole)
+                },
+                onForgotPassword = {
+                    navController.navigate(Routes.ForgotPassword)
+                }
+            )
+        }
+
+        composable(Routes.ForgotPassword) {
+            ForgotPasswordScreen(
+                onBack = { navController.popBackStackIfCurrent(Routes.ForgotPassword) },
+                onCodeSent = { phone ->
+                    navController.navigate(Routes.forgotPasswordVerify(phone))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.ForgotPasswordVerify,
+            arguments = listOf(
+                navArgument(Routes.ForgotPasswordVerifyArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.ForgotPasswordVerifyArgPhone) ?: ""
+            ForgotPasswordVerifyScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onVerified = { verifiedPhone ->
+                    navController.navigate(Routes.resetPassword(verifiedPhone)) {
+                        popUpTo(Routes.ForgotPassword) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Routes.ResetPassword,
+            arguments = listOf(
+                navArgument(Routes.ResetPasswordArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.ResetPasswordArgPhone) ?: ""
+            ResetPasswordScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onPasswordReset = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(Routes.Login) { inclusive = true }
+                    }
                 }
             )
         }

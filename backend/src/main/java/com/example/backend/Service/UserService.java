@@ -26,7 +26,7 @@ public class UserService {
 
         // 중복 체크
         if (userRepository.existsByPhone(dto.getPhone())) {
-            throw new IllegalArgumentException("이미 사용 중인 전화번호입니다.");
+            throw new IllegalArgumentException("이미 등록된 전화번호입니다. 비밀번호 찾기를 이용해주세요.");
         }
 
         User user = new User();
@@ -89,6 +89,17 @@ public class UserService {
         }
 
         protector.setTargetPatient(patient);
+    }
+
+    public boolean existsByPhone(String phone) {
+        return userRepository.existsByPhone(phone);
+    }
+
+    @Transactional
+    public void resetPassword(String phone, String newPassword) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        user.setPassword(newPassword);
     }
 
     // 로그인

@@ -62,6 +62,17 @@ object Routes {
     const val AccessibilitySettings = "accessibility_settings"
     const val ProfileEdit = "profile_edit"
 
+    // 비밀번호 찾기
+    const val ForgotPassword = "forgot_password"
+
+    const val ForgotPasswordVerifyArgPhone = "phone"
+    const val ForgotPasswordVerify = "forgot_password_verify/{$ForgotPasswordVerifyArgPhone}"
+    fun forgotPasswordVerify(phone: String) = "forgot_password_verify/$phone"
+
+    const val ResetPasswordArgPhone = "phone"
+    const val ResetPassword = "reset_password/{$ResetPasswordArgPhone}"
+    fun resetPassword(phone: String) = "reset_password/$phone"
+
     /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
     const val Home = UserHome
 }

@@ -85,7 +85,9 @@ fun SignupInfoScreen(
                 onVerify(phone)
             }
             is AuthState.Error -> {
-                serverError = (authState as AuthState.Error).message
+                val msg = (authState as AuthState.Error).message
+                if (msg.contains("전화번호")) phoneError = msg
+                else serverError = msg
             }
             else -> {}
         }

@@ -4,6 +4,7 @@ import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
 import com.example.backend.Util.JwtTokenProvider;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,9 @@ public class AuthController {
 
             User savedUser = userService.register(user);
             return ResponseEntity.ok(ApiResponse.success(savedUser));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.fail(409, e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(500, "회원가입 실패"));
@@ -55,6 +59,29 @@ public class AuthController {
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.fail(401, "아이디 또는 비밀번호가 틀렸습니다."));
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<?>> forgotPassword(@RequestBody ForgotPasswordDTO dto) {
+        if (!userService.existsByPhone(dto.getPhone())) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, "등록되지 않은 전화번호입니다."));
+        }
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<?>> resetPassword(@RequestBody ResetPasswordDTO dto) {
+        try {
+            userService.resetPassword(dto.getPhone(), dto.getNewPassword());
+            return ResponseEntity.ok(ApiResponse.success(null));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.fail(500, "비밀번호 변경에 실패했습니다."));
         }
     }
 
