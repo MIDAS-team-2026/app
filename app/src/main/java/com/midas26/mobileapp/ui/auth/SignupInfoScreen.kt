@@ -80,6 +80,7 @@ fun SignupInfoScreen(
                 val prefs = PrefsManager.from(context)
                 prefs.saveToken(user.token.orEmpty())
                 prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserPhone(phone)
                 prefs.saveUserRole(role)
                 viewModel.resetState()
                 onVerify(phone)

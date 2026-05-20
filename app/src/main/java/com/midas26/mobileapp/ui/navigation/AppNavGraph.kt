@@ -372,6 +372,8 @@ fun AppNavHost(
 
         composable(Routes.ProfileEdit) {
             ProfileEditScreen(
+                initialName = PrefsManager.from(context).getUserName(),
+                initialPhone = PrefsManager.from(context).getUserPhone(),
                 onBack = { navController.popBackStackIfCurrent(Routes.ProfileEdit) }
             )
         }
