@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,12 +18,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -46,10 +48,8 @@ import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -116,21 +116,23 @@ fun LoginScreen(
     ) {
         Spacer(modifier = Modifier.height(64.dp))
 
-        // 앱 아이콘
-        Surface(
-            modifier = Modifier.size(72.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = Green400,
-            shadowElevation = 0.dp
+        // 앱 아이콘 (런처 아이콘과 동일한 디자인)
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF4CAF50), Color(0xFF2D7D31))
+                    )
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.Psychology,
-                    contentDescription = null,
-                    tint = BrandWhite,
-                    modifier = Modifier.size(44.dp)
-                )
-            }
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         Spacer(modifier = Modifier.height(28.dp))
 
