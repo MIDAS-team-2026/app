@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">마이다스</string>
+    <string name="app_name">똑똑</string>
     <string name="app_tagline">매일 대화하며 인지 건강 지키기</string>
 
     <!-- 온보딩 -->

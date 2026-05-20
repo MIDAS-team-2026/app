@@ -1,54 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 새싹 마크 아이콘 (I6) — viewBox 140×140, safe-zone 적용 (r=47) -->
+<!-- 새싹 마크 아이콘 (I6) — viewBox 140×140, safe-zone 적용 (r=38) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="140"
     android:viewportHeight="140">
 
-    <!-- 흰 원 (cx=70 cy=70 r=47) — safe-zone 맞게 축소, 4분호 방식 -->
+    <!-- 흰 원 (cx=70 cy=70 r=38) — 4분호 방식 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M70,23
-            A47,47,0,0,1,117,70
-            A47,47,0,0,1,70,117
-            A47,47,0,0,1,23,70
-            A47,47,0,0,1,70,23 Z"/>
+        android:pathData="M70,32
+            A38,38,0,0,1,108,70
+            A38,38,0,0,1,70,108
+            A38,38,0,0,1,32,70
+            A38,38,0,0,1,70,32 Z"/>
 
-    <!-- 왼쪽 잎 : cx=52 cy=52, rx=16 ry=24, rotate(-30, 52,52) -->
+    <!-- 왼쪽 잎 : cx=55 cy=55, rx=13 ry=19, rotate(-30, 55,55) -->
     <group
         android:rotation="-30"
-        android:pivotX="52"
-        android:pivotY="52">
+        android:pivotX="55"
+        android:pivotY="55">
         <path
             android:fillColor="#7CC04A"
-            android:pathData="M52,28
-                A16,24,0,0,1,68,52
-                A16,24,0,0,1,52,76
-                A16,24,0,0,1,36,52
-                A16,24,0,0,1,52,28 Z"/>
+            android:pathData="M55,36
+                A13,19,0,0,1,68,55
+                A13,19,0,0,1,55,74
+                A13,19,0,0,1,42,55
+                A13,19,0,0,1,55,36 Z"/>
     </group>
 
-    <!-- 오른쪽 잎 : cx=89 cy=44, rx=18 ry=26, rotate(28, 89,44) -->
+    <!-- 오른쪽 잎 : cx=85 cy=49, rx=15 ry=21, rotate(28, 85,49) -->
     <group
         android:rotation="28"
-        android:pivotX="89"
-        android:pivotY="44">
+        android:pivotX="85"
+        android:pivotY="49">
         <path
             android:fillColor="#94C560"
-            android:pathData="M89,18
-                A18,26,0,0,1,107,44
-                A18,26,0,0,1,89,70
-                A18,26,0,0,1,71,44
-                A18,26,0,0,1,89,18 Z"/>
+            android:pathData="M85,28
+                A15,21,0,0,1,100,49
+                A15,21,0,0,1,85,70
+                A15,21,0,0,1,70,49
+                A15,21,0,0,1,85,28 Z"/>
     </group>
 
     <!-- 줄기 -->
     <path
         android:strokeColor="#5FA83A"
-        android:strokeWidth="6"
+        android:strokeWidth="5"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M70,93 L70,60"/>
+        android:pathData="M70,89 L70,62"/>
 
 </vector>
