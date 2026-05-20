@@ -6,6 +6,6 @@ import lombok.Setter;
 @Getter
 @Setter
 public class LinkRequestDTO {
-    private Long protectorId;
+    private Integer protectorId;
     private String patientCode;
 }
