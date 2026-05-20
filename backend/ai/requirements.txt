@@ -1,0 +1,11 @@
+sentence-transformers
+pandas
+numpy
+scikit-learn
+datasets
+transformers
+evaluate
+accelerate
+torch
+gradio
+python-dotenv
