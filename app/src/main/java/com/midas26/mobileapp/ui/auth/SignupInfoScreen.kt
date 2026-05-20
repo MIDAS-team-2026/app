@@ -80,12 +80,15 @@ fun SignupInfoScreen(
                 val prefs = PrefsManager.from(context)
                 prefs.saveToken(user.token.orEmpty())
                 prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserPhone(phone)
                 prefs.saveUserRole(role)
                 viewModel.resetState()
                 onVerify(phone)
             }
             is AuthState.Error -> {
-                serverError = (authState as AuthState.Error).message
+                val msg = (authState as AuthState.Error).message
+                if (msg.contains("전화번호")) phoneError = msg
+                else serverError = msg
             }
             else -> {}
         }

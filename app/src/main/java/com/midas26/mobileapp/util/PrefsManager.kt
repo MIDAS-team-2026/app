@@ -43,6 +43,10 @@ class PrefsManager(context: Context) {
     fun getUserName(): String = prefs.getString(KEY_USER_NAME, "") ?: ""
     fun saveUserName(name: String) { prefs.edit().putString(KEY_USER_NAME, name).apply() }
 
+    // 사용자 전화번호
+    fun getUserPhone(): String = prefs.getString(KEY_USER_PHONE, "") ?: ""
+    fun saveUserPhone(phone: String) { prefs.edit().putString(KEY_USER_PHONE, phone).apply() }
+
     // 사용자 코드
     fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
     fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
@@ -76,6 +80,7 @@ class PrefsManager(context: Context) {
         private const val KEY_ROLE = "user_role"
 
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_PHONE = "user_phone"
         private const val KEY_USER_CODE = "user_code"
 
         // 접근성

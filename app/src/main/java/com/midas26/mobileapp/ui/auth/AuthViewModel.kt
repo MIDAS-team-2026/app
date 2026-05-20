@@ -2,6 +2,8 @@ package com.midas26.mobileapp.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.gson.Gson
+import com.midas26.mobileapp.network.ApiResponse
 import com.midas26.mobileapp.network.LoginRequest
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.network.SignupRequest
@@ -48,7 +50,14 @@ class AuthViewModel : ViewModel() {
                 if (response.isSuccessful && response.body()?.data != null) {
                     _authState.value = AuthState.Success(response.body()!!.data!!)
                 } else {
-                    _authState.value = AuthState.Error("회원가입에 실패했습니다.")
+                    val message = try {
+                        val json = response.errorBody()?.string()
+                        if (!json.isNullOrEmpty())
+                            Gson().fromJson(json, ApiResponse::class.java).message
+                                ?: "회원가입에 실패했습니다."
+                        else "회원가입에 실패했습니다."
+                    } catch (e: Exception) { "회원가입에 실패했습니다." }
+                    _authState.value = AuthState.Error(message)
                 }
             } catch (e: Exception) {
                 _authState.value = AuthState.Error("서버에 연결할 수 없습니다.")

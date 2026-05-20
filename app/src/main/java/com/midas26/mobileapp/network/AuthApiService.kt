@@ -23,10 +23,19 @@ data class UserResponse(
     val patientCode: String?
 )
 
+data class ForgotPasswordRequest(val phone: String)
+data class ResetPasswordRequest(val phone: String, val newPassword: String)
+
 interface AuthApiService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): Response<ApiResponse<UserResponse>>
 
     @POST("api/auth/signup")
     suspend fun signup(@Body request: SignupRequest): Response<ApiResponse<UserResponse>>
+
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse<Any>>
+
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse<Any>>
 }

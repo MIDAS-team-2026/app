@@ -43,6 +43,7 @@ fun AppOutlinedTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
@@ -58,8 +59,9 @@ fun AppOutlinedTextField(
     OutlinedTextField(
         value = value,
         onValueChange = { new ->
-            if (maxLength == null || new.length <= maxLength) onValueChange(new)
+            if (enabled && (maxLength == null || new.length <= maxLength)) onValueChange(new)
         },
+        enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
