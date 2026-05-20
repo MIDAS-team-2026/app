@@ -1,42 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 새싹 마크 아이콘 (I6 스펙) — viewBox 140×140 -->
+<!-- 새싹 마크 아이콘 (I6) — viewBox 140×140 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="140"
     android:viewportHeight="140">
 
-    <!-- 흰 원 (cx=70 cy=70 r=60) -->
+    <!-- 흰 원 (cx=70 cy=70 r=58) — 4분호로 그려 경로 오류 방지 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M10,70 A60,60,0,1,0,130,70 A60,60,0,1,0,10,70 Z"/>
+        android:pathData="M70,12
+            A58,58,0,0,1,128,70
+            A58,58,0,0,1,70,128
+            A58,58,0,0,1,12,70
+            A58,58,0,0,1,70,12 Z"/>
 
-    <!-- 왼쪽 잎: ellipse cx=48 cy=48 rx=20 ry=30, rotate(-30, 48, 48) -->
+    <!-- 왼쪽 잎 : ellipse cx=48 cy=48 rx=20 ry=30, rotate(-30, 48,48) -->
     <group
         android:rotation="-30"
         android:pivotX="48"
         android:pivotY="48">
         <path
             android:fillColor="#7CC04A"
-            android:pathData="M28,48 A20,30,0,1,0,68,48 A20,30,0,1,0,28,48 Z"/>
+            android:pathData="M48,18
+                A20,30,0,0,1,68,48
+                A20,30,0,0,1,48,78
+                A20,30,0,0,1,28,48
+                A20,30,0,0,1,48,18 Z"/>
     </group>
 
-    <!-- 오른쪽 잎: ellipse cx=94 cy=38 rx=22 ry=32, rotate(28, 94, 38) -->
+    <!-- 오른쪽 잎 : ellipse cx=94 cy=38 rx=22 ry=32, rotate(28, 94,38) -->
     <group
         android:rotation="28"
         android:pivotX="94"
         android:pivotY="38">
         <path
             android:fillColor="#94C560"
-            android:pathData="M72,38 A22,32,0,1,0,116,38 A22,32,0,1,0,72,38 Z"/>
+            android:pathData="M94,6
+                A22,32,0,0,1,116,38
+                A22,32,0,0,1,94,70
+                A22,32,0,0,1,72,38
+                A22,32,0,0,1,94,6 Z"/>
     </group>
 
-    <!-- 줄기 (M70,100 L70,60) stroke #5fa83a 8px round -->
+    <!-- 줄기 -->
     <path
         android:strokeColor="#5FA83A"
         android:strokeWidth="8"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M70,100 L70,60"/>
+        android:pathData="M70,98 L70,58"/>
 
 </vector>
