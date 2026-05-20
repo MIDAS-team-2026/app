@@ -25,6 +25,7 @@ data class UserResponse(
 
 data class ForgotPasswordRequest(val phone: String)
 data class ResetPasswordRequest(val phone: String, val newPassword: String)
+data class WithdrawRequest(val phone: String)
 
 interface AuthApiService {
     @POST("api/auth/login")
@@ -38,4 +39,7 @@ interface AuthApiService {
 
     @POST("api/auth/reset-password")
     suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse<Any>>
+
+    @POST("api/auth/withdraw")
+    suspend fun withdraw(@Body request: WithdrawRequest): Response<ApiResponse<Any>>
 }
