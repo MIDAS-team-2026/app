@@ -4,9 +4,9 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
 
-data class LoginRequest(val email: String, val password: String)
+data class LoginRequest(val phone: String, val password: String)
 data class SignupRequest(
-    val email: String,
+    val phone: String,
     val password: String,
     val name: String,
     val role: String,
@@ -15,12 +15,17 @@ data class SignupRequest(
 )
 data class ApiResponse<T>(val status: Int, val message: String?, val data: T?)
 data class UserResponse(
-    val id: Int,
-    val email: String,
-    val name: String,
-    val role: String,
+    val userId: Int?,
+    val phone: String?,
+    val name: String?,
+    val token: String?,
+    val role: String?,
     val patientCode: String?
 )
+
+data class ForgotPasswordRequest(val phone: String)
+data class ResetPasswordRequest(val phone: String, val newPassword: String)
+data class WithdrawRequest(val phone: String)
 
 interface AuthApiService {
     @POST("api/auth/login")
@@ -28,4 +33,13 @@ interface AuthApiService {
 
     @POST("api/auth/signup")
     suspend fun signup(@Body request: SignupRequest): Response<ApiResponse<UserResponse>>
+
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse<Any>>
+
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse<Any>>
+
+    @POST("api/auth/withdraw")
+    suspend fun withdraw(@Body request: WithdrawRequest): Response<ApiResponse<Any>>
 }

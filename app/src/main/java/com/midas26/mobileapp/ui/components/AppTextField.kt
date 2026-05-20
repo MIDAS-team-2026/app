@@ -28,7 +28,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.Gray600
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.LocalHighContrast
 
 /**
  * zip의 `Widget.App.TextInput` (OutlinedBox) 스타일에 대응.
@@ -43,6 +45,7 @@ fun AppOutlinedTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     leadingIcon: ImageVector? = null,
     keyboardType: KeyboardType = KeyboardType.Text,
     imeAction: ImeAction = ImeAction.Next,
@@ -54,12 +57,15 @@ fun AppOutlinedTextField(
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     val isError = errorText != null
+    val highContrast = LocalHighContrast.current
+    val unfocusedBorder = if (highContrast) Gray600 else Gray200
 
     OutlinedTextField(
         value = value,
         onValueChange = { new ->
-            if (maxLength == null || new.length <= maxLength) onValueChange(new)
+            if (enabled && (maxLength == null || new.length <= maxLength)) onValueChange(new)
         },
+        enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = 16.dp),
@@ -104,7 +110,7 @@ fun AppOutlinedTextField(
         supportingText = supportingTextSlot(errorText = errorText, helperText = helperText),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Green400,
-            unfocusedBorderColor = Gray200,
+            unfocusedBorderColor = unfocusedBorder,
             focusedLabelColor = Green400,
             unfocusedLabelColor = Gray400,
             cursorColor = Green400,

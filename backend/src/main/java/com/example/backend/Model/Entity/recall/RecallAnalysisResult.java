@@ -22,7 +22,7 @@ public class RecallAnalysisResult {
     private RecallQuestion recallQuestion;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "past_record_id", nullable = false)
+    @JoinColumn(name = "past_record_id", nullable = true)
     private AudioRecord pastRecord;
 
     @ManyToOne(fetch = FetchType.LAZY)

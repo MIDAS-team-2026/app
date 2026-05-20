@@ -17,7 +17,11 @@ import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
+import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
+import com.midas26.mobileapp.ui.auth.PhoneVerificationScreen
+import com.midas26.mobileapp.ui.auth.ResetPasswordScreen
 import com.midas26.mobileapp.ui.auth.SignupCompleteScreen
 import com.midas26.mobileapp.ui.auth.SignupInfoScreen
 import com.midas26.mobileapp.ui.auth.SignupRoleScreen
@@ -40,6 +44,8 @@ import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
+import com.midas26.mobileapp.ui.settings.WithdrawScreen
+import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
@@ -174,6 +180,54 @@ fun AppNavHost(
                 },
                 onNavigateToSignup = {
                     navController.navigate(Routes.SignupRole)
+                },
+                onForgotPassword = {
+                    navController.navigate(Routes.ForgotPassword)
+                }
+            )
+        }
+
+        composable(Routes.ForgotPassword) {
+            ForgotPasswordScreen(
+                onBack = { navController.popBackStackIfCurrent(Routes.ForgotPassword) },
+                onCodeSent = { phone ->
+                    navController.navigate(Routes.forgotPasswordVerify(phone))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.ForgotPasswordVerify,
+            arguments = listOf(
+                navArgument(Routes.ForgotPasswordVerifyArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.ForgotPasswordVerifyArgPhone) ?: ""
+            ForgotPasswordVerifyScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onVerified = { verifiedPhone ->
+                    navController.navigate(Routes.resetPassword(verifiedPhone)) {
+                        popUpTo(Routes.ForgotPassword) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(
+            route = Routes.ResetPassword,
+            arguments = listOf(
+                navArgument(Routes.ResetPasswordArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.ResetPasswordArgPhone) ?: ""
+            ResetPasswordScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onPasswordReset = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(Routes.Login) { inclusive = true }
+                    }
                 }
             )
         }
@@ -201,8 +255,29 @@ fun AppNavHost(
             SignupInfoScreen(
                 role = role,
                 onBack = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
-                // 회원가입 완료 후 권한 요청 화면으로 이동
-                onComplete = {
+                onVerify = { phone ->
+                    navController.navigate(Routes.phoneVerification(phone, role))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.PhoneVerification,
+            arguments = listOf(
+                navArgument(Routes.PhoneVerificationArgPhone) { type = NavType.StringType },
+                navArgument(Routes.PhoneVerificationArgRole) {
+                    type = NavType.StringType
+                    defaultValue = PrefsManager.ROLE_USER
+                }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.PhoneVerificationArgPhone) ?: ""
+            val role = backStackEntry.arguments?.getString(Routes.PhoneVerificationArgRole)
+                ?: PrefsManager.ROLE_USER
+            PhoneVerificationScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onVerified = {
                     navController.navigate(Routes.permission(role)) {
                         popUpTo(Routes.SignupRole) { inclusive = true }
                     }
@@ -266,6 +341,7 @@ fun AppNavHost(
 
         composable(Routes.UserHome) {
             UserHomeScreen(
+                userName = PrefsManager.from(context).getUserName(),
                 onMenuClick = { menu ->
                     when (menu) {
                         UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
@@ -279,6 +355,7 @@ fun AppNavHost(
 
         composable(Routes.Settings) {
             SettingsScreen(
+                userName = PrefsManager.from(context).getUserName(),
                 onBack = { navController.popBackStackIfCurrent(Routes.Settings) },
                 onLogout = {
                     navController.navigate(Routes.Login) {
@@ -286,9 +363,7 @@ fun AppNavHost(
                     }
                 },
                 onDeleteAccount = {
-                    navController.navigate(Routes.Login) {
-                        popUpTo(0) { inclusive = true }
-                    }
+                    navController.navigate(Routes.Withdraw)
                 },
                 onAccessibility = { navController.navigate(Routes.AccessibilitySettings) },
                 onProfileEdit = { navController.navigate(Routes.ProfileEdit) }
@@ -297,7 +372,38 @@ fun AppNavHost(
 
         composable(Routes.ProfileEdit) {
             ProfileEditScreen(
+                initialName = PrefsManager.from(context).getUserName(),
+                initialPhone = PrefsManager.from(context).getUserPhone(),
                 onBack = { navController.popBackStackIfCurrent(Routes.ProfileEdit) }
+            )
+        }
+
+        composable(Routes.Withdraw) {
+            WithdrawScreen(
+                phone = PrefsManager.from(context).getUserPhone(),
+                onBack = { navController.popBackStackIfCurrent(Routes.Withdraw) },
+                onSendCode = {
+                    val phone = PrefsManager.from(context).getUserPhone()
+                    navController.navigate(Routes.withdrawVerify(phone))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.WithdrawVerify,
+            arguments = listOf(
+                navArgument(Routes.WithdrawVerifyArgPhone) { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.WithdrawVerifyArgPhone) ?: ""
+            WithdrawVerifyScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onWithdrawn = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
 

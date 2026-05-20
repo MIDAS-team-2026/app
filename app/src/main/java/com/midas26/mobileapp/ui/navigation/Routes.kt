@@ -22,6 +22,12 @@ object Routes {
     const val SignupInfo = "$SignupInfoBase/{$SignupInfoArgRole}"
     fun signupInfo(role: String) = "$SignupInfoBase/$role"
 
+    // 전화번호 인증 — phone + role 을 path arg 로 전달
+    const val PhoneVerificationArgPhone = "phone"
+    const val PhoneVerificationArgRole = "role"
+    const val PhoneVerification = "phone_verification/{$PhoneVerificationArgPhone}/{$PhoneVerificationArgRole}"
+    fun phoneVerification(phone: String, role: String) = "phone_verification/$phone/$role"
+
     // 인증 직후 흐름 — role 인자를 path 로 전달
     const val PermissionArgRole = "role"
     const val Permission = "permission/{$PermissionArgRole}"
@@ -55,6 +61,23 @@ object Routes {
     const val Settings = "settings"
     const val AccessibilitySettings = "accessibility_settings"
     const val ProfileEdit = "profile_edit"
+
+    // 비밀번호 찾기
+    const val ForgotPassword = "forgot_password"
+
+    const val ForgotPasswordVerifyArgPhone = "phone"
+    const val ForgotPasswordVerify = "forgot_password_verify/{$ForgotPasswordVerifyArgPhone}"
+    fun forgotPasswordVerify(phone: String) = "forgot_password_verify/$phone"
+
+    const val ResetPasswordArgPhone = "phone"
+    const val ResetPassword = "reset_password/{$ResetPasswordArgPhone}"
+    fun resetPassword(phone: String) = "reset_password/$phone"
+
+    // 회원탈퇴
+    const val Withdraw = "withdraw"
+    const val WithdrawVerifyArgPhone = "phone"
+    const val WithdrawVerify = "withdraw_verify/{$WithdrawVerifyArgPhone}"
+    fun withdrawVerify(phone: String) = "withdraw_verify/$phone"
 
     /** 호환용 별칭. 사용자 역할에 맞는 홈으로 분기할 때 사용. */
     const val Home = UserHome

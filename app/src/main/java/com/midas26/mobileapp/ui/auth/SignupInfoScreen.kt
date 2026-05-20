@@ -1,6 +1,5 @@
 package com.midas26.mobileapp.ui.auth
 
-import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
@@ -18,9 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,19 +54,19 @@ import com.midas26.mobileapp.util.PrefsManager
 fun SignupInfoScreen(
     role: String,
     onBack: () -> Unit,
-    onComplete: () -> Unit,
+    onVerify: (phone: String) -> Unit,
     viewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
 
     var name by remember { mutableStateOf("") }
     var birth by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
 
     var nameError by remember { mutableStateOf<String?>(null) }
     var birthError by remember { mutableStateOf<String?>(null) }
-    var emailError by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var serverError by remember { mutableStateOf<String?>(null) }
 
@@ -77,19 +76,26 @@ fun SignupInfoScreen(
     LaunchedEffect(authState) {
         when (authState) {
             is AuthState.Success -> {
+                val user = (authState as AuthState.Success).user
+                val prefs = PrefsManager.from(context)
+                prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserPhone(phone)
+                prefs.saveUserRole(role)
                 viewModel.resetState()
-                PrefsManager.from(context).saveUserRole(role)
-                onComplete()
+                onVerify(phone)
             }
             is AuthState.Error -> {
-                serverError = (authState as AuthState.Error).message
+                val msg = (authState as AuthState.Error).message
+                if (msg.contains("전화번호")) phoneError = msg
+                else serverError = msg
             }
             else -> {}
         }
     }
 
     val errorRequired = stringResource(R.string.error_required)
-    val errorEmailInvalid = stringResource(R.string.error_email_invalid)
+    val errorPhoneInvalid = stringResource(R.string.error_phone_invalid)
     val errorPasswordShort = stringResource(R.string.error_password_short)
     val errorBirthFormat = stringResource(R.string.error_birth_format)
     val passwordHelper = stringResource(R.string.password_helper)
@@ -102,9 +108,9 @@ fun SignupInfoScreen(
             birth.length != 8 || birth.toLongOrNull() == null -> { ok = false; errorBirthFormat }
             else -> null
         }
-        emailError = when {
-            email.trim().isEmpty() -> { ok = false; errorRequired }
-            !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> { ok = false; errorEmailInvalid }
+        phoneError = when {
+            phone.trim().isEmpty() -> { ok = false; errorRequired }
+            !phone.trim().matches(Regex("^01[0-9]{8,9}$")) -> { ok = false; errorPhoneInvalid }
             else -> null
         }
         passwordError = when {
@@ -192,13 +198,14 @@ fun SignupInfoScreen(
             errorText = birthError
         )
         AppOutlinedTextField(
-            value = email,
-            onValueChange = { email = it; emailError = null; serverError = null },
-            label = stringResource(R.string.hint_email),
-            leadingIcon = Icons.Filled.Email,
-            keyboardType = KeyboardType.Email,
+            value = phone,
+            onValueChange = { phone = it.filter { c -> c.isDigit() }; phoneError = null; serverError = null },
+            label = stringResource(R.string.hint_phone),
+            leadingIcon = Icons.Filled.Phone,
+            keyboardType = KeyboardType.Phone,
             imeAction = ImeAction.Next,
-            errorText = emailError
+            maxLength = 11,
+            errorText = phoneError
         )
         AppOutlinedTextField(
             value = password,
@@ -231,7 +238,7 @@ fun SignupInfoScreen(
                 text = stringResource(R.string.btn_complete),
                 onClick = {
                     if (validate()) {
-                        viewModel.signup(email.trim(), password, name.trim(), role)
+                        viewModel.signup(phone.trim(), password, name.trim(), role)
                     }
                 }
             )

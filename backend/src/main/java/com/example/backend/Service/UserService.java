@@ -1,29 +1,36 @@
 package com.example.backend.Service;
 
+import com.example.backend.Model.Entity.recall.RecallQuestion;
 import com.example.backend.Model.Entity.user.User;
+import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionRepository;
 import com.example.backend.Model.Repository.UserRepository;
+import com.example.backend.Util.DefaultRecallQuestions;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class UserService {
 
     private final UserRepository userRepository;
+    private final RecallQuestionRepository recallQuestionRepository;
 
     // 회원가입
     @Transactional
     public User register(User dto) {
 
         // 중복 체크
-        if (userRepository.existsByEmail(dto.getEmail())) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+        if (userRepository.existsByPhone(dto.getPhone())) {
+            throw new IllegalArgumentException("이미 등록된 전화번호입니다. 비밀번호 찾기를 이용해주세요.");
         }
 
         User user = new User();
-        user.setEmail(dto.getEmail());
+        user.setPhone(dto.getPhone());
         user.setName(dto.getName());
         user.setRole(dto.getRole());
         user.setPassword(dto.getPassword());
@@ -39,10 +46,32 @@ public class UserService {
             // 보호자 -> 코드가 필요 없으므로 null로 처리
             user.setPatientCode(null);
         }
+        User savedUser = userRepository.save(user);
 
-        return userRepository.save(user);
+        // 연관 데이터(질문 리스트) 생성
+        if ("PATIENT".equals(savedUser.getRole())) {
+            setupDefaultRecallQuestions(savedUser);
+        }
+
+        return savedUser;
     }
 
+    private void setupDefaultRecallQuestions(User user) {
+        // 상수 클래스에서 질문 목록을 가져와 RecallQuestion 엔티티로 변환
+        List<RecallQuestion> initialQuestions = DefaultRecallQuestions.DEFAULT_QUESTIONS.stream()
+                .map(questionText -> {
+                    RecallQuestion recallQuestion = new RecallQuestion();
+                    recallQuestion.setUser(user);
+                    recallQuestion.setQuestionText(questionText);
+                    recallQuestion.setQuestionType("DEFAULT");
+                    recallQuestion.setCategory("기본정보");
+                    return recallQuestion;
+                })
+                .collect(Collectors.toList());
+
+        // 3. DB에 일괄 저장 (saveAll을 사용해 성능 최적화)
+        recallQuestionRepository.saveAll(initialQuestions);
+    }
     // 보호자-환자 연동
     @Transactional
     public void linkProtector(Integer protectorId, String patientCode) {
@@ -62,9 +91,28 @@ public class UserService {
         protector.setTargetPatient(patient);
     }
 
+    public boolean existsByPhone(String phone) {
+        return userRepository.existsByPhone(phone);
+    }
+
+    @Transactional
+    public void resetPassword(String phone, String newPassword) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        user.setPassword(newPassword);
+    }
+
+    // 회원 탈퇴
+    @Transactional
+    public void deleteUser(String phone) {
+        User user = userRepository.findByPhone(phone)
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+        userRepository.delete(user);
+    }
+
     // 로그인
-    public User login(String email, String password) {
-        return userRepository.findByEmail(email)
+    public User login(String phone, String password) {
+        return userRepository.findByPhone(phone)
                 .filter(u -> u.getPassword().equals(password))
                 .orElse(null);
     }

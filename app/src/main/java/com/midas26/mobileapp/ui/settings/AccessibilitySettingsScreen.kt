@@ -40,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Gray100
@@ -50,7 +51,7 @@ import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -258,6 +259,8 @@ private fun FontSizeSelector(
 ) {
     val labels = listOf("작게", "보통", "크게", "매우\n크게")
     val previewSizes = listOf(14.sp, 17.sp, 21.sp, 26.sp)
+    val highContrast = LocalHighContrast.current
+    val unselectedBorder = if (highContrast) Gray600 else Gray200
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -271,7 +274,7 @@ private fun FontSizeSelector(
                         .weight(1f)
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Green400 else Gray200,
+                            color = if (isSelected) Green400 else unselectedBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clip(RoundedCornerShape(12.dp))

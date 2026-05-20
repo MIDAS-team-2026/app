@@ -1,6 +1,6 @@
 package com.midas26.mobileapp.ui.auth
 
-import android.util.Patterns
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,14 +16,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -38,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
@@ -46,10 +48,9 @@ import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun LoginScreen(
@@ -58,9 +59,10 @@ fun LoginScreen(
     onForgotPassword: () -> Unit = {},
     viewModel: AuthViewModel = viewModel()
 ) {
-    var email by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var emailError by remember { mutableStateOf<String?>(null) }
+    var phoneError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var serverError by remember { mutableStateOf<String?>(null) }
 
@@ -70,6 +72,12 @@ fun LoginScreen(
     LaunchedEffect(authState) {
         when (authState) {
             is AuthState.Success -> {
+                val user = (authState as AuthState.Success).user
+                val prefs = PrefsManager.from(context)
+                prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserPhone(user.phone.orEmpty())
+                prefs.saveUserRole(user.role?.lowercase().orEmpty())
                 viewModel.resetState()
                 onNavigateToHome()
             }
@@ -81,14 +89,14 @@ fun LoginScreen(
     }
 
     val errorRequired = stringResource(R.string.error_required)
-    val errorEmailInvalid = stringResource(R.string.error_email_invalid)
+    val errorPhoneInvalid = stringResource(R.string.error_phone_invalid)
     val errorPasswordShort = stringResource(R.string.error_password_short)
 
     fun validate(): Boolean {
         var ok = true
-        emailError = when {
-            email.trim().isEmpty() -> { ok = false; errorRequired }
-            !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> { ok = false; errorEmailInvalid }
+        phoneError = when {
+            phone.trim().isEmpty() -> { ok = false; errorRequired }
+            !phone.trim().matches(Regex("^01[0-9]{8,9}$")) -> { ok = false; errorPhoneInvalid }
             else -> null
         }
         passwordError = when {
@@ -108,21 +116,23 @@ fun LoginScreen(
     ) {
         Spacer(modifier = Modifier.height(64.dp))
 
-        // 앱 아이콘
-        Surface(
-            modifier = Modifier.size(72.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = Green400,
-            shadowElevation = 0.dp
+        // 앱 아이콘 (런처 아이콘과 동일한 디자인)
+        Box(
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color(0xFF4CAF50), Color(0xFF2D7D31))
+                    )
+                ),
+            contentAlignment = Alignment.Center
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Filled.Psychology,
-                    contentDescription = null,
-                    tint = BrandWhite,
-                    modifier = Modifier.size(44.dp)
-                )
-            }
+            Image(
+                painter = painterResource(R.drawable.ic_launcher_foreground),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
         }
         Spacer(modifier = Modifier.height(28.dp))
 
@@ -142,17 +152,18 @@ fun LoginScreen(
 
         // 입력 폼
         AppOutlinedTextField(
-            value = email,
+            value = phone,
             onValueChange = {
-                email = it
-                emailError = null
+                phone = it.filter { c -> c.isDigit() }
+                phoneError = null
                 serverError = null
             },
-            label = stringResource(R.string.hint_email),
-            leadingIcon = Icons.Filled.Email,
-            keyboardType = KeyboardType.Email,
+            label = stringResource(R.string.hint_phone),
+            leadingIcon = Icons.Filled.Phone,
+            keyboardType = KeyboardType.Phone,
             imeAction = ImeAction.Next,
-            errorText = emailError
+            maxLength = 11,
+            errorText = phoneError
         )
         AppOutlinedTextField(
             value = password,
@@ -200,7 +211,7 @@ fun LoginScreen(
                 text = stringResource(R.string.btn_login),
                 onClick = {
                     if (validate()) {
-                        viewModel.login(email.trim(), password)
+                        viewModel.login(phone.trim(), password)
                     }
                 }
             )

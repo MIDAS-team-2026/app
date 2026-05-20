@@ -16,16 +16,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,54 +43,65 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
 fun ProfileEditScreen(
-    initialName: String = "홍길동",
+    initialName: String = "",
     initialPhone: String = "",
-    onBack: () -> Unit = {}
+    onBack: () -> Unit = {},
+    viewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
 
-    var name by remember { mutableStateOf(initialName) }
-    var phone by remember { mutableStateOf(initialPhone) }
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
 
-    var nameError by remember { mutableStateOf<String?>(null) }
+    var currentPasswordError by remember { mutableStateOf<String?>(null) }
     var newPasswordError by remember { mutableStateOf<String?>(null) }
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
+    var serverError by remember { mutableStateOf<String?>(null) }
+
+    val state by viewModel.state.collectAsState()
+    val isLoading = state is ProfileEditState.Loading
+
+    LaunchedEffect(state) {
+        when (state) {
+            is ProfileEditState.PasswordChanged -> {
+                viewModel.resetState()
+                Toast.makeText(context, "비밀번호가 변경되었습니다.", Toast.LENGTH_SHORT).show()
+                onBack()
+            }
+            is ProfileEditState.Error -> {
+                serverError = (state as ProfileEditState.Error).message
+            }
+            else -> {}
+        }
+    }
 
     fun validate(): Boolean {
-        var valid = true
-        nameError = if (name.isBlank()) { valid = false; "이름을 입력해주세요" } else null
-
-        val changingPassword = currentPassword.isNotEmpty() || newPassword.isNotEmpty() || confirmPassword.isNotEmpty()
-        if (changingPassword) {
-            newPasswordError = when {
-                newPassword.length < 8 -> { valid = false; "8자 이상 입력해주세요" }
-                else -> null
-            }
-            confirmPasswordError = when {
-                newPassword != confirmPassword -> { valid = false; "비밀번호가 일치하지 않아요" }
-                else -> null
-            }
-        } else {
-            newPasswordError = null
-            confirmPasswordError = null
+        var ok = true
+        currentPasswordError = if (currentPassword.isEmpty()) {
+            ok = false; "현재 비밀번호를 입력해주세요."
+        } else null
+        newPasswordError = when {
+            newPassword.isEmpty() -> { ok = false; "새 비밀번호를 입력해주세요." }
+            newPassword.length < 8 -> { ok = false; "8자 이상 입력해주세요." }
+            else -> null
         }
-        return valid
+        confirmPasswordError = when {
+            confirmPassword.isEmpty() -> { ok = false; "비밀번호 확인을 입력해주세요." }
+            confirmPassword != newPassword -> { ok = false; "비밀번호가 일치하지 않습니다." }
+            else -> null
+        }
+        return ok
     }
 
     Column(
@@ -102,7 +118,7 @@ fun ProfileEditScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 8.dp)
+                    .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp)
             ) {
                 IconButton(
                     onClick = onBack,
@@ -121,22 +137,6 @@ fun ProfileEditScreen(
                     color = AppColor.textPrimary,
                     modifier = Modifier.align(Alignment.Center)
                 )
-                TextButton(
-                    onClick = {
-                        if (validate()) {
-                            Toast.makeText(context, "저장되었어요", Toast.LENGTH_SHORT).show()
-                            onBack()
-                        }
-                    },
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    Text(
-                        text = "저장",
-                        color = AppColor.accent,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyLarge
-                    )
-                }
             }
         }
 
@@ -159,7 +159,7 @@ fun ProfileEditScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = name.take(1).ifEmpty { "?" },
+                            text = initialName.take(1).ifEmpty { "?" },
                             fontSize = 40.sp,
                             fontWeight = FontWeight.Bold,
                             color = AppColor.accentDark
@@ -170,22 +170,25 @@ fun ProfileEditScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // 기본 정보 섹션
+            // 기본 정보 섹션 (수정 불가)
             ProfileSection(title = "기본 정보") {
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                     AppOutlinedTextField(
-                        value = name,
-                        onValueChange = { name = it; nameError = null },
+                        value = initialName,
+                        onValueChange = {},
                         label = "이름",
-                        errorText = nameError,
-                        imeAction = ImeAction.Next
+                        leadingIcon = Icons.Filled.Person,
+                        enabled = false,
+                        imeAction = ImeAction.None
                     )
                     AppOutlinedTextField(
-                        value = phone,
-                        onValueChange = { phone = it },
+                        value = initialPhone,
+                        onValueChange = {},
                         label = "전화번호",
+                        leadingIcon = Icons.Filled.Phone,
                         keyboardType = KeyboardType.Phone,
-                        imeAction = ImeAction.Done
+                        enabled = false,
+                        imeAction = ImeAction.None
                     )
                 }
             }
@@ -197,9 +200,15 @@ fun ProfileEditScreen(
                 Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                     AppOutlinedTextField(
                         value = currentPassword,
-                        onValueChange = { currentPassword = it },
+                        onValueChange = {
+                            currentPassword = it
+                            currentPasswordError = null
+                            serverError = null
+                        },
                         label = "현재 비밀번호",
+                        leadingIcon = Icons.Filled.Lock,
                         isPassword = true,
+                        errorText = currentPasswordError,
                         imeAction = ImeAction.Next
                     )
                     HorizontalDivider(
@@ -209,46 +218,70 @@ fun ProfileEditScreen(
                     )
                     AppOutlinedTextField(
                         value = newPassword,
-                        onValueChange = { newPassword = it; newPasswordError = null },
+                        onValueChange = {
+                            newPassword = it
+                            newPasswordError = null
+                            serverError = null
+                        },
                         label = "새 비밀번호",
+                        leadingIcon = Icons.Filled.Lock,
                         isPassword = true,
-                        helperText = "영문, 숫자 포함 8자 이상",
+                        helperText = "8자 이상 입력해주세요.",
                         errorText = newPasswordError,
                         imeAction = ImeAction.Next
                     )
                     AppOutlinedTextField(
                         value = confirmPassword,
-                        onValueChange = { confirmPassword = it; confirmPasswordError = null },
+                        onValueChange = {
+                            confirmPassword = it
+                            confirmPasswordError = null
+                            serverError = null
+                        },
                         label = "새 비밀번호 확인",
+                        leadingIcon = Icons.Filled.Lock,
                         isPassword = true,
                         errorText = confirmPasswordError,
                         imeAction = ImeAction.Done
                     )
+                    if (serverError != null) {
+                        Text(
+                            text = serverError!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Button(
-                onClick = {
-                    if (validate()) {
-                        Toast.makeText(context, "저장되었어요", Toast.LENGTH_SHORT).show()
-                        onBack()
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .height(56.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Green400)
-            ) {
-                Text(
-                    text = "저장하기",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = BrandWhite
-                )
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = Green400)
+                }
+            } else {
+                Button(
+                    onClick = {
+                        if (validate()) {
+                            serverError = null
+                            viewModel.changePassword(initialPhone, currentPassword, newPassword)
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Green400)
+                ) {
+                    Text(
+                        text = "비밀번호 변경",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = BrandWhite
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(32.dp))

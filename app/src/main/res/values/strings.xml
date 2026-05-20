@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">마이다스</string>
+    <string name="app_name">똑똑</string>
     <string name="app_tagline">매일 대화하며 인지 건강 지키기</string>
 
     <!-- 온보딩 -->
@@ -40,7 +40,17 @@
     <string name="signup_step_2_of_2">2 / 2단계</string>
     <string name="password_helper">영문, 숫자 포함 8자 이상</string>
 
+    <!-- 전화번호 인증 -->
+    <string name="phone_verify_title">전화번호 인증</string>
+    <string name="phone_verify_subtitle">%1$s 으로\n6자리 인증 코드를 보냈어요</string>
+    <string name="phone_verify_hint">인증 코드 6자리 입력</string>
+    <string name="btn_verify">인증 완료</string>
+    <string name="phone_verify_resend">코드를 못 받으셨나요?</string>
+    <string name="btn_resend">재전송하기</string>
+    <string name="phone_verify_resent">인증 코드를 재전송했어요</string>
+
     <!-- 공통 에러 -->
+    <string name="error_phone_invalid">올바른 전화번호 형식이 아니에요 (01012345678)</string>
     <string name="error_email_invalid">올바른 이메일 형식이 아니에요</string>
     <string name="error_password_short">비밀번호는 8자 이상이어야 해요</string>
     <string name="error_required">필수 입력 항목이에요</string>
