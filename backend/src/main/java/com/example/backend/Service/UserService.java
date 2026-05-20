@@ -7,6 +7,7 @@ import com.example.backend.Model.Repository.UserRepository;
 import com.example.backend.Util.DefaultRecallQuestions;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -19,6 +20,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final RecallQuestionRepository recallQuestionRepository;
+    private final BCryptPasswordEncoder passwordEncoder;
 
     // 회원가입
     @Transactional
@@ -33,7 +35,7 @@ public class UserService {
         user.setPhone(dto.getPhone());
         user.setName(dto.getName());
         user.setRole(dto.getRole());
-        user.setPassword(dto.getPassword());
+        user.setPassword(passwordEncoder.encode(dto.getPassword()));
 
         if ("PATIENT".equals(dto.getRole())) {
             // 환자 -> 보호자가 앱에서 환자와 연동할 수 있도록 고유한 8자리 초대 코드를 발급
@@ -99,7 +101,7 @@ public class UserService {
     public void resetPassword(String phone, String newPassword) {
         User user = userRepository.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
-        user.setPassword(newPassword);
+        user.setPassword(passwordEncoder.encode(newPassword));
     }
 
     // 회원 탈퇴
@@ -113,7 +115,7 @@ public class UserService {
     // 로그인
     public User login(String phone, String password) {
         return userRepository.findByPhone(phone)
-                .filter(u -> u.getPassword().equals(password))
+                .filter(u -> passwordEncoder.matches(password, u.getPassword()))
                 .orElse(null);
     }
 }

@@ -1,12 +1,16 @@
 package com.example.backend.Model.DTO;
 
-public class LoginRequestDTO {
-    private String email;
-    private String password;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
-    // Getter, Setter
-    public String getEmail() { return email; }
-    public void setEmail(String email) { this.email = email; }
-    public String getPassword() { return password; }
-    public void setPassword(String password) { this.password = password; }
+@Getter
+@AllArgsConstructor
+@NoArgsConstructor
+public class UserResponseDTO {
+    private Integer userId;
+    private String phone;
+    private String name;
+    private String role;
+    private String patientCode;
 }
