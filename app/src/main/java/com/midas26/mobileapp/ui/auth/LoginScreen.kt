@@ -37,12 +37,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.components.AppTextButton
-import androidx.compose.ui.platform.LocalContext
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
@@ -59,6 +59,7 @@ fun LoginScreen(
     onForgotPassword: () -> Unit = {},
     viewModel: AuthViewModel = viewModel()
 ) {
+    val context = LocalContext.current
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var phoneError by remember { mutableStateOf<String?>(null) }
@@ -67,15 +68,15 @@ fun LoginScreen(
 
     val authState by viewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
-    val context = LocalContext.current
 
     LaunchedEffect(authState) {
         when (authState) {
             is AuthState.Success -> {
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
-                prefs.saveToken(user.id.toString())
-                prefs.saveUserRole(user.role)
+                prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserRole(user.role?.lowercase().orEmpty())
                 viewModel.resetState()
                 onNavigateToHome()
             }

@@ -78,7 +78,8 @@ fun SignupInfoScreen(
             is AuthState.Success -> {
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
-                prefs.saveToken(user.id.toString())
+                prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserRole(role)
                 viewModel.resetState()
                 onVerify(phone)

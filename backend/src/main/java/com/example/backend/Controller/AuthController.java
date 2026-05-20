@@ -46,6 +46,7 @@ public class AuthController {
 
             LoginResponse loginDTO1 = new LoginResponse(
                     user.getPhone(),
+                    user.getName(),
                     token,
                     user.getRole(),
                     user.getId()

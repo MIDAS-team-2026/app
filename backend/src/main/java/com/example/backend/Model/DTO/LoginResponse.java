@@ -11,6 +11,7 @@ import lombok.Setter;
 @AllArgsConstructor
 public class LoginResponse {
     private String phone;
+    private String name;
     private String token;
     private String role;
     private Integer userId;

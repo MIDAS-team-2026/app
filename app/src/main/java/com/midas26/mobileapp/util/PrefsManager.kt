@@ -39,6 +39,10 @@ class PrefsManager(context: Context) {
         prefs.edit().putString(KEY_ROLE, role).apply()
     }
 
+    // 사용자 이름
+    fun getUserName(): String = prefs.getString(KEY_USER_NAME, "") ?: ""
+    fun saveUserName(name: String) { prefs.edit().putString(KEY_USER_NAME, name).apply() }
+
     // 사용자 코드
     fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
     fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
@@ -71,6 +75,7 @@ class PrefsManager(context: Context) {
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_ROLE = "user_role"
 
+        private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_CODE = "user_code"
 
         // 접근성

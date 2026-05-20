@@ -288,6 +288,7 @@ fun AppNavHost(
 
         composable(Routes.UserHome) {
             UserHomeScreen(
+                userName = PrefsManager.from(context).getUserName(),
                 onMenuClick = { menu ->
                     when (menu) {
                         UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
@@ -301,6 +302,7 @@ fun AppNavHost(
 
         composable(Routes.Settings) {
             SettingsScreen(
+                userName = PrefsManager.from(context).getUserName(),
                 onBack = { navController.popBackStackIfCurrent(Routes.Settings) },
                 onLogout = {
                     navController.navigate(Routes.Login) {
