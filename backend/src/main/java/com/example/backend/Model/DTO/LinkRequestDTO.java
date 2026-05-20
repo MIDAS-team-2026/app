@@ -1,11 +1,11 @@
 package com.example.backend.Model.DTO;
 
-import lombok.Getter;
-import lombok.Setter;
-
-@Getter
-@Setter
 public class LinkRequestDTO {
-    private Integer protectorId;
+    private Long protectorId;
     private String patientCode;
+
+    public Long getProtectorId() { return protectorId; }
+    public void setProtectorId(Long protectorId) { this.protectorId = protectorId; }
+    public String getPatientCode() { return patientCode; }
+    public void setPatientCode(String patientCode) { this.patientCode = patientCode; }
 }
