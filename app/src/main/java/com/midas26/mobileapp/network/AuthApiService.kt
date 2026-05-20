@@ -4,9 +4,9 @@ import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
 
-data class LoginRequest(val email: String, val password: String)
+data class LoginRequest(val phone: String, val password: String)
 data class SignupRequest(
-    val email: String,
+    val phone: String,
     val password: String,
     val name: String,
     val role: String,
@@ -16,7 +16,7 @@ data class SignupRequest(
 data class ApiResponse<T>(val status: Int, val message: String?, val data: T?)
 data class UserResponse(
     val id: Int,
-    val email: String,
+    val phone: String,
     val name: String,
     val role: String,
     val patientCode: String?

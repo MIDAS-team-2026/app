@@ -18,6 +18,7 @@ import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
+import com.midas26.mobileapp.ui.auth.PhoneVerificationScreen
 import com.midas26.mobileapp.ui.auth.SignupCompleteScreen
 import com.midas26.mobileapp.ui.auth.SignupInfoScreen
 import com.midas26.mobileapp.ui.auth.SignupRoleScreen
@@ -201,8 +202,29 @@ fun AppNavHost(
             SignupInfoScreen(
                 role = role,
                 onBack = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
-                // 회원가입 완료 후 권한 요청 화면으로 이동
-                onComplete = {
+                onVerify = { phone ->
+                    navController.navigate(Routes.phoneVerification(phone, role))
+                }
+            )
+        }
+
+        composable(
+            route = Routes.PhoneVerification,
+            arguments = listOf(
+                navArgument(Routes.PhoneVerificationArgPhone) { type = NavType.StringType },
+                navArgument(Routes.PhoneVerificationArgRole) {
+                    type = NavType.StringType
+                    defaultValue = PrefsManager.ROLE_USER
+                }
+            )
+        ) { backStackEntry ->
+            val phone = backStackEntry.arguments?.getString(Routes.PhoneVerificationArgPhone) ?: ""
+            val role = backStackEntry.arguments?.getString(Routes.PhoneVerificationArgRole)
+                ?: PrefsManager.ROLE_USER
+            PhoneVerificationScreen(
+                phone = phone,
+                onBack = { navController.popBackStack() },
+                onVerified = {
                     navController.navigate(Routes.permission(role)) {
                         popUpTo(Routes.SignupRole) { inclusive = true }
                     }

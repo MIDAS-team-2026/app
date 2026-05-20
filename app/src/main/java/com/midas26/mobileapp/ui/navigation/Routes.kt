@@ -22,6 +22,12 @@ object Routes {
     const val SignupInfo = "$SignupInfoBase/{$SignupInfoArgRole}"
     fun signupInfo(role: String) = "$SignupInfoBase/$role"
 
+    // 전화번호 인증 — phone + role 을 path arg 로 전달
+    const val PhoneVerificationArgPhone = "phone"
+    const val PhoneVerificationArgRole = "role"
+    const val PhoneVerification = "phone_verification/{$PhoneVerificationArgPhone}/{$PhoneVerificationArgRole}"
+    fun phoneVerification(phone: String, role: String) = "phone_verification/$phone/$role"
+
     // 인증 직후 흐름 — role 인자를 path 로 전달
     const val PermissionArgRole = "role"
     const val Permission = "permission/{$PermissionArgRole}"
