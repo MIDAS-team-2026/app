@@ -15,10 +15,11 @@ data class SignupRequest(
 )
 data class ApiResponse<T>(val status: Int, val message: String?, val data: T?)
 data class UserResponse(
-    val id: Int,
-    val phone: String,
-    val name: String,
-    val role: String,
+    val userId: Int?,
+    val phone: String?,
+    val name: String?,
+    val token: String?,
+    val role: String?,
     val patientCode: String?
 )
 
