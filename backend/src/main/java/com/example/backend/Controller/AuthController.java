@@ -102,7 +102,7 @@ public class AuthController {
     @PostMapping("/link")
     public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {
         try {
-            userService.linkProtector(linkDTO.getProtectorId(), linkDTO.getPatientCode());
+            userService.linkProtector(Math.toIntExact(linkDTO.getProtectorId()), linkDTO.getPatientCode());
             // 성공 시 별도의 데이터 없이 성공 메시지만 반환
             return ResponseEntity.ok(ApiResponse.success());
         } catch (IllegalArgumentException | IllegalStateException e) {
