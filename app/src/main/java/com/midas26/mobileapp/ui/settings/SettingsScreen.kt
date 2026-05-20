@@ -19,8 +19,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.Manifest
 import android.app.TimePickerDialog
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -61,6 +65,8 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.notification.AlarmScheduler
+import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -78,11 +84,25 @@ fun SettingsScreen(
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
     val userCode = prefs.getUserCode().ifEmpty { "842716" } // 백엔드 연동 전 임시 기본값
 
-    var notificationEnabled by remember { mutableStateOf(true) }
-    var notifHour by remember { mutableIntStateOf(8) }
-    var notifMinute by remember { mutableIntStateOf(0) }
+    var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
+    var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
+    var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    NotificationHelper.createChannel(context)
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            prefs.setNotificationEnabled(true)
+            AlarmScheduler.schedule(context, notifHour, notifMinute)
+        } else {
+            notificationEnabled = false
+            Toast.makeText(context, "알림 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     if (showLogoutDialog) {
         ConfirmDialog(
@@ -150,7 +170,20 @@ fun SettingsScreen(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
                     checked = notificationEnabled,
-                    onCheckedChange = { notificationEnabled = it }
+                    onCheckedChange = { enabled ->
+                        notificationEnabled = enabled
+                        if (enabled) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                prefs.setNotificationEnabled(true)
+                                AlarmScheduler.schedule(context, notifHour, notifMinute)
+                            }
+                        } else {
+                            prefs.setNotificationEnabled(false)
+                            AlarmScheduler.cancel(context)
+                        }
+                    }
                 )
                 AnimatedVisibility(visible = notificationEnabled) {
                     Column {
@@ -164,6 +197,8 @@ fun SettingsScreen(
                                     { _, hour, minute ->
                                         notifHour = hour
                                         notifMinute = minute
+                                        prefs.setNotificationTime(hour, minute)
+                                        AlarmScheduler.schedule(context, hour, minute)
                                     },
                                     notifHour,
                                     notifMinute,

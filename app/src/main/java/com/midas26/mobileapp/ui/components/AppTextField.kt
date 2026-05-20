@@ -28,7 +28,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.Gray600
 import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.LocalHighContrast
 
 /**
  * zip의 `Widget.App.TextInput` (OutlinedBox) 스타일에 대응.
@@ -55,6 +57,8 @@ fun AppOutlinedTextField(
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     val isError = errorText != null
+    val highContrast = LocalHighContrast.current
+    val unfocusedBorder = if (highContrast) Gray600 else Gray200
 
     OutlinedTextField(
         value = value,
@@ -106,7 +110,7 @@ fun AppOutlinedTextField(
         supportingText = supportingTextSlot(errorText = errorText, helperText = helperText),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = Green400,
-            unfocusedBorderColor = Gray200,
+            unfocusedBorderColor = unfocusedBorder,
             focusedLabelColor = Green400,
             unfocusedLabelColor = Gray400,
             cursorColor = Green400,
