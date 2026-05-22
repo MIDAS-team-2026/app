@@ -6,8 +6,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,11 +40,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
@@ -483,6 +491,167 @@ fun WideSecondaryButton(
                 fontWeight = FontWeight.SemiBold
             )
         }
+    }
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+//  캐릭터 중심 UI 컴포넌트
+// ════════════════════════════════════════════════════════════════════════════
+
+/**
+ * AI 말풍선 박스 — Figma 디자인 기준.
+ *
+ * 녹색 테두리(2dp), 둥근 모서리(10dp) 박스 안에 AI 질문/답변을 큰 글씨로 표시.
+ * [highlighted] = true (AI 말하는 중) 이면 테두리가 굵어지고 배경이 펄스 애니메이션.
+ * [onClick] 이 있으면 탭 시 AI 재생 콜백을 호출한다.
+ */
+@Composable
+fun AiSpeechBubble(
+    text: String,
+    isLoading: Boolean = false,
+    highlighted: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    // 하이라이트 펄스 — 항상 transition 생성, highlighted 여부에 따라 적용
+    val hlTransition = rememberInfiniteTransition(label = "bubble_hl")
+    val pulseAlpha by hlTransition.animateFloat(
+        initialValue = 0.10f,
+        targetValue = 0.28f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 850, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "bubble_hl_alpha"
+    )
+
+    val borderWidth = if (highlighted) 3.dp else 2.dp
+    val borderColor = if (highlighted) Green400 else Green400.copy(alpha = 0.55f)
+    val bgFill     = if (highlighted) Green400.copy(alpha = pulseAlpha) else Color.Transparent
+
+    val shape = RoundedCornerShape(10.dp)
+
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(bgFill)
+            .border(borderWidth, borderColor, shape)
+            .then(if (onClick != null) Modifier.clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            ) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 20.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isLoading) {
+            // 로딩 중 — 점 3개 애니메이션
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(vertical = 8.dp)
+            ) {
+                val transition = rememberInfiniteTransition(label = "bubble_dots")
+                repeat(3) { i ->
+                    val alpha by transition.animateFloat(
+                        initialValue = 0.25f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = 600,
+                                delayMillis = i * 180,
+                                easing = LinearEasing
+                            ),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "bdot$i"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .clip(CircleShape)
+                            .background(Green400.copy(alpha = alpha))
+                    )
+                }
+            }
+        } else {
+            val fontScale = LocalFontSizeScale.current.scale
+            Text(
+                text = text,
+                fontSize = (30f * fontScale).sp,
+                lineHeight = (42f * fontScale).sp,
+                textAlign = TextAlign.Center,
+                color = AppColor.textPrimary,
+                fontWeight = FontWeight.Normal
+            )
+        }
+    }
+}
+
+/**
+ * 캐릭터 이미지 — 상태에 따라 다른 drawable 표시.
+ *
+ * - char1 : 대기(Idle) / 확인(Reviewing) 상태
+ * - char2 : AI 말하는 중(Playing) / 처리 중(Processing) 상태
+ * - char3 : 사용자 말하는 중(Recording) 상태
+ *
+ * [onClick] 이 있으면 탭 시 콜백을 호출한다 (AI 다시 말하기 등).
+ */
+@Composable
+fun CharacterImage(
+    state: VoiceChatState,
+    onClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val charRes = when (state) {
+        is VoiceChatState.Playing                                -> R.drawable.char2
+        is VoiceChatState.Processing -> R.drawable.char2
+        is VoiceChatState.Recording                             -> R.drawable.char3
+        else                                                     -> R.drawable.char1
+    }
+    Image(
+        painter = painterResource(id = charRes),
+        contentDescription = "또바기 캐릭터",
+        modifier = modifier
+            .size(260.dp)
+            .then(if (onClick != null) Modifier.clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            ) else Modifier),
+        contentScale = ContentScale.Fit
+    )
+}
+
+/**
+ * 원형 마이크 버튼 — Figma 하단 마이크 영역.
+ *
+ * 연두색(#F0FAE8) 원형 배경에 마이크 아이콘을 표시한다.
+ * [enabled] = false 면 회색으로 비활성화된다.
+ */
+@Composable
+fun MicCircleButton(
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    val bgColor = if (enabled) Green50 else Gray200
+    val iconTint = if (enabled) Green600 else Gray400
+
+    Box(
+        modifier = Modifier
+            .size(130.dp)
+            .clip(CircleShape)
+            .background(bgColor)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Mic,
+            contentDescription = "마이크",
+            tint = iconTint,
+            modifier = Modifier.size(64.dp)
+        )
     }
 }
 

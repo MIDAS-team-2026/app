@@ -75,6 +75,7 @@ fun LoginScreen(
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
                 prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserId(user.userId ?: -1)
                 prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserPhone(user.phone.orEmpty())
                 prefs.saveUserRole(user.role?.lowercase().orEmpty())
