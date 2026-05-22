@@ -1,6 +1,11 @@
 package com.example.backend.Model.DTO;
 
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@NoArgsConstructor
 public class LinkRequestDTO {
-    private Long protectorId;
+    private Integer protectorId;
     private String patientCode;
 }
