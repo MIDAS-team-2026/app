@@ -36,7 +36,6 @@ import com.midas26.mobileapp.ui.home.UserHomeScreen
 import com.midas26.mobileapp.ui.home.UserMenu
 import com.midas26.mobileapp.ui.legal.PrivacyScreen
 import com.midas26.mobileapp.ui.onboarding.OnboardingScreen
-import com.midas26.mobileapp.ui.onboarding.SplashScreen
 import com.midas26.mobileapp.ui.permission.PermissionScreen
 import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
 import com.midas26.mobileapp.ui.recall.RecallResultScreen
@@ -73,7 +72,8 @@ private val mainRoutes = setOf(
 
 @Composable
 fun AppNavHost(
-    navController: NavHostController = rememberNavController(),
+    navController: NavHostController,
+    startDestination: String = Routes.Login,
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
@@ -134,31 +134,9 @@ fun AppNavHost(
     ) { innerPadding ->
     NavHost(
         navController = navController,
-        startDestination = Routes.Splash,
+        startDestination = startDestination,
         modifier = Modifier.padding(innerPadding)
     ) {
-        composable(Routes.Splash) {
-            SplashScreen(
-                onNavigateToHome = {
-                    val home = if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN)
-                        Routes.GuardianHome else Routes.UserHome
-                    navController.navigate(home) {
-                        popUpTo(Routes.Splash) { inclusive = true }
-                    }
-                },
-                onNavigateToLogin = {
-                    navController.navigate(Routes.Login) {
-                        popUpTo(Routes.Splash) { inclusive = true }
-                    }
-                },
-                onNavigateToOnboarding = {
-                    navController.navigate(Routes.Onboarding) {
-                        popUpTo(Routes.Splash) { inclusive = true }
-                    }
-                }
-            )
-        }
-
         composable(Routes.Onboarding) {
             OnboardingScreen(
                 onFinish = {
