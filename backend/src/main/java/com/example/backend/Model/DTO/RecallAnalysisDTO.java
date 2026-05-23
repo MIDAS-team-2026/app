@@ -12,4 +12,6 @@ public class RecallAnalysisDTO {
     private Float similarityScore;
     private Float keywordScore;
     private Float finalRecallScore;
+    private String aiLabel;
+    private Float aiConfidence;
 }
