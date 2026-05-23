@@ -35,6 +35,9 @@ public class RecallQuestion {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "expected_answer", columnDefinition = "TEXT", nullable = true)
+    private String expectedAnswer;
+
     @OneToMany(mappedBy = "recallQuestion", cascade = CascadeType.ALL)
     private List<RecallKeyword> keywords = new ArrayList<>();
 

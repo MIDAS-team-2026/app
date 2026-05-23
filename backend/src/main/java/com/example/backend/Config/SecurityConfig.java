@@ -22,6 +22,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // Swagger UI 접근 허용
+                        .requestMatchers(
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs"
+                        ).permitAll()
                         // TODO: JWT 인증 필터 구현 후 .anyRequest().authenticated() 로 변경
                         .anyRequest().permitAll()
                 );

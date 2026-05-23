@@ -1,6 +1,10 @@
 package com.example.backend.Model.DTO;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+@Getter
+@NoArgsConstructor
 import lombok.Setter;
 
 @Getter
