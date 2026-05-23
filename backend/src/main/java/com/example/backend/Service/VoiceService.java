@@ -1,5 +1,6 @@
 package com.example.backend.Service;
 
+import com.example.backend.Model.DTO.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.VoiceResponseDTO;
 import com.example.backend.Model.Entity.chat.AudioRecord;
 import com.example.backend.Model.Entity.chat.ChatSession;
@@ -14,10 +15,15 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class VoiceService {
+
+    private static final String ANSWER_ROLE_INITIAL = "INITIAL";
+    private static final String ANSWER_ROLE_RECALL = "RECALL";
 
     private final S3Service s3Service;
     private final AudioRecordRepository audioRecordRepository;
@@ -25,7 +31,13 @@ public class VoiceService {
     private final ChatSessionRepository chatSessionRepository;
 
     @Transactional
-    public VoiceResponseDTO uploadAndSave(Integer userId, Long sessionId, MultipartFile file) throws IOException {
+    public VoiceResponseDTO uploadAndSave(
+            Integer userId,
+            Long sessionId,
+            Long recallQuestionId,
+            String answerRole,
+            MultipartFile file) throws IOException {
+
         String fileUrl = s3Service.uploadFile(file);
 
         User user = userRepository.findById(userId)
@@ -42,6 +54,16 @@ public class VoiceService {
         record.setSpeaker(1); // 1: USER, 2: AI
         record.setTurnOrder(nextTurn);
         record.setRecordedAt(LocalDateTime.now());
+        record.setRecallQuestionId(recallQuestionId);
+        record.setAnswerRole(answerRole);
+
+        // RECALL 답변이면 해당 질문의 INITIAL 녹음을 부모로 연결
+        if (recallQuestionId != null && ANSWER_ROLE_RECALL.equalsIgnoreCase(answerRole)) {
+            audioRecordRepository
+                    .findFirstByUser_IdAndRecallQuestionIdAndAnswerRoleOrderByRecordedAtDesc(
+                            userId, recallQuestionId, ANSWER_ROLE_INITIAL)
+                    .ifPresent(record::setParentRecord);
+        }
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
 
@@ -51,5 +73,26 @@ public class VoiceService {
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
+    }
+
+    @Transactional
+    public void updateTranscript(Long recordId, String transcriptText) {
+        AudioRecord record = audioRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
+        record.setTranscriptText(transcriptText);
+        audioRecordRepository.save(record);
+    }
+
+    @Transactional(readOnly = true)
+    public List<SessionRecordsResponseDTO> getRecordsBySession(Long sessionId) {
+        return audioRecordRepository.findByChatSession_Id(sessionId).stream()
+                .map(record -> new SessionRecordsResponseDTO(
+                        record.getId(),
+                        record.getTranscriptText(),
+                        record.getAudioFilePath(),
+                        record.getAnswerRole() != null ? record.getAnswerRole().toString() : null,
+                        record.getRecallQuestionId()
+                ))
+                .collect(Collectors.toList());
     }
 }
