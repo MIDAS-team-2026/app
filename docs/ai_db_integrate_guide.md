@@ -1,8 +1,4 @@
-선영님, 반영된 코드를 기준으로 **업데이트된 통합 가이드**입니다. 이전 가이드에서 “아직 없다”고 했던 항목 중 상당수가 이미 구현되어 있어, **지금 있는 API만으로 돌아가는 흐름**을 중심으로 다시 정리했습니다.
-
----
-
-# MIDAS 백엔드 ↔ AI 통합 가이드 (2026.05 갱신판)
+# MIDAS 백엔드 ↔ AI 통합 가이드 
 
 ## 0. 한 줄 요약
 
@@ -24,8 +20,6 @@
 | **Spring Boot** | `backend/src/main/java/...` | S3 파일 저장, **RECALL 음성 업로드 시 INITIAL 음성과 자동 부모-자식 연결**, STT 텍스트 갱신, **AI 분석 세부 지표 DB 저장**, 보호자 알림 |
 | **Python AI #1** | `backend/ai/analysis/` | 음성 파일에서 **음향/텍스트 특징** 추출 및 **발화 이상 점수** 계산 후 전송 |
 | **Python AI #2** | `backend/ai/recall/` | **Spring에서 키워드를 조회**해 과거 답 vs 오늘 답 **회상 일치도** 및 종합 위험도 계산 |
-
-**아직 없는 것 (가이드 말미 참고):** 세션별 녹음 목록 조회, 분석 결과 조회, 질문·키워드 수정 API, 세션 종료 트리거 API.
 
 ---
 
@@ -167,9 +161,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-**통합 시 꼭 기억:** Python/오케스트레이터는 업로드마다  
-`{ recallQuestionId → { INITIAL: recordId, RECALL: recordId } }`  
-를 **직접 저장**해야 합니다. (세션별 녹음 조회 API는 아직 없음 <- 만들어야 합니다.>)
+세션별 녹음 목록 전체 조회 API(GET /api/voice/session/{sessionId}/records)가 구현 완료되었으나 오류 가능성 있음.
 
 ---
 
@@ -422,6 +414,9 @@ finalRiskScore = 100 - 건강점수
 
 앱이 음성을 업로드할 때마다 Spring이 Python 워커에게 아래와 같은 분석 요청 쪽지(JSON)를 보냅니다. Python은 이 정보를 바탕으로 S3에서 파일을 다운로드해 즉시 분석에 착수합니다.
 
+* 세션 마감 흐름:
+앱이 대화를 마치고 POST /api/ai/analysis/chat/session/{sessionId}/complete를 호출하면, Spring은 세션을 닫은 후 Python 서버 주소(http://localhost:포트/api/ai/batch-analysis)로 sessionId와 userId를 담아 POST 요청(트리거)을 보냅니다. 파이썬 팀원은 이 요청을 받는 엔드포인트를 열어두고, 신호가 오면 분석을 시작하면 됩니다.
+
 ```json
 {
   "recordId": 123,
@@ -435,16 +430,16 @@ finalRiskScore = 100 - 건강점수
 
 ---
 
-## 9. 아직 부족한 API·Service (추가 권장, 코드 수정 없이 설계만)
+## 9. 구현 완료된 추가 고도화 API 목록
 
-| 제안 | 이유 |
-|------|------|
-| `GET /api/voice/session/{sessionId}/records` | Python이 recordId·전사·URL을 API로 조회 |
-| `GET /api/ai/analysis/session/{sessionId}/summary` | 앱 리포트 화면 |
-| `PUT /api/recall/questions/{id}` (keywords, questionType) | 가입 질문은 keywords 비어 있음 |
-| `POST /api/chat/session/{sessionId}/complete` | 위험도 배치 트리거 |
-| `RecallQuestion.expectedAnswer` 컬럼 + DTO | RoBERTa `expected_answer`용 |
-* 추가한 부분 있음. 사전 확인 후 api 설계 요망!!
+기존의 "부족한 API 제안" 구역을 "파이썬/앱 연동용 추가 API 명세"로 변경합니다.
+
+| 메서드 | URL | 호출 주체 | 목적 |
+| --- | --- | --- | --- |
+| **GET** | `/api/voice/session/{sessionId}/records` | Python | 해당 세션의 모든 녹음 ID, 전사문, S3 URL 목록 일괄 조회 |
+| **GET** | `/api/ai/analysis/session/{sessionId}/summary` | 앱 (클라이언트) | 앱 리포트 화면용 최종 위험도 및 지표 요약 반환 |
+| **PUT** | `/api/recall/questions/{id}` | 보호자/웹 | 특정 질문의 키워드 목록(`List<String>`) 및 정답 문장 수정 |
+| **POST** | `/api/ai/analysis/chat/session/{sessionId}/complete` | 앱 (클라이언트) | 대화 세션 종료 기록 및 **Python 배치 분석 서버 트리거 발동** |
 
 ---
 
