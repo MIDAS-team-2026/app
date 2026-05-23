@@ -47,6 +47,10 @@ class PrefsManager(context: Context) {
     fun getUserPhone(): String = prefs.getString(KEY_USER_PHONE, "") ?: ""
     fun saveUserPhone(phone: String) { prefs.edit().putString(KEY_USER_PHONE, phone).apply() }
 
+    // 사용자 ID (서버 PK)
+    fun getUserId(): Int = prefs.getInt(KEY_USER_ID, -1)
+    fun saveUserId(id: Int) { prefs.edit().putInt(KEY_USER_ID, id).apply() }
+
     // 사용자 코드
     fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
     fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
@@ -88,9 +92,10 @@ class PrefsManager(context: Context) {
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_ROLE = "user_role"
 
-        private const val KEY_USER_NAME = "user_name"
+        private const val KEY_USER_ID    = "user_id"
+        private const val KEY_USER_NAME  = "user_name"
         private const val KEY_USER_PHONE = "user_phone"
-        private const val KEY_USER_CODE = "user_code"
+        private const val KEY_USER_CODE  = "user_code"
 
         // 알림
         private const val KEY_NOTIF_ENABLED = "notif_enabled"

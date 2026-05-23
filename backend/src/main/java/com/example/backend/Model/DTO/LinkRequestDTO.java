@@ -5,6 +5,10 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
+import lombok.Setter;
+
+@Getter
+@Setter
 public class LinkRequestDTO {
     private Integer protectorId;
     private String patientCode;
