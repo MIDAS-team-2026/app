@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO;
+package com.example.backend.Model.DTO.location;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
