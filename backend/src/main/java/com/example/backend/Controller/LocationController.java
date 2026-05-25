@@ -1,9 +1,9 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
-import com.example.backend.Model.DTO.LocationDTO;
-import com.example.backend.Model.DTO.LocationResponseDTO;
-import com.example.backend.Model.DTO.SafeZoneDTO;
+import com.example.backend.Model.DTO.location.LocationDTO;
+import com.example.backend.Model.DTO.location.LocationResponseDTO;
+import com.example.backend.Model.DTO.location.SafeZoneDTO;
 import com.example.backend.Service.LocationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
