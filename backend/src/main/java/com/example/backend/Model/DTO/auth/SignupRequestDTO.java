@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO;
+package com.example.backend.Model.DTO.auth;
 
 public class SignupRequestDTO {
     private String email;

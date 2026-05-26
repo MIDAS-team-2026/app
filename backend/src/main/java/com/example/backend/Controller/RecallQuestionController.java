@@ -1,7 +1,7 @@
 package com.example.backend.Controller;
 
-import com.example.backend.Model.DTO.RecallQuestionResponseDTO;
-import com.example.backend.Model.DTO.RecallQuestionUpdateDTO;
+import com.example.backend.Model.DTO.analysis.RecallQuestionResponseDTO;
+import com.example.backend.Model.DTO.analysis.RecallQuestionUpdateDTO;
 import com.example.backend.Service.RecallQuestionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
