@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO;
+package com.example.backend.Model.DTO.analysis;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,7 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class VerifyCodeDTO {
-    private String phone;
-    private String code;
+public class SttUpdateRequestDTO {
+    private Long recordId;
+    private String transcriptText;
 }

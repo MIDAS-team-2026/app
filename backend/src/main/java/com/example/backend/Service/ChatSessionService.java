@@ -29,4 +29,15 @@ public class ChatSessionService {
 
         return chatSessionRepository.save(session).getId();
     }
+
+    @Transactional
+    public void endSession(Long sessionId) {
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
+
+        // 세션 종료 시간 기록
+        session.setEndedAt(LocalDateTime.now());
+
+        chatSessionRepository.save(session);
+    }
 }

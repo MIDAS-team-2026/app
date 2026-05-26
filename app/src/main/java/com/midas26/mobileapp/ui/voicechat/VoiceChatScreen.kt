@@ -35,14 +35,16 @@ fun VoiceChatScreen(
     onDisconnected: () -> Unit = {},
     viewModel: VoiceChatViewModel = viewModel()
 ) {
-    val state    = viewModel.state
-    val messages = viewModel.messages
+    val state      = viewModel.state
     val ttsManager = LocalTtsManager.current
 
-    // TTS 재생 — speakTrigger 변경 시 마지막 AI 메시지 읽기
+    // TTS 재생 — speakTrigger 변경 시 현재 문장 읽기
+    // speakTrigger == 0 은 초기값(재생 요청 없음)이므로 무시
     LaunchedEffect(viewModel.speakTrigger) {
-        val speaking = messages.lastOrNull { it.isSpeaking } ?: return@LaunchedEffect
-        ttsManager?.speak(speaking.text) { viewModel.finishPlaying() }
+        if (viewModel.speakTrigger == 0) return@LaunchedEffect
+        val text = viewModel.displayedText
+        if (text.isBlank()) return@LaunchedEffect
+        ttsManager?.speak(text) { viewModel.advanceSentence() }
     }
 
     // 녹음 시작 시 TTS 즉시 중단
@@ -58,7 +60,8 @@ fun VoiceChatScreen(
         }
     }
 
-    val aiText    = messages.lastOrNull { it.from == Sender.AI && !it.isLoading }?.text ?: ""
+    // Playing 중: 현재 재생 문장 / 그 외: 마지막 AI 답변 전체
+    val aiText    = viewModel.displayedText
     val isPlaying = state is VoiceChatState.Playing
 
     // 말풍선·캐릭터 탭 → AI 다시 말하기 (Idle / Playing 상태에서만)

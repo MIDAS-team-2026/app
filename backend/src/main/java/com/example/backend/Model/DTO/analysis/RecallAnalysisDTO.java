@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO;
+package com.example.backend.Model.DTO.analysis;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -12,4 +12,6 @@ public class RecallAnalysisDTO {
     private Float similarityScore;
     private Float keywordScore;
     private Float finalRecallScore;
+    private String aiLabel;
+    private Float aiConfidence;
 }

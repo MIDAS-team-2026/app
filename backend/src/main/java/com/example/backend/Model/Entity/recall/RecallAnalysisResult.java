@@ -38,6 +38,12 @@ public class RecallAnalysisResult {
     @Column(name = "final_recall_score")
     private Float finalRecallScore;
 
+    @Column(name = "ai_label", length = 50, nullable = true)
+    private String aiLabel;
+
+    @Column(name = "ai_confidence", nullable = true)
+    private Float aiConfidence;
+
     @Column(name = "analyzed_at", nullable = false, updatable = false)
     private LocalDateTime analyzedAt;
 

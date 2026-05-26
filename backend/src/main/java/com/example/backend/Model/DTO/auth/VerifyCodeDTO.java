@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO; 
+package com.example.backend.Model.DTO.auth;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -9,9 +9,7 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginDTO {
+public class VerifyCodeDTO {
     private String phone;
-    private String password;
-    private String token;
-    private String role;
+    private String code;
 }

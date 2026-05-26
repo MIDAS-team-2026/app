@@ -25,7 +25,7 @@ public class TextAnalysisResult {
     @Column(name = "word_count")
     private Integer wordCount;
 
-    @Column(name = "sentence_count")
+    @Column(name = "sentence_count", nullable = true)
     private Integer sentenceCount;
 
     @Column(name = "avg_sentence_length")
@@ -42,6 +42,16 @@ public class TextAnalysisResult {
 
     @Column(name = "topic_coherence_score")
     private Float topicCoherenceScore;
+
+    /** Python calculate_basic_speech_features: 0 또는 1 */
+    @Column(name = "slow_speech_flag")
+    private Integer slowSpeechFlag;
+
+    @Column(name = "long_recording_flag")
+    private Integer longRecordingFlag;
+
+    @Column(name = "low_content_slow_speech_flag")
+    private Integer lowContentSlowSpeechFlag;
 
     @Column(name = "analyzed_at", nullable = false, updatable = false)
     private LocalDateTime analyzedAt;

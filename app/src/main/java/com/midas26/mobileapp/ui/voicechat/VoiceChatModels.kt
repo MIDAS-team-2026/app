@@ -75,6 +75,29 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     private var _speakTrigger by mutableStateOf(0)
     val speakTrigger: Int get() = _speakTrigger
 
+    // ── 문장 단위 출력 ────────────────────────────────────────────────────────
+
+    /** 현재 재생 중인 AI 답변의 문장 목록 */
+    private var currentSentences: List<String> = emptyList()
+    private var sentenceIndex: Int = 0
+    private var _displayedText by mutableStateOf("")
+    private var advanceSentenceJob: Job? = null
+
+    /**
+     * 말풍선에 표시할 텍스트.
+     * - _displayedText가 설정되어 있으면 그대로 유지 (재생 중·완료 후 모두)
+     * - 아직 설정 전(초기 진입)이면 마지막 AI 메시지 전체 텍스트로 폴백
+     */
+    val displayedText: String get() = _displayedText.ifEmpty {
+        _messages.lastOrNull { it.from == Sender.AI && !it.isLoading }?.text ?: ""
+    }
+
+    /** 문장 부호([.!?~。]) 기준으로 텍스트를 문장 목록으로 분리. */
+    private fun splitSentences(text: String): List<String> =
+        text.split(Regex("(?<=[.!?~。])\\s*"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+
     private var timerJob: Job? = null
 
     // ── 초기화: 세션 시작 ─────────────────────────────────────────────────────
@@ -119,7 +142,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
             delay(2000L) // TODO: AI 응답 구현 후 제거
-            dispatchAiReply("AI 답변 구현 예정입니다.")
+            dispatchAiReply("AI답변 구현 예정입니다. 조금만기다려주세요!")
         }
     }
 
@@ -130,28 +153,59 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
      * 현재는 미사용 — 백엔드 응답 엔드포인트 구현 후 연결할 것.
      */
     fun dispatchAiReply(text: String) {
+        // 문장 분리 후 첫 문장부터 시작
+        currentSentences = splitSentences(text).ifEmpty { listOf(text) }
+        sentenceIndex = 0
+        _displayedText = currentSentences[0]
         _messages.add(ChatMessage(Sender.AI, text, isSpeaking = true))
         _state = VoiceChatState.Playing
         _speakTrigger++
     }
 
+    /**
+     * TTS 한 문장 완료 시 호출.
+     * 600ms 쉰 뒤 다음 문장으로 진행하고, 마지막 문장이면 재생 종료.
+     */
+    fun advanceSentence() {
+        advanceSentenceJob?.cancel()
+        if (_state !is VoiceChatState.Playing) return
+        sentenceIndex++
+        if (sentenceIndex < currentSentences.size) {
+            advanceSentenceJob = viewModelScope.launch {
+                delay(600L) // 문장 사이 잠시 쉬기
+                if (_state !is VoiceChatState.Playing) return@launch
+                _displayedText = currentSentences[sentenceIndex]
+                _speakTrigger++
+            }
+        } else {
+            finishPlaying()
+        }
+    }
+
     // ── TTS 제어 ──────────────────────────────────────────────────────────────
 
     fun finishPlaying() {
-        if (_state !is VoiceChatState.Playing) return
+        advanceSentenceJob?.cancel()
         val last = _messages.lastOrNull()
         if (last != null && last.isSpeaking) {
             _messages[_messages.lastIndex] = last.copy(isSpeaking = false)
         }
-        _state = VoiceChatState.Idle
+        if (_state is VoiceChatState.Playing) {
+            _state = VoiceChatState.Idle
+        }
     }
 
     fun replayLastAi() {
-        if (_messages.lastOrNull()?.from != Sender.AI) return
-        val last = _messages.last()
-        if (!last.isSpeaking) {
-            _messages[_messages.lastIndex] = last.copy(isSpeaking = true)
+        advanceSentenceJob?.cancel()
+        val lastAi = _messages.lastOrNull { it.from == Sender.AI && !it.isLoading } ?: return
+        // currentSentences가 비어 있으면 (초기 메시지 등) 그 자리에서 분리
+        if (currentSentences.isEmpty()) {
+            currentSentences = splitSentences(lastAi.text).ifEmpty { listOf(lastAi.text) }
         }
+        sentenceIndex = 0
+        _displayedText = currentSentences[0]
+        val idx = _messages.lastIndexOf(lastAi)
+        if (idx >= 0) _messages[idx] = lastAi.copy(isSpeaking = true)
         _state = VoiceChatState.Playing
         _speakTrigger++
     }
@@ -167,6 +221,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
 
     override fun onCleared() {
         timerJob?.cancel()
+        advanceSentenceJob?.cancel()
         wavRecorder.stop()
         super.onCleared()
     }
