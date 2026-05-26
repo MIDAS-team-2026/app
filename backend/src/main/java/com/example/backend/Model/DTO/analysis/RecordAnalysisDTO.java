@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO;
+package com.example.backend.Model.DTO.analysis;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
