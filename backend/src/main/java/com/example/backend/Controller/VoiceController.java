@@ -1,9 +1,9 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
-import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
-import com.example.backend.Model.DTO.analysis.SttUpdateRequestDTO;
-import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
+import com.example.backend.Model.DTO.SessionRecordsResponseDTO;
+import com.example.backend.Model.DTO.SttUpdateRequestDTO;
+import com.example.backend.Model.DTO.VoiceResponseDTO;
 import com.example.backend.Service.VoiceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

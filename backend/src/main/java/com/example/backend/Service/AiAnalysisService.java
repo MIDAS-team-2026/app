@@ -1,9 +1,9 @@
 package com.example.backend.Service;
 
-import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
-import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
-import com.example.backend.Model.DTO.analysis.RiskAnalysisDTO;
-import com.example.backend.Model.DTO.analysis.SessionAnalysisSummaryResponseDTO;
+import com.example.backend.Model.DTO.RecallAnalysisDTO;
+import com.example.backend.Model.DTO.RecordAnalysisDTO;
+import com.example.backend.Model.DTO.RiskAnalysisDTO;
+import com.example.backend.Model.DTO.SessionAnalysisSummaryResponseDTO;
 import com.example.backend.Model.Entity.analysis.RiskAnalysisResult;
 import com.example.backend.Model.Entity.analysis.SpeechAnalysisResult;
 import com.example.backend.Model.Entity.analysis.TextAnalysisResult;

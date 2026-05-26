@@ -1,7 +1,7 @@
 package com.example.backend.Service;
 
-import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
-import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
+import com.example.backend.Model.DTO.SessionRecordsResponseDTO;
+import com.example.backend.Model.DTO.VoiceResponseDTO;
 import com.example.backend.Model.Entity.chat.AudioRecord;
 import com.example.backend.Model.Entity.chat.ChatSession;
 import com.example.backend.Model.Entity.user.User;

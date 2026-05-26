@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO.location;
+package com.example.backend.Model.DTO;
 
 import lombok.Getter;
 import lombok.Setter;

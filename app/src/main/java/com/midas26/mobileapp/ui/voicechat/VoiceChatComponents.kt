@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -592,12 +590,11 @@ fun AiSpeechBubble(
 }
 
 /**
- * 캐릭터 이미지 — 별 몸통 위에 눈·입을 레이어로 합성.
+ * 캐릭터 이미지 — 상태에 따라 다른 drawable 표시.
  *
- * Idle       : 감은 눈 + 미소
- * Playing    : 동그란 눈 + 벌린 입
- * Recording  : 동그란 눈 + 미소
- * Processing : 감은 눈 + 미소
+ * - char1 : 대기(Idle) / 확인(Reviewing) 상태
+ * - char2 : AI 말하는 중(Playing) / 처리 중(Processing) 상태
+ * - char3 : 사용자 말하는 중(Recording) 상태
  *
  * [onClick] 이 있으면 탭 시 콜백을 호출한다 (AI 다시 말하기 등).
  */
@@ -607,50 +604,24 @@ fun CharacterImage(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val eyeRes = when (state) {
-        is VoiceChatState.Recording,
-        is VoiceChatState.Playing -> R.drawable.char_eye_open
-        else                      -> R.drawable.char_eye_closed  // Idle, Processing
+    val charRes = when (state) {
+        is VoiceChatState.Playing                                -> R.drawable.char2
+        is VoiceChatState.Processing -> R.drawable.char2
+        is VoiceChatState.Recording                             -> R.drawable.char3
+        else                                                     -> R.drawable.char1
     }
-    val mouthRes = when (state) {
-        is VoiceChatState.Playing -> R.drawable.char_mouth_open
-        else                      -> R.drawable.char_mouth_smile
-    }
-
-    Box(
+    Image(
+        painter = painterResource(id = charRes),
+        contentDescription = "또바기 캐릭터",
         modifier = modifier
             .size(260.dp)
-            .then(
-                if (onClick != null) Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
-                    onClick = onClick
-                ) else Modifier
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        // ① 별 몸통
-        Image(
-            painter = painterResource(R.drawable.char_body),
-            contentDescription = "또바기 캐릭터",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
-        )
-        // ② 눈 레이어 (몸통보다 약간 크게 — 중앙 기준으로 확대)
-        Image(
-            painter = painterResource(eyeRes),
-            contentDescription = null,
-            modifier = Modifier.requiredSize(310.dp),
-            contentScale = ContentScale.Fit
-        )
-        // ③ 입 레이어 (몸통보다 약간 크게 — 중앙 기준으로 확대)
-        Image(
-            painter = painterResource(mouthRes),
-            contentDescription = null,
-            modifier = Modifier.requiredSize(310.dp),
-            contentScale = ContentScale.Fit
-        )
-    }
+            .then(if (onClick != null) Modifier.clickable(
+                indication = null,
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onClick
+            ) else Modifier),
+        contentScale = ContentScale.Fit
+    )
 }
 
 /**

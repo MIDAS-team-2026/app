@@ -1,8 +1,8 @@
 package com.example.backend.Service;
 
-import com.example.backend.Model.DTO.location.LocationDTO;
-import com.example.backend.Model.DTO.location.LocationResponseDTO;
-import com.example.backend.Model.DTO.location.SafeZoneDTO;
+import com.example.backend.Model.DTO.LocationDTO;
+import com.example.backend.Model.DTO.LocationResponseDTO;
+import com.example.backend.Model.DTO.SafeZoneDTO;
 import com.example.backend.Model.Entity.location.Location;
 import com.example.backend.Model.Entity.location.UserLocation;
 import com.example.backend.Model.Entity.user.User;

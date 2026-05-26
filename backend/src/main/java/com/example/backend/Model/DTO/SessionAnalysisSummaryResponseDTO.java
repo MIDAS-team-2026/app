@@ -1,4 +1,4 @@
-package com.example.backend.Model.DTO.analysis;
+package com.example.backend.Model.DTO;
 
 import lombok.Builder;
 import lombok.Getter;

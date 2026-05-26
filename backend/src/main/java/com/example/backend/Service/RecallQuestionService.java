@@ -1,7 +1,7 @@
 package com.example.backend.Service;
 
-import com.example.backend.Model.DTO.analysis.RecallQuestionResponseDTO;
-import com.example.backend.Model.DTO.analysis.RecallQuestionUpdateDTO;
+import com.example.backend.Model.DTO.RecallQuestionResponseDTO;
+import com.example.backend.Model.DTO.RecallQuestionUpdateDTO;
 import com.example.backend.Model.Entity.recall.RecallKeyword;
 import com.example.backend.Model.Entity.recall.RecallQuestion;
 import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionRepository;

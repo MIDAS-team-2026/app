@@ -1,7 +1,6 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.*;
-import com.example.backend.Model.DTO.auth.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
 import com.example.backend.Util.JwtTokenProvider;
