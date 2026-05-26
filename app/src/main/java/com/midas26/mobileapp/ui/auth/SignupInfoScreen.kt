@@ -39,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
@@ -55,7 +54,7 @@ fun SignupInfoScreen(
     role: String,
     onBack: () -> Unit,
     onVerify: (phone: String) -> Unit,
-    viewModel: AuthViewModel = viewModel()
+    viewModel: AuthViewModel
 ) {
     val context = LocalContext.current
 
@@ -238,7 +237,14 @@ fun SignupInfoScreen(
                 text = stringResource(R.string.btn_complete),
                 onClick = {
                     if (validate()) {
-                        viewModel.signup(phone.trim(), password, name.trim(), role)
+                        if (role == PrefsManager.ROLE_GUARDIAN) {
+                            // 보호자: 즉시 회원가입 API 호출
+                            viewModel.signup(phone.trim(), password, name.trim(), role)
+                        } else {
+                            // 환자: 데이터 보관 후 전화 인증으로 이동 (API는 SignupCompleteScreen에서 호출)
+                            viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
+                            onVerify(phone.trim())
+                        }
                     }
                 }
             )

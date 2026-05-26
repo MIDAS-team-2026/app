@@ -111,8 +111,8 @@ class PrefsManager(context: Context) {
         private const val KEY_VOICE_CHAT_ENABLED = "a11y_voice_chat_enabled"
         private const val KEY_TAP_TO_REPLAY = "a11y_tap_to_replay"
 
-        const val ROLE_USER = "user"
-        const val ROLE_GUARDIAN = "guardian"
+        const val ROLE_USER = "PATIENT"
+        const val ROLE_GUARDIAN = "PROTECTOR"
 
         @Volatile private var INSTANCE: PrefsManager? = null
 

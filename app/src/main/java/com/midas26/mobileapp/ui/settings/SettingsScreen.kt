@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -82,8 +80,6 @@ fun SettingsScreen(
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
-    val userCode = prefs.getUserCode().ifEmpty { "842716" } // 백엔드 연동 전 임시 기본값
-
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
@@ -132,8 +128,7 @@ fun SettingsScreen(
 
             ProfileCard(
                 userName = userName,
-                role = if (isGuardian) "보호자" else "사용자",
-                userCode = userCode
+                role = if (isGuardian) "보호자" else "사용자"
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -261,12 +256,8 @@ private fun SettingsTopBar(onBack: () -> Unit) {
 @Composable
 private fun ProfileCard(
     userName: String,
-    role: String,
-    userCode: String
+    role: String
 ) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -316,42 +307,6 @@ private fun ProfileCard(
                         color = AppColor.accentDark,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .clickable {
-                        clipboardManager.setText(AnnotatedString(userCode))
-                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
-                    },
-                shape = RoundedCornerShape(12.dp),
-                color = Gray100
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "사용자 코드",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.textTertiary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = userCode,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = AppColor.textSecondary,
-                        letterSpacing = 2.sp
                     )
                 }
             }

@@ -1,4 +1,4 @@
-﻿package com.midas26.mobileapp.ui.auth
+package com.midas26.mobileapp.ui.auth
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,11 +21,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Celebration
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,23 +45,56 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun SignupCompleteScreen(
-    userCode: String = "842716",
+    viewModel: AuthViewModel,
     onGoHome: () -> Unit
 ) {
     val context = LocalContext.current
+    val authState by viewModel.authState.collectAsState()
+
+    var userCode by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // 화면 최초 진입 시 회원가입 API 호출
+    LaunchedEffect(Unit) {
+        viewModel.signupFromPending()
+    }
+
+    // 회원가입 결과 처리
+    LaunchedEffect(authState) {
+        when (val state = authState) {
+            is AuthState.Success -> {
+                val user = state.user
+                val prefs = PrefsManager.from(context)
+                prefs.saveToken(user.token.orEmpty())
+                prefs.saveUserName(user.name.orEmpty())
+                prefs.saveUserPhone(viewModel.pendingPhone)
+                prefs.saveUserRole(viewModel.pendingRole.ifEmpty { PrefsManager.ROLE_USER })
+                prefs.saveUserId(user.userId ?: -1)
+                prefs.saveUserCode(user.patientCode.orEmpty())
+                userCode = user.patientCode.orEmpty().ifEmpty { "------" }
+                viewModel.resetState()
+            }
+            is AuthState.Error -> {
+                errorMessage = state.message
+            }
+            else -> {}
+        }
+    }
+
+    val isLoading = authState is AuthState.Loading
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Green400)
     ) {
-        // 흰 원 장식 (스플래시처럼)
+        // 흰 원 장식
         Box(
             modifier = Modifier
                 .size(220.dp)
@@ -76,7 +117,6 @@ fun SignupCompleteScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // 🎉 원형 카드
             Surface(
                 modifier = Modifier.size(120.dp),
                 shape = CircleShape,
@@ -125,54 +165,114 @@ fun SignupCompleteScreen(
                         color = BrandWhite.copy(alpha = 0.9f)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = userCode.toCharArray().joinToString(" "),
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = BrandWhite
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = stringResource(R.string.signup_complete_code_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = BrandWhite.copy(alpha = 0.85f),
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(BrandWhite.copy(alpha = 0.20f))
-                            .clickable { copyToClipboard(context, userCode) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.btn_copy_code),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BrandWhite,
-                            fontWeight = FontWeight.SemiBold
-                        )
+
+                    when {
+                        isLoading -> {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            CircularProgressIndicator(
+                                color = BrandWhite,
+                                modifier = Modifier.size(40.dp),
+                                strokeWidth = 3.dp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        errorMessage != null -> {
+                            Text(
+                                text = errorMessage!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrandWhite.copy(alpha = 0.9f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(BrandWhite.copy(alpha = 0.20f))
+                                    .clickable {
+                                        errorMessage = null
+                                        viewModel.signupFromPending()
+                                    }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = "다시 시도",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = BrandWhite,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        else -> {
+                            // 8자리 hex → 4+4 두 묶음으로 표시
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = userCode.take(4),
+                                    fontSize = 36.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandWhite,
+                                    letterSpacing = 4.sp
+                                )
+                                Text(
+                                    text = "·",
+                                    fontSize = 28.sp,
+                                    color = BrandWhite.copy(alpha = 0.5f)
+                                )
+                                Text(
+                                    text = userCode.drop(4),
+                                    fontSize = 36.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BrandWhite,
+                                    letterSpacing = 4.sp
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = stringResource(R.string.signup_complete_code_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = BrandWhite.copy(alpha = 0.85f),
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(BrandWhite.copy(alpha = 0.20f))
+                                    .clickable { copyToClipboard(context, userCode) }
+                                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.btn_copy_code),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = BrandWhite,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // 하단 "홈으로 시작하기" 버튼 (흰 배경 + 녹색 텍스트)
+        // 하단 "홈으로 시작하기" 버튼 — 코드가 발급된 후에만 활성화
+        val homeButtonEnabled = userCode.isNotEmpty()
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp, vertical = 32.dp)
                 .height(64.dp)
-                .clickable(onClick = onGoHome),
+                .clickable(enabled = homeButtonEnabled, onClick = onGoHome),
             shape = RoundedCornerShape(16.dp),
-            color = BrandWhite
+            color = if (homeButtonEnabled) BrandWhite else BrandWhite.copy(alpha = 0.4f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Text(
                     text = stringResource(R.string.btn_go_home),
                     style = MaterialTheme.typography.labelLarge,
-                    color = AppColor.accentDark,
+                    color = if (homeButtonEnabled) AppColor.accentDark else Color.White,
                     fontWeight = FontWeight.Bold
                 )
             }

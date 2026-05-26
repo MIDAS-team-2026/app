@@ -2,8 +2,10 @@ package com.midas26.mobileapp.ui.settings
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +39,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,8 +52,10 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray100
+import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun ProfileEditScreen(
@@ -59,6 +65,10 @@ fun ProfileEditScreen(
     viewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val prefs = PrefsManager.from(context)
+    val isPatient = prefs.getUserRole() == PrefsManager.ROLE_USER
+    val userCode = prefs.getUserCode()
 
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
@@ -254,7 +264,65 @@ fun ProfileEditScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 사용자 코드 섹션 — 환자만 표시
+            if (isPatient) {
+                ProfileSection(title = "사용자 코드") {
+                    val displayFirst = if (userCode.length >= 4) userCode.take(4) else "____"
+                    val displaySecond = if (userCode.length >= 8) userCode.drop(4) else "____"
+                    val hasCode = userCode.isNotEmpty()
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "$displayFirst  $displaySecond",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (hasCode) AppColor.textPrimary
+                                        else AppColor.textTertiary,
+                                letterSpacing = 3.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "보호자에게 이 코드를 알려주세요.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                        if (hasCode) {
+                            Surface(
+                                modifier = Modifier
+                                    .clickable {
+                                        clipboardManager.setText(AnnotatedString(userCode))
+                                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = Gray200
+                            ) {
+                                Text(
+                                    text = "복사",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppColor.textSecondary,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
+
+            val hasChanges = currentPassword.isNotEmpty() ||
+                             newPassword.isNotEmpty() ||
+                             confirmPassword.isNotEmpty()
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -268,15 +336,20 @@ fun ProfileEditScreen(
                             viewModel.changePassword(initialPhone, currentPassword, newPassword)
                         }
                     },
+                    enabled = hasChanges,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Green400)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Green400,
+                        disabledContainerColor = Green400.copy(alpha = 0.4f),
+                        disabledContentColor = BrandWhite.copy(alpha = 0.6f)
+                    )
                 ) {
                     Text(
-                        text = "비밀번호 변경",
+                        text = "프로필 편집",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = BrandWhite
