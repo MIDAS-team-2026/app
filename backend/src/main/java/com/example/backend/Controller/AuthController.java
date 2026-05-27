@@ -49,12 +49,19 @@ public class AuthController {
 
             String token = jwtTokenProvider.createToken(user.getPhone(), user.getRole());
 
+            String patientCode = null;
+            
+            if ("PATIENT".equalsIgnoreCase(user.getRole())) {
+                patientCode = user.getPatientCode(); // User 엔티티에 getPatientCode()가 있다고 가정
+            }
+
             LoginResponse loginDTO1 = new LoginResponse(
                     user.getPhone(),
                     user.getName(),
                     token,
                     user.getRole(),
-                    user.getId()
+                    user.getId(),
+                    patientCode
             );
             return ResponseEntity.ok(ApiResponse.success(loginDTO1));
         } else {
