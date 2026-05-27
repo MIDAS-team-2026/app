@@ -150,8 +150,19 @@ fun AppNavHost(
             composable(Routes.Onboarding) {
                 OnboardingScreen(
                     onFinish = {
-                        navController.navigate(Routes.Login) {
+                        navController.navigate(Routes.OnboardingPermission) {
                             popUpTo(Routes.Onboarding) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // ── 온보딩 후 권한 설명 화면 ──────────────────────────────────
+            composable(Routes.OnboardingPermission) {
+                PermissionScreen(
+                    onNext = {
+                        navController.navigate(Routes.Login) {
+                            popUpTo(Routes.OnboardingPermission) { inclusive = true }
                         }
                     }
                 )
@@ -243,7 +254,7 @@ fun AppNavHost(
                     phone      = phone,
                     onBack     = { navController.popBackStack() },
                     onVerified = {
-                        navController.navigate(Routes.permission(role)) {
+                        navController.navigate(Routes.privacy(role)) {
                             popUpTo(Routes.SignupRole) { inclusive = true }
                         }
                     }

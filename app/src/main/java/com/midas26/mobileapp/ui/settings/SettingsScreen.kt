@@ -20,8 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import com.midas26.mobileapp.location.LocationForegroundService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -87,6 +91,18 @@ fun SettingsScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
+
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            prefs.setLocationSharingEnabled(true)
+            context.startForegroundService(Intent(context, LocationForegroundService::class.java))
+        } else {
+            locationSharingEnabled = false
+            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -154,7 +170,25 @@ fun SettingsScreen(
                         checked = locationSharingEnabled,
                         onCheckedChange = { enabled ->
                             locationSharingEnabled = enabled
-                            prefs.setLocationSharingEnabled(enabled)
+                            if (enabled) {
+                                val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                                    ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                if (bgGranted) {
+                                    prefs.setLocationSharingEnabled(true)
+                                    context.startForegroundService(
+                                        Intent(context, LocationForegroundService::class.java)
+                                    )
+                                } else {
+                                    backgroundLocationLauncher.launch(
+                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    )
+                                }
+                            } else {
+                                prefs.setLocationSharingEnabled(false)
+                                context.stopService(Intent(context, LocationForegroundService::class.java))
+                            }
                         }
                     )
                     HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))

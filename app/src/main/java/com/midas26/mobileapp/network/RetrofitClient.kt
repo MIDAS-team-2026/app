@@ -32,4 +32,8 @@ object RetrofitClient {
     val voiceChat: VoiceChatApiService by lazy {
         retrofit.create(VoiceChatApiService::class.java)
     }
+
+    val location: LocationApiService by lazy {
+        retrofit.create(LocationApiService::class.java)
+    }
 }
