@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,8 +57,8 @@ fun UserHomeScreen(
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
-    weeklyChecks: List<Boolean> = listOf(true, true, true, true, true, false, false), // 월~일
-    todayIndex: Int = 5, // 토요일이 오늘 (0=월)
+    weeklyChecks: List<Boolean> = listOf(false, true, true, true, true, true, false), // 일~토
+    todayIndex: Int = 6, // 토요일이 오늘 (0=일)
     onMenuClick: (UserMenu) -> Unit = {}
 ) {
     Column(
@@ -69,10 +72,7 @@ fun UserHomeScreen(
             weeklyChecks = weeklyChecks,
             todayIndex = todayIndex
         )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        ScoreCard(score = weeklyScore)
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         Text(
             text = stringResource(R.string.home_today_check),
@@ -84,6 +84,7 @@ fun UserHomeScreen(
         Spacer(modifier = Modifier.height(8.dp))
         MenuGrid(
             onMenuClick = onMenuClick,
+            todayChecked = weeklyChecks.getOrNull(todayIndex) == true,
             modifier = Modifier.weight(1f)
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -100,27 +101,17 @@ private fun UserHomeHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(240.dp)
-            .background(Green400)
+            .wrapContentHeight()
+            .background(brush = Brush.linearGradient(
+                colors = listOf(Green500, Green400),
+                start = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
+            ))
     ) {
-        Box(
-            modifier = Modifier
-                .size(200.dp)
-                .offset(x = 240.dp, y = 20.dp)
-                .clip(CircleShape)
-                .background(BrandWhite.copy(alpha = 0.15f))
-        )
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .offset(x = (-30).dp, y = 110.dp)
-                .clip(CircleShape)
-                .background(BrandWhite.copy(alpha = 0.10f))
-        )
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(top = 48.dp, bottom = 16.dp)
         ) {
@@ -142,7 +133,7 @@ private fun UserHomeHeader(
                 color = BrandWhite.copy(alpha = 0.20f)
             ) {
                 Text(
-                    text = stringResource(R.string.home_streak),
+                    text = stringResource(R.string.home_streak, streakDays),
                     style = MaterialTheme.typography.bodyMedium,
                     color = BrandWhite,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
@@ -160,15 +151,15 @@ private fun WeekStatusCard(
     todayIndex: Int
 ) {
     val weekdays = listOf(
-        R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed,
-        R.string.weekday_thu, R.string.weekday_fri, R.string.weekday_sat, R.string.weekday_sun
+        R.string.weekday_sun, R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed,
+        R.string.weekday_thu, R.string.weekday_fri, R.string.weekday_sat
     )
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = BrandWhite.copy(alpha = 0.20f)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
                 text = stringResource(R.string.home_week_status),
                 style = MaterialTheme.typography.bodySmall,
@@ -199,25 +190,19 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
             style = MaterialTheme.typography.bodySmall,
             color = BrandWhite.copy(alpha = 0.85f)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Surface(
-            modifier = Modifier.size(width = 30.dp, height = 24.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = if (isToday) BrandWhite
+            modifier = Modifier
+                .size(36.dp)
+                .then(if (isToday) Modifier.border(2.dp, BrandWhite, CircleShape) else Modifier),
+            shape = CircleShape,
+            color = if (isToday) Color.Transparent
             else if (checked) BrandWhite.copy(alpha = 0.4f)
             else BrandWhite.copy(alpha = 0.15f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                if (isToday) {
-                    Text(
-                        text = "오늘",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.accentDark,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
-                    )
-                } else if (checked) {
-                    Text(text = "✓", color = BrandWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                if (checked) {
+                    Text(text = "✓", color = BrandWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -296,6 +281,7 @@ private fun ScoreCard(score: Int) {
 @Composable
 private fun MenuGrid(
     onMenuClick: (UserMenu) -> Unit,
+    todayChecked: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -306,7 +292,7 @@ private fun MenuGrid(
         MenuCard(
             icon = Icons.Default.Mic,
             titleRes = R.string.menu_voice_chat,
-            badge = "N",
+            badge = if (!todayChecked) "!" else null,
             onClick = { onMenuClick(UserMenu.VoiceChat) },
             modifier = Modifier
                 .fillMaxWidth()
