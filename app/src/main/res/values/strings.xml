@@ -96,7 +96,7 @@
     <!-- 사용자 홈 -->
     <string name="home_hello">안녕하세요 👋</string>
     <string name="home_user_suffix">님</string>
-    <string name="home_streak">🔥 %1$d일 연속 점검 중</string>
+    <string name="home_streak">🔥 %1$d일 연속 점검 중!</string>
     <string name="home_week_status">이번 주 점검 현황</string>
     <string name="home_today">오늘</string>
     <string name="home_week_score_label">이번 주 인지 점수</string>
@@ -105,9 +105,13 @@
     <string name="home_score_normal">정상 범위</string>
     <string name="home_today_check">오늘의 점검</string>
     <string name="menu_voice_chat">음성 대화</string>
+    <string name="menu_voice_chat_desc">AI와 대화하며 인지 기능을 훈련해요</string>
     <string name="menu_recall">회상 과제</string>
     <string name="menu_analysis">분석 결과</string>
+    <string name="menu_analysis_desc">대화 결과와 인지 점수를 확인해요</string>
     <string name="menu_settings">설정</string>
+    <string name="menu_settings_desc">앱 환경과 알림을 설정해요</string>
+    <string name="section_settings">환경설정</string>
     <string name="tab_home">홈</string>
     <string name="tab_chat">대화</string>
     <string name="tab_analysis">분석</string>

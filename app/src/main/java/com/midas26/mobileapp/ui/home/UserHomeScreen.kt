@@ -74,17 +74,8 @@ fun UserHomeScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        Text(
-            text = stringResource(R.string.home_today_check),
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppColor.textTertiary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 24.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
         MenuGrid(
             onMenuClick = onMenuClick,
-            todayChecked = weeklyChecks.getOrNull(todayIndex) == true,
             modifier = Modifier.weight(1f)
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -108,45 +99,31 @@ private fun UserHomeHeader(
                 end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
             ))
     ) {
-
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(top = 48.dp, bottom = 16.dp)
+                .padding(top = 24.dp, bottom = 20.dp)
         ) {
             Text(
-                text = stringResource(R.string.home_hello),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BrandWhite.copy(alpha = 0.9f)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
                 text = "$userName ${stringResource(R.string.home_user_suffix)}",
-                fontSize = 28.sp,
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 color = BrandWhite
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = BrandWhite.copy(alpha = 0.20f)
-            ) {
-                Text(
-                    text = stringResource(R.string.home_streak, streakDays),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BrandWhite,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            WeekStatusCard(weeklyChecks = weeklyChecks, todayIndex = todayIndex)
+            Spacer(modifier = Modifier.height(12.dp))
+            WeekStatusCard(
+                streakDays = streakDays,
+                weeklyChecks = weeklyChecks,
+                todayIndex = todayIndex
+            )
         }
     }
 }
 
 @Composable
 private fun WeekStatusCard(
+    streakDays: Int,
     weeklyChecks: List<Boolean>,
     todayIndex: Int
 ) {
@@ -161,11 +138,12 @@ private fun WeekStatusCard(
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
-                text = stringResource(R.string.home_week_status),
-                style = MaterialTheme.typography.bodySmall,
-                color = BrandWhite.copy(alpha = 0.9f)
+                text = stringResource(R.string.home_streak, streakDays),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = BrandWhite
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -279,46 +257,67 @@ private fun ScoreCard(score: Int) {
 }
 
 @Composable
+private fun SectionHeader(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = Gray400,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(Gray200)
+        )
+    }
+}
+
+@Composable
 private fun MenuGrid(
     onMenuClick: (UserMenu) -> Unit,
-    todayChecked: Boolean,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = modifier
+            .padding(horizontal = 20.dp)
+            .padding(top = 20.dp),
+        verticalArrangement = Arrangement.Top
     ) {
-        // 음성대화 — 회상과제 자리까지 가로 전체 차지
+        SectionHeader(title = stringResource(R.string.home_today_check))
+        Spacer(modifier = Modifier.height(12.dp))
         MenuCard(
             icon = Icons.Default.Mic,
             titleRes = R.string.menu_voice_chat,
-            badge = if (!todayChecked) "!" else null,
+            descRes = R.string.menu_voice_chat_desc,
             onClick = { onMenuClick(UserMenu.VoiceChat) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
+            modifier = Modifier.fillMaxWidth()
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MenuCard(
-                icon = Icons.Default.BarChart,
-                titleRes = R.string.menu_analysis,
-                onClick = { onMenuClick(UserMenu.Analysis) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                icon = Icons.Default.Settings,
-                titleRes = R.string.menu_settings,
-                onClick = { onMenuClick(UserMenu.Settings) },
-                accent = Gray100,
-                iconTint = Gray400,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        Spacer(modifier = Modifier.height(12.dp))
+        MenuCard(
+            icon = Icons.Default.BarChart,
+            titleRes = R.string.menu_analysis,
+            descRes = R.string.menu_analysis_desc,
+            onClick = { onMenuClick(UserMenu.Analysis) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(40.dp))
+        SectionHeader(title = stringResource(R.string.section_settings))
+        Spacer(modifier = Modifier.height(12.dp))
+        MenuCard(
+            icon = Icons.Default.Settings,
+            titleRes = R.string.menu_settings,
+            descRes = R.string.menu_settings_desc,
+            onClick = { onMenuClick(UserMenu.Settings) },
+            accent = Gray100,
+            iconTint = Gray400,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -326,64 +325,53 @@ private fun MenuGrid(
 private fun MenuCard(
     icon: ImageVector,
     titleRes: Int,
+    descRes: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    badge: String? = null,
     accent: Color = Green50,
     iconTint: Color = Green600
 ) {
     Surface(
         modifier = modifier
-            .fillMaxHeight()
+            .height(104.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         shadowElevation = 2.dp
     ) {
-        Box(modifier = Modifier.padding(12.dp)) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    modifier = Modifier.size(72.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    color = accent
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = iconTint,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(titleRes),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(descRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColor.textTertiary
+                )
             }
-            if (badge != null) {
-                Surface(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .align(Alignment.TopEnd),
-                    shape = CircleShape,
-                    color = Red400
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = badge,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = BrandWhite,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            Surface(
+                modifier = Modifier.size(72.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = accent
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
             }
         }
