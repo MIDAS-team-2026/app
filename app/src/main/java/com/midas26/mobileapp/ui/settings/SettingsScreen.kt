@@ -48,9 +48,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -67,6 +70,7 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.R
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.util.PrefsManager
@@ -319,16 +323,14 @@ private fun ProfileCard(
             Surface(
                 modifier = Modifier.size(64.dp),
                 shape = CircleShape,
-                color = Green50
+                color = BrandWhite
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = userName.take(1),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AppColor.accentDark
-                    )
-                }
+                Image(
+                    painter = painterResource(R.drawable.char1),
+                    contentDescription = "프로필 이미지",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             Spacer(modifier = Modifier.width(16.dp))
