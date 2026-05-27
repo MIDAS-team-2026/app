@@ -102,7 +102,11 @@ private fun UserHomeHeader(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight()
-            .background(brush = Brush.verticalGradient(listOf(Green500, Green400)))
+            .background(brush = Brush.linearGradient(
+                colors = listOf(Green500, Green400),
+                start = androidx.compose.ui.geometry.Offset(Float.POSITIVE_INFINITY, 0f),
+                end = androidx.compose.ui.geometry.Offset(0f, Float.POSITIVE_INFINITY)
+            ))
     ) {
 
         Column(
