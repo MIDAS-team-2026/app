@@ -145,16 +145,11 @@ fun SettingsScreen(
 
             ProfileCard(
                 userName = userName,
-                role = if (isGuardian) "보호자" else "사용자"
+                role = if (isGuardian) "보호자" else "사용자",
+                onClick = onProfileEdit
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsSection(title = "계정") {
-                SettingsRow(label = "프로필 편집", onClick = onProfileEdit)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "접근성") {
                 SettingsRow(label = "접근성 설정", onClick = onAccessibility)
@@ -303,12 +298,14 @@ private fun SettingsTopBar(onBack: () -> Unit) {
 @Composable
 private fun ProfileCard(
     userName: String,
-    role: String
+    role: String,
+    onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         shadowElevation = 2.dp
@@ -357,6 +354,13 @@ private fun ProfileCard(
                     )
                 }
             }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

@@ -141,7 +141,7 @@ fun ProfileEditScreen(
                     )
                 }
                 Text(
-                    text = "프로필 편집",
+                    text = "프로필",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = AppColor.textPrimary,
@@ -179,6 +179,60 @@ fun ProfileEditScreen(
             }
 
             Spacer(modifier = Modifier.height(28.dp))
+
+            // 사용자 코드 섹션 — 환자만 표시
+            if (isPatient) {
+                ProfileSection(title = "사용자 코드") {
+                    val displayFirst = if (userCode.length >= 4) userCode.take(4) else "____"
+                    val displaySecond = if (userCode.length >= 8) userCode.drop(4) else "____"
+                    val hasCode = userCode.isNotEmpty()
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "$displayFirst  $displaySecond",
+                                style = MaterialTheme.typography.headlineSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (hasCode) AppColor.textPrimary
+                                        else AppColor.textTertiary,
+                                letterSpacing = 3.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "보호자에게 이 코드를 알려주세요.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                        if (hasCode) {
+                            Surface(
+                                modifier = Modifier
+                                    .clickable {
+                                        clipboardManager.setText(AnnotatedString(userCode))
+                                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
+                                    },
+                                shape = RoundedCornerShape(10.dp),
+                                color = Gray200
+                            ) {
+                                Text(
+                                    text = "복사",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = AppColor.textSecondary,
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // 기본 정보 섹션 (수정 불가)
             ProfileSection(title = "기본 정보") {
@@ -264,60 +318,6 @@ fun ProfileEditScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // 사용자 코드 섹션 — 환자만 표시
-            if (isPatient) {
-                ProfileSection(title = "사용자 코드") {
-                    val displayFirst = if (userCode.length >= 4) userCode.take(4) else "____"
-                    val displaySecond = if (userCode.length >= 8) userCode.drop(4) else "____"
-                    val hasCode = userCode.isNotEmpty()
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 20.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "$displayFirst  $displaySecond",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = if (hasCode) AppColor.textPrimary
-                                        else AppColor.textTertiary,
-                                letterSpacing = 3.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "보호자에게 이 코드를 알려주세요.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = AppColor.textTertiary
-                            )
-                        }
-                        if (hasCode) {
-                            Surface(
-                                modifier = Modifier
-                                    .clickable {
-                                        clipboardManager.setText(AnnotatedString(userCode))
-                                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
-                                    },
-                                shape = RoundedCornerShape(10.dp),
-                                color = Gray200
-                            ) {
-                                Text(
-                                    text = "복사",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = AppColor.textSecondary,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(24.dp))
 
             val hasChanges = currentPassword.isNotEmpty() ||
@@ -349,7 +349,7 @@ fun ProfileEditScreen(
                     )
                 ) {
                     Text(
-                        text = "프로필 편집",
+                        text = "프로필 수정",
                         style = MaterialTheme.typography.bodyLarge,
                         fontWeight = FontWeight.Bold,
                         color = BrandWhite
