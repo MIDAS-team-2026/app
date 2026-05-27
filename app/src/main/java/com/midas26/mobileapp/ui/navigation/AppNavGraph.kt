@@ -15,7 +15,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
@@ -63,7 +62,7 @@ private val mainRoutes = setOf(
     Routes.UserHome, Routes.GuardianHome,
     Routes.VoiceChat, Routes.VoiceChatDisconnected,
     Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-    Routes.AnalysisResult, Routes.AnalysisGraph,
+    Routes.AnalysisResult,
     Routes.Settings, Routes.AccessibilitySettings, Routes.ProfileEdit,
     // ── 위치 정보 화면들도 하단 바 유지 ──
     Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute
@@ -96,7 +95,7 @@ fun AppNavHost(
             if (isGuardian) GuardianHomeTab.Home else UserHomeTab.Home
         Routes.VoiceChat, Routes.VoiceChatDisconnected -> UserHomeTab.Chat
         Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-        Routes.AnalysisResult, Routes.AnalysisGraph ->
+        Routes.AnalysisResult ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
         // ── 위치 화면들은 Location 탭 선택 상태 유지 ──
         Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute ->
@@ -485,13 +484,7 @@ fun AppNavHost(
             // ── 분석 ──────────────────────────────────────────────────────
             composable(Routes.AnalysisResult) {
                 AnalysisResultScreen(
-                    onBack      = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
-                    onShowGraph = { navController.navigate(Routes.AnalysisGraph) }
-                )
-            }
-            composable(Routes.AnalysisGraph) {
-                AnalysisGraphScreen(
-                    onBack = { navController.popBackStackIfCurrent(Routes.AnalysisGraph) }
+                    onBack = { navController.popBackStackIfCurrent(Routes.AnalysisResult) }
                 )
             }
 

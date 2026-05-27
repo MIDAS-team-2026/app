@@ -55,6 +55,10 @@ class PrefsManager(context: Context) {
     fun getUserCode(): String = prefs.getString(KEY_USER_CODE, "") ?: ""
     fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
 
+    // 마지막 음성 대화 세션 ID
+    fun getLastSessionId(): Long = prefs.getLong(KEY_LAST_SESSION_ID, -1L)
+    fun saveLastSessionId(id: Long) { prefs.edit().putLong(KEY_LAST_SESSION_ID, id).apply() }
+
     // 알림 설정
     fun getLocationSharingEnabled(): Boolean = prefs.getBoolean(KEY_LOCATION_SHARING, false)
     fun setLocationSharingEnabled(enabled: Boolean) { prefs.edit().putBoolean(KEY_LOCATION_SHARING, enabled).apply() }
@@ -95,10 +99,11 @@ class PrefsManager(context: Context) {
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_ROLE = "user_role"
 
-        private const val KEY_USER_ID    = "user_id"
-        private const val KEY_USER_NAME  = "user_name"
-        private const val KEY_USER_PHONE = "user_phone"
-        private const val KEY_USER_CODE  = "user_code"
+        private const val KEY_USER_ID         = "user_id"
+        private const val KEY_USER_NAME       = "user_name"
+        private const val KEY_USER_PHONE      = "user_phone"
+        private const val KEY_USER_CODE       = "user_code"
+        private const val KEY_LAST_SESSION_ID = "last_session_id"
 
         // 알림
         private const val KEY_NOTIF_ENABLED = "notif_enabled"
