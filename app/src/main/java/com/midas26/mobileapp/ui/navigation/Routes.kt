@@ -54,7 +54,6 @@ object Routes {
     const val RecallResult   = "recall_result"
 
     // 분석
-    const val AnalysisLoading = "analysis_loading"
     const val AnalysisResult  = "analysis_result"
     const val AnalysisGraph   = "analysis_graph"
 

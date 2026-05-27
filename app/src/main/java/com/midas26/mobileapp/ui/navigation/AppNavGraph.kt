@@ -16,7 +16,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
-import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
@@ -64,7 +63,7 @@ private val mainRoutes = setOf(
     Routes.UserHome, Routes.GuardianHome,
     Routes.VoiceChat, Routes.VoiceChatDisconnected,
     Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-    Routes.AnalysisLoading, Routes.AnalysisResult, Routes.AnalysisGraph,
+    Routes.AnalysisResult, Routes.AnalysisGraph,
     Routes.Settings, Routes.AccessibilitySettings, Routes.ProfileEdit,
     // ── 위치 정보 화면들도 하단 바 유지 ──
     Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute
@@ -97,7 +96,7 @@ fun AppNavHost(
             if (isGuardian) GuardianHomeTab.Home else UserHomeTab.Home
         Routes.VoiceChat, Routes.VoiceChatDisconnected -> UserHomeTab.Chat
         Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-        Routes.AnalysisLoading, Routes.AnalysisResult, Routes.AnalysisGraph ->
+        Routes.AnalysisResult, Routes.AnalysisGraph ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
         // ── 위치 화면들은 Location 탭 선택 상태 유지 ──
         Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute ->
@@ -307,7 +306,7 @@ fun AppNavHost(
                         when (menu) {
                             UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
                             UserMenu.Recall    -> navController.navigate(Routes.RecallStart)
-                            UserMenu.Analysis  -> navController.navigate(Routes.AnalysisLoading)
+                            UserMenu.Analysis  -> navController.navigate(Routes.AnalysisResult)
                             UserMenu.Settings  -> navController.navigate(Routes.Settings)
                         }
                     }
@@ -479,20 +478,11 @@ fun AppNavHost(
                             popUpTo(Routes.UserHome) { inclusive = true }
                         }
                     },
-                    onSeeDetails = { navController.navigate(Routes.AnalysisLoading) }
+                    onSeeDetails = { navController.navigate(Routes.AnalysisResult) }
                 )
             }
 
             // ── 분석 ──────────────────────────────────────────────────────
-            composable(Routes.AnalysisLoading) {
-                AnalysisLoadingScreen(
-                    onFinished = {
-                        navController.navigate(Routes.AnalysisResult) {
-                            popUpTo(Routes.AnalysisLoading) { inclusive = true }
-                        }
-                    }
-                )
-            }
             composable(Routes.AnalysisResult) {
                 AnalysisResultScreen(
                     onBack      = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
