@@ -1,25 +1,30 @@
 package com.midas26.mobileapp.ui.analysis
 
+import android.app.Application
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.midas26.mobileapp.network.RetrofitClient
+import com.midas26.mobileapp.util.PrefsManager
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
-/** 분석 항목 한 줄 (B2 의 4 항목 카드 / B3 의 항목별 추이 공용). */
+/** 분석 항목 한 줄 (4개 카드 공용). */
 data class AnalysisItem(
     val icon: ImageVector,
     val label: String,
-    val valueText: String,    // 예: "정상", "82%", "1.4s"
-    val trendText: String,    // 예: "▲ 안정적", "▲ +5%", "─ 유지"
+    val valueText: String,
+    val trendText: String,
     val trend: Trend
 ) {
     enum class Trend { Up, Down, Steady }
@@ -39,105 +44,128 @@ data class ShareOption(
     val defaultEnabled: Boolean
 )
 
-/** 보호자 정보 (공유 모달용 더미). */
+/** 보호자 정보 (공유 모달용). */
 data class GuardianInfo(
     val name: String,
-    val relationLabel: String,   // "아들 · 연결됨"
+    val relationLabel: String,
     val icon: ImageVector = Icons.Default.Person
 )
 
-/**
- * 분석 ViewModel — 더미.
- * - B1 로딩 단계 (음성 인식/어휘 분석/인지 점수) 진행 시뮬레이션
- * - B2 점수 + 4 항목
- * - B3 7일/30일 추이
- * - B4 보호자 + 공유 옵션 토글
- */
-class AnalysisViewModel : ViewModel() {
+class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
-    /** B1 진행 상태. */
-    var loadingPhase by mutableStateOf(LoadingPhase.SCORE)
+    private val prefs = PrefsManager.from(application)
+    private val api   = RetrofitClient.analysis
+
+    // ── 로딩 상태 ─────────────────────────────────────────────────────────────
+
+    var isLoading by mutableStateOf(false)
         private set
 
-    enum class LoadingPhase { VOICE, VOCAB, SCORE, DONE }
+    // ── API 데이터 ─────────────────────────────────────────────────────────────
 
-    /** B2 헤더 점수. */
-    val todayDateLabel = "2026년 5월 5일 · 오늘"
-    val todayScore: Int = 75
-    val scoreDeltaText: String = "▲ +3"
-    val scoreDeltaSubtext: String = "지난 분석 대비 향상되었어요"
+    private var finalRiskScore by mutableStateOf<Float?>(null)
+    private var riskLevel      by mutableStateOf<String?>(null)
+    private var speechScore    by mutableStateOf<Float?>(null)
+    private var textScore      by mutableStateOf<Float?>(null)
+    private var recallScore    by mutableStateOf<Float?>(null)
 
-    /** B2 4 항목. */
-    val todayItems: List<AnalysisItem> = listOf(
-        AnalysisItem(Icons.Default.RecordVoiceOver, "발화 속도",  "정상",   "▲ 안정적", AnalysisItem.Trend.Steady),
-        AnalysisItem(Icons.AutoMirrored.Filled.MenuBook,         "어휘 다양성", "82%",   "▲ +5%",   AnalysisItem.Trend.Up),
-        AnalysisItem(Icons.Default.Psychology,       "기억 일치도", "78%",   "─ 유지",   AnalysisItem.Trend.Steady),
-        AnalysisItem(Icons.Default.Speed,            "반응 속도",  "1.4s",   "▲ 빨라짐", AnalysisItem.Trend.Up)
-    )
+    init {
+        loadSummary()
+    }
 
-    /** B2 코멘트. */
-    val comment: String = "꾸준한 점검으로 인지 점수가\n향상되고 있어요. 내일도 함께해요!"
+    fun loadSummary() {
+        val sessionId = prefs.getLastSessionId()
+        if (sessionId <= 0) return
+        viewModelScope.launch {
+            isLoading = true
+            runCatching { api.getSessionSummary(sessionId) }
+                .onSuccess { resp ->
+                    resp.body()?.let { body ->
+                        finalRiskScore = body.finalRiskScore
+                        riskLevel      = body.riskLevel
+                        speechScore    = body.speechScore
+                        textScore      = body.textScore
+                        recallScore    = body.recallScore
+                    }
+                }
+            isLoading = false
+        }
+    }
 
-    /** B3 그래프 — 탭별 데이터. */
+    // ── 헤더 ──────────────────────────────────────────────────────────────────
+
+    val todayDateLabel: String = "오늘의 분석 결과"
+
+    /** 종합 점수 (0–100 스케일 가정). */
+    val todayScore: Int get() = finalRiskScore?.roundToInt() ?: 0
+
+    /** 헤더 배지 — 위험 등급. */
+    val scoreDeltaText: String get() = riskLevel ?: "─"
+
+    val scoreDeltaSubtext: String = "분석이 완료되었어요"
+
+    // ── 4 카드 ─────────────────────────────────────────────────────────────────
+
+    val todayItems: List<AnalysisItem>
+        get() = listOf(
+            AnalysisItem(
+                icon      = Icons.Default.BarChart,
+                label     = "종합 위험도",
+                valueText = riskLevel ?: "-",
+                trendText = "",
+                trend     = AnalysisItem.Trend.Steady
+            ),
+            AnalysisItem(
+                icon      = Icons.Default.RecordVoiceOver,
+                label     = "음성 점수",
+                valueText = speechScore?.let { "${it.roundToInt()}점" } ?: "-",
+                trendText = "",
+                trend     = AnalysisItem.Trend.Steady
+            ),
+            AnalysisItem(
+                icon      = Icons.Default.Psychology,
+                label     = "회상 점수",
+                valueText = recallScore?.let { "${it.roundToInt()}점" } ?: "-",
+                trendText = "",
+                trend     = AnalysisItem.Trend.Steady
+            ),
+            AnalysisItem(
+                icon      = Icons.AutoMirrored.Filled.MenuBook,
+                label     = "텍스트 점수",
+                valueText = textScore?.let { "${it.roundToInt()}점" } ?: "-",
+                trendText = "",
+                trend     = AnalysisItem.Trend.Steady
+            )
+        )
+
+    // ── 주간 그래프 (더미 유지 — 히스토리 API 추가 전까지) ────────────────────
+
     var graphRange by mutableStateOf(TrendRange.WEEK)
         private set
 
     private val weekScores: List<DailyScore> = listOf(
-        DailyScore("월", 70),
-        DailyScore("화", 68),
-        DailyScore("수", 73),
-        DailyScore("목", 71),
-        DailyScore("금", 74),
-        DailyScore("토", 73),
+        DailyScore("월", 70), DailyScore("화", 68), DailyScore("수", 73),
+        DailyScore("목", 71), DailyScore("금", 74), DailyScore("토", 73),
         DailyScore("일", 75)
     )
-    private val daySamples: List<DailyScore> = listOf(
-        DailyScore("0h", 72), DailyScore("4h", 73), DailyScore("8h", 74),
-        DailyScore("12h", 75), DailyScore("16h", 75), DailyScore("20h", 76)
-    )
-    private val monthSamples: List<DailyScore> = (1..30).map { i ->
-        DailyScore("$i", (60 + (i * 17 + 13) % 25))
-    }
 
-    val graphPoints: List<DailyScore>
-        get() = when (graphRange) {
-            TrendRange.DAY -> daySamples
-            TrendRange.WEEK -> weekScores
-            TrendRange.MONTH -> monthSamples
-        }
+    val graphPoints: List<DailyScore> get() = weekScores
 
-    val graphAverage: Float
-        get() = graphPoints.map { it.score }.average().toFloat()
+    fun selectRange(range: TrendRange) { graphRange = range }
 
-    val graphAverageDeltaText: String = "평균 +2.3"
+    // ── 보호자 공유 (더미) ────────────────────────────────────────────────────
 
-    fun selectRange(range: TrendRange) {
-        graphRange = range
-    }
-
-    /** B3 항목별 추이 (B2 와 일부 항목 다를 수 있음). */
-    val trendItems: List<AnalysisItem> = listOf(
-        AnalysisItem(Icons.Default.RecordVoiceOver, "발화 속도",  "정상", "▲ +8%",  AnalysisItem.Trend.Up),
-        AnalysisItem(Icons.AutoMirrored.Filled.MenuBook,         "어휘 다양성", "82%", "▲ +5%",  AnalysisItem.Trend.Up),
-        AnalysisItem(Icons.Default.Psychology,       "기억 일치도", "78%", "─ 유지",  AnalysisItem.Trend.Steady)
-    )
-
-    /** B4 보호자 정보. */
     val guardian: GuardianInfo = GuardianInfo(name = "홍철수 보호자", relationLabel = "아들 · 연결됨")
 
-    /** B4 공유 옵션. */
     val shareOptions: List<ShareOption> = listOf(
-        ShareOption("today_score",    "오늘 점수 (75점)",  "점수 + 정상 범위 여부",   defaultEnabled = true),
-        ShareOption("detail_items",   "상세 분석 항목",     "발화·어휘·기억·반응",     defaultEnabled = true),
-        ShareOption("voice_recording", "대화 녹음 원본",   "보호자가 직접 들어볼 수 있어요", defaultEnabled = false)
+        ShareOption("today_score",     "오늘 점수",     "점수 + 정상 범위 여부",          defaultEnabled = true),
+        ShareOption("detail_items",    "상세 분석 항목", "음성·회상·텍스트 점수",          defaultEnabled = true),
+        ShareOption("voice_recording", "대화 녹음 원본", "보호자가 직접 들어볼 수 있어요", defaultEnabled = false)
     )
 
-    /** B4 토글 상태. */
     val shareSelected = shareOptions.map { it.defaultEnabled }.toMutableStateList()
 
     fun toggleShareOption(index: Int) {
-        if (index in shareSelected.indices) {
-            shareSelected[index] = !shareSelected[index]
-        }
+        if (index in shareSelected.indices) shareSelected[index] = !shareSelected[index]
     }
 }

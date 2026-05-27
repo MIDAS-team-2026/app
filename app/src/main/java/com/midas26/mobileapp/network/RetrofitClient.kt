@@ -36,4 +36,8 @@ object RetrofitClient {
     val location: LocationApiService by lazy {
         retrofit.create(LocationApiService::class.java)
     }
+
+    val analysis: AnalysisApiService by lazy {
+        retrofit.create(AnalysisApiService::class.java)
+    }
 }

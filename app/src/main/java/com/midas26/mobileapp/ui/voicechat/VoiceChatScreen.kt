@@ -52,11 +52,12 @@ fun VoiceChatScreen(
         if (state is VoiceChatState.Recording) ttsManager?.stop()
     }
 
-    // 화면 벗어날 때 TTS 중단 및 재생 상태 초기화
+    // 화면 벗어날 때 TTS 중단, 재생 상태 초기화, 세션 종료
     DisposableEffect(Unit) {
         onDispose {
             ttsManager?.stop()
             viewModel.finishPlaying()
+            viewModel.endSession()
         }
     }
 

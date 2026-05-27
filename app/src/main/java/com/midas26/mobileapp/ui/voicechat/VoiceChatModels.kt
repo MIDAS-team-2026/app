@@ -52,12 +52,13 @@ sealed interface VoiceChatState {
  */
 class VoiceChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs      = PrefsManager.from(application)
+    private val prefs       = PrefsManager.from(application)
     private val wavRecorder = WavRecorder(application)
-    private val api        = RetrofitClient.voiceChat
+    private val api         = RetrofitClient.voiceChat
 
-    private val userId: Int get() = prefs.getUserId()
-    private var sessionId: Long   = -1L
+    private val userId: Int  get() = prefs.getUserId()
+    private var sessionId: Long    = -1L
+    private var sessionEnded       = false
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
 
@@ -105,7 +106,10 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             runCatching { api.startSession(userId) }
-                .onSuccess { resp -> sessionId = resp.body()?.data ?: -1L }
+                .onSuccess { resp ->
+                    sessionId = resp.body()?.data ?: -1L
+                    if (sessionId > 0) prefs.saveLastSessionId(sessionId)
+                }
         }
     }
 
@@ -208,6 +212,20 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         if (idx >= 0) _messages[idx] = lastAi.copy(isSpeaking = true)
         _state = VoiceChatState.Playing
         _speakTrigger++
+    }
+
+    // ── 세션 종료 ─────────────────────────────────────────────────────────────
+
+    /**
+     * 화면 이탈 시 호출 — 세션 종료 및 AI 분석 트리거.
+     * 중복 호출되더라도 최초 1회만 실행된다.
+     */
+    fun endSession() {
+        if (sessionId <= 0 || sessionEnded) return
+        sessionEnded = true
+        viewModelScope.launch {
+            runCatching { api.completeSession(sessionId) }
+        }
     }
 
     fun speakMessage(index: Int) {
