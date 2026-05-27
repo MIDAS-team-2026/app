@@ -78,7 +78,7 @@ fun LoginScreen(
                 prefs.saveUserId(user.userId ?: -1)
                 prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserPhone(user.phone.orEmpty())
-                prefs.saveUserRole(user.role?.lowercase().orEmpty())
+                prefs.saveUserRole(user.role.orEmpty())
                 viewModel.resetState()
                 onNavigateToHome()
             }
