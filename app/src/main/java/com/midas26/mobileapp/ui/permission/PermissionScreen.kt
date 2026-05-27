@@ -1,5 +1,9 @@
 ﻿package com.midas26.mobileapp.ui.permission
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -42,8 +46,6 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
@@ -59,6 +61,23 @@ private data class PermissionItem(
 fun PermissionScreen(
     onNext: () -> Unit
 ) {
+    val permissions = buildList {
+        add(Manifest.permission.RECORD_AUDIO)
+        add(Manifest.permission.ACCESS_FINE_LOCATION)
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.POST_NOTIFICATIONS)
+            add(Manifest.permission.READ_MEDIA_IMAGES)
+            add(Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }.toTypedArray()
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { onNext() }
+
     val items = listOf(
         PermissionItem(Icons.Default.Mic,           R.string.permission_mic,          R.string.permission_mic_desc,          true),
         PermissionItem(Icons.Default.LocationOn,    R.string.permission_location,     R.string.permission_location_desc,     false),
@@ -136,7 +155,7 @@ fun PermissionScreen(
             Spacer(modifier = Modifier.weight(1f))
             AppPrimaryButton(
                 text = stringResource(R.string.btn_grant_and_start),
-                onClick = onNext
+                onClick = { launcher.launch(permissions) }
             )
             Spacer(modifier = Modifier.height(20.dp))
         }
