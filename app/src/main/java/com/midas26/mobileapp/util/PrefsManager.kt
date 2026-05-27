@@ -56,6 +56,9 @@ class PrefsManager(context: Context) {
     fun saveUserCode(code: String) { prefs.edit().putString(KEY_USER_CODE, code).apply() }
 
     // 알림 설정
+    fun getLocationSharingEnabled(): Boolean = prefs.getBoolean(KEY_LOCATION_SHARING, false)
+    fun setLocationSharingEnabled(enabled: Boolean) { prefs.edit().putBoolean(KEY_LOCATION_SHARING, enabled).apply() }
+
     fun getNotificationEnabled(): Boolean = prefs.getBoolean(KEY_NOTIF_ENABLED, true)
     fun setNotificationEnabled(enabled: Boolean) { prefs.edit().putBoolean(KEY_NOTIF_ENABLED, enabled).apply() }
     fun getNotificationHour(): Int = prefs.getInt(KEY_NOTIF_HOUR, 8)
@@ -101,6 +104,8 @@ class PrefsManager(context: Context) {
         private const val KEY_NOTIF_ENABLED = "notif_enabled"
         private const val KEY_NOTIF_HOUR = "notif_hour"
         private const val KEY_NOTIF_MINUTE = "notif_minute"
+
+        private const val KEY_LOCATION_SHARING = "location_sharing_enabled"
 
         // 접근성
         private const val KEY_FONT_SIZE = "a11y_font_size"
