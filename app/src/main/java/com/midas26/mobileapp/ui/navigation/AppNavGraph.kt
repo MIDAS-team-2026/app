@@ -333,9 +333,7 @@ fun AppNavHost(
                 )
             }
 
-            // ══════════════════════════════════════════════════════════════
             // 위치 정보 화면 2 — 지도 + 이동경로/전화걸기 (사진 2번)
-            // ══════════════════════════════════════════════════════════════
             composable(
                 route = Routes.LocationDetail,
                 arguments = listOf(navArgument(Routes.LocationDetailArgUserId) { type = NavType.StringType })
@@ -347,19 +345,13 @@ fun AppNavHost(
                     user        = user,
                     onBack      = { navController.popBackStackIfCurrent(Routes.LocationDetail) },
                     onRouteClick = {
-                        // 이동 경로 탭 → 화면 3
+                        // 이동 경로 탭
                         navController.navigate(Routes.locationRoute(user.id))
-                    },
-                    onCallClick  = {
-                        // 전화 걸기 탭 → 화면 4 (화면 2 위 팝업)
-                        // LocationDetailScreen 내부에서 showCallDialog 상태로 처리
                     }
                 )
             }
 
-            // ══════════════════════════════════════════════════════════════
-            // 위치 정보 화면 3 — 이동 경로 + 타임라인 (사진 3번)
-            // ══════════════════════════════════════════════════════════════
+            // 이동 경로 + 타임라인
             composable(
                 route = Routes.LocationRoute,
                 arguments = listOf(navArgument(Routes.LocationRouteArgUserId) { type = NavType.StringType })
