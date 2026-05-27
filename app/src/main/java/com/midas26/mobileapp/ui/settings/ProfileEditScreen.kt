@@ -37,9 +37,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -48,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
@@ -155,30 +159,39 @@ fun ProfileEditScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            Spacer(modifier = Modifier.height(28.dp))
-
-            // 아바타
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+            // 아바타 — 중심선 기준 위 BrandWhite / 아래 Gray100
+            // 원 박스 128dp, 이미지 96dp, 위 여백 28dp → 전체 높이 156dp, 흰 영역 92dp
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(156.dp),
+                contentAlignment = Alignment.BottomCenter
             ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(92.dp)
+                        .align(Alignment.TopStart)
+                        .background(BrandWhite)
+                )
                 Surface(
-                    modifier = Modifier.size(96.dp),
+                    modifier = Modifier.size(128.dp),
                     shape = CircleShape,
-                    color = Green50
+                    color = BrandWhite,
+                    shadowElevation = 8.dp
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = initialName.take(1).ifEmpty { "?" },
-                            fontSize = 40.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppColor.accentDark
+                        Image(
+                            painter = painterResource(R.drawable.char1),
+                            contentDescription = "프로필 이미지",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(96.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // 사용자 코드 섹션 — 환자만 표시
             if (isPatient) {

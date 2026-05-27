@@ -79,6 +79,7 @@ fun LoginScreen(
                 prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserPhone(user.phone.orEmpty())
                 prefs.saveUserRole(user.role.orEmpty())
+                prefs.saveUserCode(user.patientCode.orEmpty())
                 viewModel.resetState()
                 onNavigateToHome()
             }
