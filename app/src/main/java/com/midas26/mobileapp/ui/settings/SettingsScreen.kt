@@ -80,6 +80,7 @@ fun SettingsScreen(
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
+    var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
@@ -146,6 +147,18 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "앱 설정") {
+                if (!isGuardian) {
+                    SettingsToggleRow(
+                        label = "보호자에게 위치 정보 제공",
+                        description = "보호자가 내 위치를 확인할 수 있어요",
+                        checked = locationSharingEnabled,
+                        onCheckedChange = { enabled ->
+                            locationSharingEnabled = enabled
+                            prefs.setLocationSharingEnabled(enabled)
+                        }
+                    )
+                    HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                }
                 SettingsToggleRow(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
