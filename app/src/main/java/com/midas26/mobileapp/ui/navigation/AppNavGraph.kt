@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -17,6 +18,7 @@ import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
@@ -82,6 +84,9 @@ fun AppNavHost(
     val context = LocalContext.current
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
+
+    // 회원가입 화면들 간 공유 ViewModel (Activity 스코프)
+    val authViewModel: AuthViewModel = viewModel()
 
     val role      = PrefsManager.from(context).getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
@@ -219,9 +224,10 @@ fun AppNavHost(
             ) { back ->
                 val role = back.arguments?.getString(Routes.SignupInfoArgRole) ?: PrefsManager.ROLE_USER
                 SignupInfoScreen(
-                    role   = role,
-                    onBack = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
-                    onVerify = { phone -> navController.navigate(Routes.phoneVerification(phone, role)) }
+                    role      = role,
+                    onBack    = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
+                    onVerify  = { phone -> navController.navigate(Routes.phoneVerification(phone, role)) },
+                    viewModel = authViewModel
                 )
             }
             composable(
@@ -273,10 +279,10 @@ fun AppNavHost(
             }
             composable(Routes.SignupComplete) {
                 SignupCompleteScreen(
-                    userCode = "842716",
-                    onGoHome = {
-                        navController.navigate(Routes.UserHome) {
-                            popUpTo(Routes.SignupComplete) { inclusive = true }
+                    viewModel = authViewModel,
+                    onGoHome  = {
+                        navController.navigate(Routes.Login) {
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )

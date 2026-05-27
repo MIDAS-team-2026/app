@@ -24,6 +24,23 @@ class AuthViewModel : ViewModel() {
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState: StateFlow<AuthState> = _authState
 
+    // USER 역할 회원가입 시 SignupCompleteScreen에서 사용할 임시 데이터
+    var pendingPhone: String = ""; private set
+    var pendingPassword: String = ""; private set
+    var pendingName: String = ""; private set
+    var pendingRole: String = ""; private set
+
+    fun savePendingSignupData(phone: String, password: String, name: String, role: String) {
+        pendingPhone = phone
+        pendingPassword = password
+        pendingName = name
+        pendingRole = role
+    }
+
+    fun signupFromPending() {
+        signup(pendingPhone, pendingPassword, pendingName, pendingRole)
+    }
+
     fun login(phone: String, password: String) {
         viewModelScope.launch {
             _authState.value = AuthState.Loading
