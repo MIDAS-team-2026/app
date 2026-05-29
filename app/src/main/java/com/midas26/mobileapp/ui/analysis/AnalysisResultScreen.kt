@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,16 +54,14 @@ fun AnalysisResultScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .wrapContentHeight()
                 .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(Green500, Green400),
-                        start = Offset(Float.POSITIVE_INFINITY, 0f),
-                        end = Offset(0f, Float.POSITIVE_INFINITY)
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Green600, Green400)
                     )
                 )
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.wrapContentHeight()) {
                 // 앱바
                 Row(
                     modifier = Modifier
@@ -96,14 +95,14 @@ fun AnalysisResultScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
+                        .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
                 ) {
                     Text(
                         text = viewModel.todayDateLabel,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = BrandWhite.copy(alpha = 0.92f)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             text = viewModel.todayScore.toString(),
@@ -134,12 +133,14 @@ fun AnalysisResultScreen(
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = viewModel.scoreDeltaSubtext,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = BrandWhite.copy(alpha = 0.92f)
-                    )
+                    if (viewModel.yesterdayCompareText.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = viewModel.yesterdayCompareText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BrandWhite.copy(alpha = 0.85f)
+                        )
+                    }
                 }
             }
         }

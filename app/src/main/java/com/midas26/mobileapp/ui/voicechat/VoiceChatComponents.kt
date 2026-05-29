@@ -59,8 +59,10 @@ import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Green100
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
+import androidx.compose.ui.graphics.Brush
 
 /**
  * 음성 대화 화면 상단 앱바 — ← + "음성 대화" + 우측 시간(옵션).
@@ -70,10 +72,14 @@ fun VoiceChatTopBar(
     onBack: () -> Unit,
     rightLabel: String? = null
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Green600, Green400)
+                )
+            )
     ) {
         Row(
             modifier = Modifier
@@ -86,7 +92,7 @@ fun VoiceChatTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary,
+                    tint = BrandWhite,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -94,7 +100,7 @@ fun VoiceChatTopBar(
             Text(
                 text = "음성 대화",
                 style = MaterialTheme.typography.titleLarge,
-                color = AppColor.textPrimary,
+                color = BrandWhite,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -102,7 +108,7 @@ fun VoiceChatTopBar(
                 Text(
                     text = rightLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
+                    color = BrandWhite.copy(alpha = 0.85f),
                     modifier = Modifier.padding(end = 16.dp)
                 )
             }
