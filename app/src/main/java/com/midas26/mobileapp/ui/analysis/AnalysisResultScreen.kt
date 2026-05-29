@@ -16,17 +16,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -43,23 +38,12 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.Green900
 
 @Composable
 fun AnalysisResultScreen(
     onBack: () -> Unit,
     viewModel: AnalysisViewModel = viewModel()
 ) {
-    var showShareSheet by remember { mutableStateOf(false) }
-    if (showShareSheet) {
-        ShareToGuardianSheet(
-            onDismiss = { showShareSheet = false },
-            onShare = { showShareSheet = false /* TODO: 백엔드 공유 API 호출 */ },
-            viewModel = viewModel
-        )
-    }
-    val onShare: () -> Unit = { showShareSheet = true }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -104,14 +88,7 @@ fun AnalysisResultScreen(
                             .weight(1f)
                             .padding(start = 4.dp)
                     )
-                    IconButton(onClick = onShare, modifier = Modifier.size(48.dp)) {
-                        Icon(
-                            imageVector = Icons.Filled.Share,
-                            contentDescription = "보호자에게 공유",
-                            tint = BrandWhite,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
+                    Spacer(modifier = Modifier.size(48.dp))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -174,13 +151,35 @@ fun AnalysisResultScreen(
                 .padding(horizontal = 16.dp)
                 .padding(top = 12.dp, bottom = 24.dp)
         ) {
-            // 주간 그래프 (배경에 바로)
-            WeeklyLineChart(
-                points = viewModel.graphPoints,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-            )
+            // 주간 그래프 카드
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = BrandWhite,
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    Text(
+                        text = "이번 주 추이",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AppColor.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "최근 7일",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColor.textTertiary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    WeeklyLineChart(
+                        points = viewModel.graphPoints,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -288,18 +287,28 @@ private fun WeeklyLineChart(
                     cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
                 }
             }
-            drawPath(path = linePath, color = Green600, style = Stroke(width = 4f))
+            drawPath(
+                path = linePath,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(Green400, Green600),
+                    startX = 0f,
+                    endX = w
+                ),
+                style = Stroke(width = 8f)
+            )
 
             // 데이터 포인트
             for (i in points.indices) {
                 val isLast = i == points.lastIndex
-                val r = if (isLast) 11f else 5f
-                drawCircle(color = BrandWhite, radius = r + 3f, center = Offset(xs[i], ys[i]))
-                drawCircle(
-                    color = if (isLast) Green900 else Green600,
-                    radius = r,
-                    center = Offset(xs[i], ys[i])
-                )
+                if (isLast) {
+                    // 바깥 흰 원 (테두리 역할)
+                    drawCircle(color = BrandWhite, radius = 22f, center = Offset(xs[i], ys[i]))
+                    // 초록 채움 원
+                    drawCircle(color = Green500, radius = 15f, center = Offset(xs[i], ys[i]))
+                } else {
+                    drawCircle(color = BrandWhite, radius = 12f, center = Offset(xs[i], ys[i]))
+                    drawCircle(color = Green600, radius = 8f, center = Offset(xs[i], ys[i]))
+                }
             }
         }
 
