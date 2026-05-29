@@ -102,7 +102,18 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     /** 헤더 배지 — 위험 등급. */
     val scoreDeltaText: String get() = riskLevel ?: "─"
 
-    val scoreDeltaSubtext: String = "분석이 완료되었어요"
+    /** 어제 대비 점수 변화 문구. 히스토리 API 연동 전까지 weekScores 기반. */
+    val yesterdayCompareText: String
+        get() {
+            val today = weekScores.lastOrNull()?.score ?: return ""
+            val yesterday = weekScores.getOrNull(weekScores.size - 2)?.score ?: return ""
+            val delta = today - yesterday
+            return when {
+                delta > 0 -> "어제보다 ${delta}점 올랐어요"
+                delta < 0 -> "어제보다 ${-delta}점 내렸어요"
+                else      -> "어제와 같은 점수예요"
+            }
+        }
 
     // ── 4 카드 ─────────────────────────────────────────────────────────────────
 

@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
@@ -40,8 +41,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -55,11 +59,11 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.util.PrefsManager
+import androidx.compose.foundation.layout.offset
 
 @Composable
 fun ProfileEditScreen(
@@ -118,80 +122,23 @@ fun ProfileEditScreen(
         return ok
     }
 
-    Column(
+    val scrollState = rememberScrollState()
+    val rangePx = with(LocalDensity.current) { 128.dp.toPx() }
+    val p = (scrollState.value / rangePx).coerceIn(0f, 1f)
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Gray100)
+            .background(BrandWhite)
     ) {
-        // 상단 바
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = BrandWhite,
-            shadowElevation = 0.dp
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.CenterStart)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "뒤로가기",
-                        tint = AppColor.textPrimary
-                    )
-                }
-                Text(
-                    text = "프로필",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary,
-                    modifier = Modifier.align(Alignment.Center)
-                )
-            }
-        }
-
+        // ── 스크롤 콘텐츠 ────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         ) {
-            // 아바타 — 중심선 기준 위 BrandWhite / 아래 Gray100
-            // 원 박스 128dp, 이미지 96dp, 위 여백 28dp → 전체 높이 156dp, 흰 영역 92dp
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(156.dp),
-                contentAlignment = Alignment.BottomCenter
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(92.dp)
-                        .align(Alignment.TopStart)
-                        .background(BrandWhite)
-                )
-                Surface(
-                    modifier = Modifier.size(128.dp),
-                    shape = CircleShape,
-                    color = BrandWhite,
-                    shadowElevation = 8.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Image(
-                            painter = painterResource(R.drawable.char1),
-                            contentDescription = "프로필 이미지",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(96.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
+            // 헤더 높이(200) + 아바타 반지름(56) + 여백(16)
+            Spacer(modifier = Modifier.height(272.dp))
 
             // 사용자 코드 섹션 — 환자만 표시
             if (isPatient) {
@@ -372,6 +319,120 @@ fun ProfileEditScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+
+        // ── 스크롤바 오버레이 (헤더 접힘 모션과 동기화) ─────────────
+        val profileHeaderHeight = (200.dp - 128.dp * p).coerceAtLeast(72.dp)
+        VerticalScrollbar(
+            state = scrollState,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = profileHeaderHeight)
+        )
+
+        // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
+        CollapsingProfileHeader(p = p, userName = initialName, onBack = onBack)
+    }
+}
+
+@Composable
+private fun CollapsingProfileHeader(
+    p: Float,
+    userName: String,
+    onBack: () -> Unit
+) {
+    val maxH = 200.dp
+    val minH = 72.dp
+    val range = maxH - minH
+    val headerHeight = (maxH - range * p).coerceAtLeast(minH)
+
+    // pe: p=0.5까지 유지 → p=1.0에서 완전히 전환 (큰 아바타/라벨 ↔ 앱바 타이틀)
+    val pe = ((p - 0.5f) / 0.5f).coerceIn(0f, 1f)
+    // pm: 미니 아바타 페이드인 (p=0.7 → p=1.0)
+    val pm = ((p - 0.7f) / 0.3f).coerceIn(0f, 1f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(headerHeight)
+            .background(brush = Brush.verticalGradient(colors = listOf(Green600, Green400)))
+    ) {
+        // ── 확장 아바타 (헤더 하단 중앙에 반 걸침, 접힐수록 사라짐) ──
+        Surface(
+            shape = CircleShape,
+            color = BrandWhite,
+            shadowElevation = 6.dp,
+            modifier = Modifier
+                .size(112.dp)
+                .align(Alignment.BottomCenter)
+                .offset(y = (56f - 10f * pe).dp)   // 56dp = 반지름(112/2)
+                .alpha((1f - pe).coerceAtLeast(0f))
+        ) {
+            Image(
+                painter = painterResource(R.drawable.char1),
+                contentDescription = "프로필 이미지",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        // ── 확장 상태 라벨 (이미지 위, 접힐수록 사라짐) ──────────
+        Text(
+            text = "${userName} 님의 프로필",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.Bold,
+            color = BrandWhite,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = (-8f * pe).dp)
+                .alpha((1f - pe).coerceAtLeast(0f))
+        )
+
+        // ── 네비 행 (항상 상단 고정) ──────────────────────────────
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopStart)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(56.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "뒤로가기",
+                    tint = BrandWhite,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
+            // 앱바 타이틀 — 접힐수록 나타남
+            Text(
+                text = "프로필",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = BrandWhite,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp)
+                    .alpha(pe)
+            )
+            // 미니 아바타 (접힘 상태에서만 등장)
+            Surface(
+                shape = CircleShape,
+                color = BrandWhite,
+                shadowElevation = 4.dp,
+                modifier = Modifier
+                    .size(40.dp)
+                    .offset(x = (8f * (1f - pm)).dp)
+                    .alpha(pm)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.char1),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
     }
 }
 
@@ -392,7 +453,7 @@ private fun ProfileSection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 1.dp
+            shadowElevation = 3.dp
         ) {
             content()
         }
