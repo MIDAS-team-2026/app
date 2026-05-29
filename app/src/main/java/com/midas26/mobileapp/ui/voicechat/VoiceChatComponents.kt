@@ -1,9 +1,11 @@
 ﻿package com.midas26.mobileapp.ui.voicechat
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -22,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,8 +44,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +73,7 @@ import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 
 /**
  * 음성 대화 화면 상단 앱바 — ← + "음성 대화" + 우측 시간(옵션).
@@ -540,8 +551,13 @@ fun AiSpeechBubble(
 
     val shape = RoundedCornerShape(10.dp)
 
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
     Box(
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxWidth()
             .clip(shape)
             .background(bgFill)
             .border(borderWidth, borderColor, shape)
@@ -595,15 +611,45 @@ fun AiSpeechBubble(
             )
         }
     }
+
+    // 꼬리 삼각형 — 말풍선 하단 중앙에서 캐릭터 방향으로
+    // offset(y = -borderWidth) 로 버블 border 위에 겹쳐서 이음새 선 제거
+    Canvas(
+        modifier = Modifier
+            .size(width = 26.dp, height = 14.dp)
+            .offset(y = -borderWidth)
+    ) {
+        val tailBorderColor = if (highlighted) Green400 else Green400.copy(alpha = 0.55f)
+        val tailFillColor   = if (highlighted) Green400.copy(alpha = pulseAlpha) else BrandWhite
+
+        // 테두리 삼각형
+        val borderPath = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width / 2f, size.height)
+            close()
+        }
+        drawPath(borderPath, color = tailBorderColor)
+
+        // 내부 채움 삼각형 — 상단을 버블 안쪽 배경색으로 채워 이음새 완전 제거
+        val inset = 2.5.dp.toPx()
+        val fillPath = Path().apply {
+            moveTo(inset, 0f)
+            lineTo(size.width - inset, 0f)
+            lineTo(size.width / 2f, size.height - inset * 1.2f)
+            close()
+        }
+        drawPath(fillPath, color = tailFillColor)
+    }
+    } // Column 닫기
 }
 
 /**
- * 캐릭터 이미지 — 별 몸통 위에 눈·입을 레이어로 합성.
+ * 캐릭터 이미지 — 별 몸통 위에 눈·입을 레이어로 합성 + 상태별 애니메이션.
  *
- * Idle       : 감은 눈 + 미소
- * Playing    : 동그란 눈 + 벌린 입
- * Recording  : 동그란 눈 + 미소
- * Processing : 감은 눈 + 미소
+ * Idle / Processing  : float (위아래) + blink (눈 깜빡)
+ * Playing            : float + blink + talk (입 움직임)
+ * Recording          : pulse (확대/축소) + blink, float 없음
  *
  * [onClick] 이 있으면 탭 시 콜백을 호출한다 (AI 다시 말하기 등).
  */
@@ -613,19 +659,101 @@ fun CharacterImage(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val eyeRes = when (state) {
-        is VoiceChatState.Recording,
-        is VoiceChatState.Playing -> R.drawable.char_eye_open
-        else                      -> R.drawable.char_eye_closed  // Idle, Processing
-    }
-    val mouthRes = when (state) {
-        is VoiceChatState.Playing -> R.drawable.char_mouth_open
-        else                      -> R.drawable.char_mouth_smile
-    }
+    val isFloating  = state is VoiceChatState.Idle || state is VoiceChatState.Processing || state is VoiceChatState.Playing
+    val isTalking   = state is VoiceChatState.Playing
+    val isListening = state is VoiceChatState.Recording
+
+    val transition = rememberInfiniteTransition(label = "char")
+
+    // ── float: 0 → -10dp → 0 (3.6 s, FastOutSlowIn, Reverse) ──────────
+    val floatOffset by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = -10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "float"
+    )
+
+    // ── blink: 4.2 s 주기, 94-98% 구간에서 감은 눈 ──────────────────────
+    // 0f = eye_open 표시, 1f = eye_closed 표시
+    val blinkProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 4200
+                0f at 0
+                0f at 3700                          // 88 %
+                1f at 3950 using LinearEasing       // 94 %  (감음)
+                0f at 4200                          // 100 % (뜸)
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "blink"
+    )
+
+    // ── talk: 0.42 s 주기, 50% 경계에서 입 교체 ─────────────────────────
+    // 0f = mouth_smile, 1f = mouth_open
+    val talkProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 420
+                0f at 0
+                0f at 209
+                1f at 210 using LinearEasing
+                1f at 420
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "talk"
+    )
+
+    // ── pulse: 1 → 1.06 → 1 (1.1 s, FastOutSlowIn, Reverse) ────────────
+    val pulseScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 550, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    // 눈: blink 진행 중(>0.5)이면 감은 눈, 아니면 뜬 눈
+    //     Recording에서는 기본 뜬 눈 + blink 적용
+    val eyeClosed  = blinkProgress > 0.5f
+    val eyeRes     = if (eyeClosed) R.drawable.char_eye_closed else R.drawable.char_eye_open
+
+    // 입: Playing 상태에서 talk 진행 중(>0.5)이면 벌린 입
+    val mouthOpen  = isTalking && talkProgress > 0.5f
+    val mouthRes   = if (mouthOpen) R.drawable.char_mouth_open else R.drawable.char_mouth_smile
+
+    val density = LocalDensity.current
+    val floatOffsetPx = with(density) { floatOffset.dp.toPx() }
+    val scale = if (isListening) pulseScale else 1f
+
+    val res = LocalContext.current.resources
+    val bodyBitmap   = remember { ImageBitmap.imageResource(res, R.drawable.char_body) }
+    val eyeOpenBmp   = remember { ImageBitmap.imageResource(res, R.drawable.char_eye_open) }
+    val eyeClosedBmp = remember { ImageBitmap.imageResource(res, R.drawable.char_eye_closed) }
+    val mouthSmileBmp = remember { ImageBitmap.imageResource(res, R.drawable.char_mouth_smile) }
+    val mouthOpenBmp  = remember { ImageBitmap.imageResource(res, R.drawable.char_mouth_open) }
+
+    val eyeBitmap   = if (eyeClosed) eyeClosedBmp else eyeOpenBmp
+    val mouthBitmap = if (mouthOpen) mouthOpenBmp else mouthSmileBmp
 
     Box(
         modifier = modifier
             .size(260.dp)
+            .graphicsLayer(
+                translationY = if (isFloating) floatOffsetPx else 0f,
+                scaleX = scale,
+                scaleY = scale
+            )
             .then(
                 if (onClick != null) Modifier.clickable(
                     indication = null,
@@ -637,24 +765,27 @@ fun CharacterImage(
     ) {
         // ① 별 몸통
         Image(
-            painter = painterResource(R.drawable.char_body),
+            bitmap = bodyBitmap,
             contentDescription = "또바기 캐릭터",
             modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
         )
-        // ② 눈 레이어 (몸통보다 약간 크게 — 중앙 기준으로 확대)
+        // ② 눈 레이어 (중앙 기준으로 약간 크게)
         Image(
-            painter = painterResource(eyeRes),
+            bitmap = eyeBitmap,
             contentDescription = null,
-            modifier = Modifier.requiredSize(310.dp),
-            contentScale = ContentScale.Fit
+            modifier = Modifier.requiredSize(340.dp),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
         )
-        // ③ 입 레이어 (몸통보다 약간 크게 — 중앙 기준으로 확대)
+        // ③ 입 레이어 (중앙 기준으로 약간 크게)
         Image(
-            painter = painterResource(mouthRes),
+            bitmap = mouthBitmap,
             contentDescription = null,
-            modifier = Modifier.requiredSize(310.dp),
-            contentScale = ContentScale.Fit
+            modifier = Modifier.requiredSize(340.dp),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
         )
     }
 }
