@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
@@ -318,6 +319,15 @@ fun ProfileEditScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+
+        // ── 스크롤바 오버레이 (헤더 접힘 모션과 동기화) ─────────────
+        val profileHeaderHeight = (200.dp - 128.dp * p).coerceAtLeast(72.dp)
+        VerticalScrollbar(
+            state = scrollState,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = profileHeaderHeight)
+        )
 
         // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
         CollapsingProfileHeader(p = p, userName = initialName, onBack = onBack)

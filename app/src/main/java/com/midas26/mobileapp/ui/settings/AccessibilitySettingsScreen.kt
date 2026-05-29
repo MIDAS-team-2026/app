@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
@@ -82,10 +83,12 @@ fun AccessibilitySettingsScreen(
     ) {
         AccessibilityTopBar(onBack = onBack)
 
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -194,6 +197,8 @@ fun AccessibilitySettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+        VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }
