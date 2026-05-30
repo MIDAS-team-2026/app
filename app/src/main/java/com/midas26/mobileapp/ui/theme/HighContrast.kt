@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.Color
 
 val LocalHighContrast = compositionLocalOf { false }
 val LocalHapticEnabled = compositionLocalOf { true }
+val LocalTapToReplay = compositionLocalOf { true }
 
 // null = TTS 비활성화 상태
 val LocalTtsManager = compositionLocalOf<com.midas26.mobileapp.util.TtsManager?> { null }

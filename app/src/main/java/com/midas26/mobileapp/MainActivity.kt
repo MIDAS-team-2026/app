@@ -32,6 +32,7 @@ import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
+import com.midas26.mobileapp.ui.theme.LocalTapToReplay
 import com.midas26.mobileapp.ui.theme.LocalTtsManager
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.util.TtsManager
@@ -65,6 +66,7 @@ fun AppRoot(ttsManager: TtsManager? = null) {
     }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
     var hapticEnabled by remember { mutableStateOf(prefs.getHapticFeedback()) }
+    var tapToReplay by remember { mutableStateOf(prefs.getTapToReplay()) }
     var voiceChatEnabled by remember { mutableStateOf(prefs.getVoiceChatEnabled()) }
 
     val navController = rememberNavController()
@@ -84,6 +86,7 @@ fun AppRoot(ttsManager: TtsManager? = null) {
         LocalFontSizeScale provides fontSizeLevel,
         LocalHighContrast provides highContrast,
         LocalHapticEnabled provides hapticEnabled,
+        LocalTapToReplay provides tapToReplay,
         LocalTtsManager provides if (voiceChatEnabled) ttsManager else null
     ) {
         AppTheme {
@@ -111,6 +114,9 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             onHapticChange = { enabled ->
                                 hapticEnabled = enabled
                                 prefs.setHapticFeedback(enabled)
+                            },
+                            onTapToReplayChange = { enabled ->
+                                tapToReplay = enabled
                             },
                             onSpeedChange = { speed ->
                                 ttsManager?.setSpeed(speed)

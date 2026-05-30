@@ -12,7 +12,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +78,12 @@ import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawBehind
+import android.graphics.BlurMaskFilter
 import androidx.compose.ui.graphics.graphicsLayer
 
 /**
@@ -325,10 +336,33 @@ fun Waveform(
     }
 }
 
+private fun Modifier.circleGlow(
+    color: Color,
+    blur: Dp = 24.dp,
+    spread: Dp = 0.dp,
+    offsetY: Dp = 12.dp
+): Modifier = this.drawBehind {
+    drawIntoCanvas { canvas ->
+        val paint = Paint().also {
+            it.asFrameworkPaint().apply {
+                isAntiAlias = true
+                this.color = android.graphics.Color.TRANSPARENT
+                maskFilter = BlurMaskFilter(blur.toPx(), BlurMaskFilter.Blur.NORMAL)
+                setShadowLayer(blur.toPx(), 0f, offsetY.toPx(), color.toArgb())
+            }
+        }
+        canvas.drawCircle(
+            center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f + offsetY.toPx() / 2f),
+            radius = size.minDimension / 2f + spread.toPx(),
+            paint  = paint
+        )
+    }
+}
+
 /**
- * 큰 마이크 / 정지 버튼 (160dp 외곽 + 132dp 내부 원).
- * - mode = Mic  : 외곽 Green400, 내부 Green600, Mic 아이콘
- * - mode = Stop : 빨간 원 + Stop 아이콘
+ * 마이크 버튼 — 110dp 원형.
+ * - recording = false : 그린(#2d7d31) 배경 + 흰 마이크 아이콘
+ * - recording = true  : 레드(#ef4444) 배경 + 흰 정지 사각형 + 2겹 ripple
  */
 @Composable
 fun BigActionButton(
@@ -336,78 +370,106 @@ fun BigActionButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
-    val outerColor: Color
-    val innerColor: Color
-    val icon: ImageVector
-    when (mode) {
-        BigActionMode.Mic -> {
-            outerColor = if (enabled) Green400 else Gray200
-            innerColor = if (enabled) Green600 else Gray400
-            icon = Icons.Default.Mic
-        }
-        BigActionMode.Stop -> {
-            outerColor = Red400.copy(alpha = 0.18f)
-            innerColor = Red400
-            icon = Icons.Default.Stop
-        }
-    }
+    val recording = mode == BigActionMode.Stop
+    val bgColor   = if (recording) Color(0xFFEF4444) else if (enabled) Color(0xFF2D7D31) else Gray400
+
+    val animatedBgColor by animateColorAsState(
+        targetValue = bgColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "btnColor"
+    )
+    val animatedGlowColor by animateColorAsState(
+        targetValue = if (recording) Color(0xFFEF4444).copy(alpha = 0.55f) else Color(0xFF2D7D31).copy(alpha = 0.55f),
+        animationSpec = tween(durationMillis = 250),
+        label = "glowColor"
+    )
+
+    val btnInteractionSource = remember { MutableInteractionSource() }
+    val isBtnPressed by btnInteractionSource.collectIsPressedAsState()
+    val btnPressScale by animateFloatAsState(
+        targetValue = if (isBtnPressed) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "btnPressScale"
+    )
+
     Box(
         modifier = Modifier
-            .size(160.dp)
-            .clip(CircleShape)
-            .background(outerColor)
-            .clickable(enabled = enabled, onClick = onClick),
+            .size(170.dp)
+            .graphicsLayer { scaleX = btnPressScale; scaleY = btnPressScale },
         contentAlignment = Alignment.Center
     ) {
+        // ripple 링 2겹 — recording 중에만 표시
+        if (recording) {
+            val transition = rememberInfiniteTransition(label = "ripple")
+            repeat(2) { i ->
+                val delayMs = i * 600
+                val scale by transition.animateFloat(
+                    initialValue = 0.82f,
+                    targetValue  = 1.35f,
+                    animationSpec = infiniteRepeatable(
+                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "ripple_scale_$i"
+                )
+                val alpha by transition.animateFloat(
+                    initialValue = 1f,
+                    targetValue  = 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "ripple_alpha_$i"
+                )
+                Box(
+                    modifier = Modifier
+                        .size(110.dp)
+                        .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
+                        .clip(CircleShape)
+                        .border(3.dp, Color(0xFFEF4444).copy(alpha = 0.45f), CircleShape)
+                )
+            }
+        }
+
+        // 버튼 본체
         Box(
             modifier = Modifier
-                .size(132.dp)
+                .size(110.dp)
+                .circleGlow(color = animatedGlowColor, blur = 28.dp, offsetY = 12.dp)
                 .clip(CircleShape)
-                .background(innerColor),
+                .background(animatedBgColor)
+                .clickable(enabled = enabled, interactionSource = btnInteractionSource, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = BrandWhite,
-                modifier = Modifier.size(52.dp)
-            )
+            Crossfade(targetState = recording, animationSpec = tween(250), label = "btnIcon") { isRec ->
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+                    if (isRec) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(BrandWhite)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = BrandWhite,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 enum class BigActionMode { Mic, Stop }
 
-/**
- * 녹음 중 펄스 — 빨간 동심원 3개 (확대-축소 애니메이션).
- */
+/** @Deprecated 새 BigActionButton에 ripple이 내장됨. 하위 호환용으로 유지. */
 @Composable
 fun RecordingPulse(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val outerScale by transition.animateFloat(
-        initialValue = 0.85f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "outer"
-    )
-    val midScale by transition.animateFloat(
-        initialValue = 0.95f, targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "mid"
-    )
-    Box(modifier = modifier.size(220.dp), contentAlignment = Alignment.Center) {
-        Box(
-            modifier = Modifier
-                .size((220 * outerScale).dp.coerceAtLeast(160.dp))
-                .clip(CircleShape)
-                .background(Red400.copy(alpha = 0.10f))
-        )
-        Box(
-            modifier = Modifier
-                .size((180 * midScale).dp.coerceAtLeast(140.dp))
-                .clip(CircleShape)
-                .background(Red400.copy(alpha = 0.18f))
-        )
-    }
+    Box(modifier = modifier.size(220.dp))
 }
 
 /** 녹음 타이머 표시 — 00:07 형식. */
@@ -734,7 +796,17 @@ fun CharacterImage(
 
     val density = LocalDensity.current
     val floatOffsetPx = with(density) { floatOffset.dp.toPx() }
-    val scale = if (isListening) pulseScale else 1f
+
+    // 누름 감지 — onClick 있을 때만 (tapToReplay 켜진 경우)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed && onClick != null) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "pressScale"
+    )
+
+    val scale = if (isListening) pulseScale else pressScale
 
     val res = LocalContext.current.resources
     val bodyBitmap   = remember { ImageBitmap.imageResource(res, R.drawable.char_body) }
@@ -749,6 +821,7 @@ fun CharacterImage(
     Box(
         modifier = modifier
             .size(260.dp)
+            .circleGlow(color = Color(0xFFFFCC00).copy(alpha = 0.25f), blur = 40.dp, spread = -20.dp, offsetY = 12.dp)
             .graphicsLayer(
                 translationY = if (isFloating) floatOffsetPx else 0f,
                 scaleX = scale,
@@ -757,7 +830,7 @@ fun CharacterImage(
             .then(
                 if (onClick != null) Modifier.clickable(
                     indication = null,
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = interactionSource,
                     onClick = onClick
                 ) else Modifier
             ),

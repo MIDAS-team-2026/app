@@ -75,6 +75,7 @@ fun AppNavHost(
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
+    onTapToReplayChange: (Boolean) -> Unit = {},
     onSpeedChange: (Float) -> Unit = {},
     onVoiceChatEnabledChange: (Boolean) -> Unit = {},
     onPreviewTts: () -> Unit = {}
@@ -422,10 +423,11 @@ fun AppNavHost(
                     onBack               = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) },
                     onFontSizeChange     = onFontSizeChange,
                     onHighContrastChange = onHighContrastChange,
-                    onHapticChange       = onHapticChange,
-                    onSpeedChange        = onSpeedChange,
+                    onHapticChange           = onHapticChange,
+                    onTapToReplayChange      = onTapToReplayChange,
+                    onSpeedChange            = onSpeedChange,
                     onVoiceChatEnabledChange = onVoiceChatEnabledChange,
-                    onPreviewTts         = onPreviewTts
+                    onPreviewTts             = onPreviewTts
                 )
             }
 
@@ -433,7 +435,8 @@ fun AppNavHost(
             composable(Routes.VoiceChat) {
                 VoiceChatScreen(
                     onBack        = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
-                    onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) }
+                    onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) },
+                    onNavigateToSettings = { navController.navigate(Routes.AccessibilitySettings) }
                 )
             }
             composable(Routes.VoiceChatDisconnected) {

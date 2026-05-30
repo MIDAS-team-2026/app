@@ -61,6 +61,7 @@ fun AccessibilitySettingsScreen(
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
+    onTapToReplayChange: (Boolean) -> Unit = {},
     onSpeedChange: (Float) -> Unit = {},
     onVoiceChatEnabledChange: (Boolean) -> Unit = {},
     onPreviewTts: () -> Unit = {}
@@ -175,6 +176,7 @@ fun AccessibilitySettingsScreen(
                             onCheckedChange = {
                                 tapToReplay = it
                                 prefs.setTapToReplay(it)
+                                onTapToReplayChange(it)
                             }
                         )
                     }
