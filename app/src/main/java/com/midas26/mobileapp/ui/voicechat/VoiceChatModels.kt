@@ -66,7 +66,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     val state: VoiceChatState get() = _state
 
     private val _messages: SnapshotStateList<ChatMessage> = listOf(
-        ChatMessage(Sender.AI, "안녕하세요 😊\n오늘은 몇 월 며칠인가요?")
+        ChatMessage(Sender.AI, "준비되시면 먼저 말씀해주세요!")
     ).toMutableStateList()
     val messages: List<ChatMessage> get() = _messages
 
