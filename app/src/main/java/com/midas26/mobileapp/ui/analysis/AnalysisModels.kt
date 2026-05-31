@@ -17,6 +17,7 @@ import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import kotlin.math.roundToInt
 
 /** 분석 항목 한 줄 (4개 카드 공용). */
@@ -68,36 +69,66 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private var speechScore    by mutableStateOf<Float?>(null)
     private var textScore      by mutableStateOf<Float?>(null)
     private var recallScore    by mutableStateOf<Float?>(null)
+    private var analyzedAt     by mutableStateOf<String?>(null)
 
     init {
         loadSummary()
     }
 
     fun loadSummary() {
-        val sessionId = prefs.getLastSessionId()
-        if (sessionId <= 0) return
+        val userId = prefs.getUserId()
+        if (userId <= 0) return
         viewModelScope.launch {
             isLoading = true
-            runCatching { api.getSessionSummary(sessionId) }
+            var loaded = false
+
+            // 오늘 데이터 시도
+            runCatching { api.getTodaySummary(userId) }
                 .onSuccess { resp ->
-                    resp.body()?.let { body ->
-                        finalRiskScore = body.finalRiskScore
-                        riskLevel      = body.riskLevel
-                        speechScore    = body.speechScore
-                        textScore      = body.textScore
-                        recallScore    = body.recallScore
+                    resp.body()?.data?.let { body ->
+                        applyBody(body)
+                        loaded = true
                     }
                 }
+
+            // 없으면 최신 데이터로 폴백
+            if (!loaded) {
+                runCatching { api.getLatestSummary(userId) }
+                    .onSuccess { resp ->
+                        resp.body()?.data?.let { body -> applyBody(body) }
+                    }
+            }
+
             isLoading = false
         }
     }
 
+    private fun applyBody(body: com.midas26.mobileapp.network.SessionSummaryResponse) {
+        finalRiskScore = body.finalRiskScore
+        riskLevel      = body.riskLevel
+        speechScore    = body.speechScore
+        textScore      = body.textScore
+        recallScore    = body.recallScore
+        analyzedAt     = body.analyzedAt
+    }
+
     // ── 헤더 ──────────────────────────────────────────────────────────────────
 
-    val todayDateLabel: String = "오늘의 분석 결과"
+    val todayDateLabel: String
+        get() {
+            val raw = analyzedAt ?: return "분석 결과"
+            return try {
+                val date = LocalDate.parse(raw.substring(0, 10))
+                val today = LocalDate.now()
+                val prefix = if (date.year != today.year) "${date.year}년 " else ""
+                "${prefix}${date.monthValue}월 ${date.dayOfMonth}일 분석 결과"
+            } catch (e: Exception) {
+                "분석 결과"
+            }
+        }
 
     /** 종합 점수 (0–100 스케일 가정). */
-    val todayScore: Int get() = finalRiskScore?.roundToInt() ?: 0
+    val todayScore: Int get() = finalRiskScore?.let { (it * 100).roundToInt() } ?: 0
 
     /** 헤더 배지 — 위험 등급. */
     val scoreDeltaText: String get() = riskLevel ?: "─"
@@ -129,7 +160,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             AnalysisItem(
                 icon      = Icons.Default.RecordVoiceOver,
                 label     = "음성 점수",
-                valueText = speechScore?.let { "${it.roundToInt()}점" } ?: "-",
+                valueText = speechScore?.let { "${(it * 100).roundToInt()}점" } ?: "-",
                 trendText = "",
                 trend     = AnalysisItem.Trend.Steady
             ),
@@ -143,7 +174,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             AnalysisItem(
                 icon      = Icons.AutoMirrored.Filled.MenuBook,
                 label     = "텍스트 점수",
-                valueText = textScore?.let { "${it.roundToInt()}점" } ?: "-",
+                valueText = textScore?.let { "${(it * 100).roundToInt()}점" } ?: "-",
                 trendText = "",
                 trend     = AnalysisItem.Trend.Steady
             )

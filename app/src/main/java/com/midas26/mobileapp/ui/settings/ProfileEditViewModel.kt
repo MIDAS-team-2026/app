@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.midas26.mobileapp.network.ApiResponse
 import com.midas26.mobileapp.network.LoginRequest
+import com.midas26.mobileapp.network.ProtectorInfo
 import com.midas26.mobileapp.network.ResetPasswordRequest
 import com.midas26.mobileapp.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,18 @@ class ProfileEditViewModel : ViewModel() {
 
     private val _state = MutableStateFlow<ProfileEditState>(ProfileEditState.Idle)
     val state: StateFlow<ProfileEditState> = _state
+
+    private val _protectors = MutableStateFlow<List<ProtectorInfo>>(emptyList())
+    val protectors: StateFlow<List<ProtectorInfo>> = _protectors
+
+    fun loadProtectors(userId: Int) {
+        viewModelScope.launch {
+            runCatching { RetrofitClient.instance.getProtectors(userId) }
+                .onSuccess { resp ->
+                    _protectors.value = resp.body()?.data ?: emptyList()
+                }
+        }
+    }
 
     fun changePassword(phone: String, currentPassword: String, newPassword: String) {
         viewModelScope.launch {
