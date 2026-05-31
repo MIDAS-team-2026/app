@@ -1,6 +1,7 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.*;
+import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RiskAnalysisDTO;
@@ -8,8 +9,12 @@ import com.example.backend.Model.DTO.analysis.SessionAnalysisSummaryResponseDTO;
 import com.example.backend.Service.AiAnalysisService;
 import com.example.backend.Service.ChatSessionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/ai/analysis")
@@ -58,6 +63,27 @@ class AiAnalysisController {
     public ResponseEntity<ApiResponse<SessionAnalysisSummaryResponseDTO>> getTodaySummary(@PathVariable Integer userId) {
         try {
             return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getTodayAverageSummary(userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
+    @GetMapping("/user/{userId}/streak")
+    public ResponseEntity<ApiResponse<Integer>> getStreak(@PathVariable Integer userId) {
+        return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getStreakDays(userId)));
+    }
+
+    @GetMapping("/user/{userId}/weekly")
+    public ResponseEntity<ApiResponse<List<DailyScoreDTO>>> getWeeklyScores(@PathVariable Integer userId) {
+        return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getWeeklyScores(userId)));
+    }
+
+    @GetMapping("/user/{userId}/daily")
+    public ResponseEntity<ApiResponse<DailyScoreDTO>> getDailyScore(
+            @PathVariable Integer userId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getDailyScore(userId, date)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.ok(ApiResponse.fail(404, e.getMessage()));
         }

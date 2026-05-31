@@ -372,7 +372,7 @@ private fun CollapsingSettingsHeader(
             Surface(
                 shape = CircleShape,
                 color = BrandWhite,
-                shadowElevation = 4.dp,
+                shadowElevation = AppColor.cardShadowElevation,
                 modifier = Modifier
                     .size(40.dp)
                     .offset(x = (8f * (1f - pm)).dp)
@@ -406,7 +406,7 @@ private fun CollapsingSettingsHeader(
                     Surface(
                         shape = CircleShape,
                         color = BrandWhite,
-                        shadowElevation = 3.dp,
+                        shadowElevation = AppColor.cardShadowElevation,
                         modifier = Modifier.size(54.dp)
                     ) {
                         Image(
@@ -458,7 +458,7 @@ private fun CollapsingSettingsHeader(
                         .padding(top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StatItem(value = "${weeklyScore}점", label = "이번 주", modifier = Modifier.weight(1f))
+                    StatItem(value = if (weeklyScore > 0) "${weeklyScore}점" else "-", label = "오늘 점수", modifier = Modifier.weight(1f))
                     Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
                     StatItem(value = "🔥 ${streakDays}일", label = "연속 점검", modifier = Modifier.weight(1f))
                     Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
@@ -494,7 +494,8 @@ private fun ProfileCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 4.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
         Row(
             modifier = Modifier
@@ -566,7 +567,8 @@ private fun SettingsSection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 3.dp
+            shadowElevation = AppColor.cardShadowElevation,
+            border = AppColor.cardBorder
         ) {
             Column { content() }
         }

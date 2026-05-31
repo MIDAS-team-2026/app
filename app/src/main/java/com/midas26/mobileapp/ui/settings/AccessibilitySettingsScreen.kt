@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
@@ -252,7 +253,8 @@ private fun AccessibilitySection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 1.dp
+            shadowElevation = AppColor.cardShadowElevation,
+            border = AppColor.cardBorder
         ) {
             Column { content() }
         }

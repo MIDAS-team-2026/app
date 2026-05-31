@@ -16,8 +16,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.network.DailyScoreResponse
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
 
 /** 분석 항목 한 줄 (4개 카드 공용). */
@@ -32,7 +34,7 @@ data class AnalysisItem(
 }
 
 /** 한 일자의 인지 점수. */
-data class DailyScore(val dayLabel: String, val score: Int)
+data class DailyScore(val dayLabel: String, val score: Int, val date: String? = null)
 
 /** 그래프 탭. */
 enum class TrendRange { DAY, WEEK, MONTH }
@@ -73,6 +75,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadSummary()
+        loadWeeklyScores()
+        loadStreak()
     }
 
     fun loadSummary() {
@@ -103,6 +107,45 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    fun refresh() {
+        loadSummary()
+        loadWeeklyScores()
+        loadStreak()
+    }
+
+    private fun loadStreak() {
+        val userId = prefs.getUserId()
+        if (userId <= 0) return
+        viewModelScope.launch {
+            runCatching { api.getStreakDays(userId) }
+                .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
+        }
+    }
+
+    // ── 홈 화면용 ─────────────────────────────────────────────────────────────
+
+    /** 최근 7일 각 날짜에 분석 데이터가 있는지 여부 (index 0 = 6일 전, index 6 = 오늘) */
+    val weeklyChecks: List<Boolean>
+        get() = if (graphPoints.size == 7) {
+            graphPoints.map { it.score > 0 }
+        } else {
+            List(7) { false }
+        }
+
+    /** 최근 7일 요일 라벨 (index 0 = 6일 전, index 6 = 오늘) */
+    val weeklyDayLabels: List<String>
+        get() {
+            val today = LocalDate.now()
+            val dayNames = listOf("일", "월", "화", "수", "목", "금", "토")
+            return (6 downTo 0).map { daysAgo ->
+                val date = today.minusDays(daysAgo.toLong())
+                dayNames[date.dayOfWeek.value % 7]
+            }
+        }
+
+    /** 오늘은 항상 마지막(index 6) */
+    val todayDayIndex: Int get() = 6
+
     private fun applyBody(body: com.midas26.mobileapp.network.SessionSummaryResponse) {
         finalRiskScore = body.finalRiskScore
         riskLevel      = body.riskLevel
@@ -127,17 +170,43 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-    /** 종합 점수 (0–100 스케일 가정). */
-    val todayScore: Int get() = finalRiskScore?.let { (it * 100).roundToInt() } ?: 0
+    /** 오늘 데이터를 보고 있는지 여부 (선택 날짜가 없거나 오늘이면 true) */
+    val isViewingToday: Boolean get() {
+        val selDate = selectedDayScore?.date ?: return true
+        return try {
+            LocalDate.parse(selDate.substring(0, 10)) == LocalDate.now()
+        } catch (e: Exception) { true }
+    }
 
-    /** 헤더 배지 — 위험 등급. */
-    val scoreDeltaText: String get() = riskLevel ?: "─"
+    /** 헤더에 표시할 종합 점수 */
+    val displayScore: Int get() = selectedDayScore
+        ?.finalRiskScore?.let { (it * 100).roundToInt() }
+        ?: finalRiskScore?.let { (it * 100).roundToInt() }
+        ?: 0
 
-    /** 어제 대비 점수 변화 문구. 히스토리 API 연동 전까지 weekScores 기반. */
+    /** 헤더 배지 — 위험 등급 */
+    val displayRiskLevel: String get() = selectedDayScore?.riskLevel ?: riskLevel ?: "─"
+
+    /** 헤더 날짜 라벨 */
+    val displayDateLabel: String
+        get() {
+            if (isViewingToday) return "오늘의 분석 결과"
+            val raw = selectedDayScore?.date ?: analyzedAt ?: return "분석 결과"
+            return try {
+                val date = LocalDate.parse(raw.substring(0, 10))
+                val today = LocalDate.now()
+                val prefix = if (date.year != today.year) "${date.year}년 " else ""
+                "${prefix}${date.monthValue}월 ${date.dayOfMonth}일 분석 결과"
+            } catch (e: Exception) { "분석 결과" }
+        }
+
+    /** 어제 대비 점수 변화 문구 — 주간 그래프 데이터 기반. */
     val yesterdayCompareText: String
         get() {
-            val today = weekScores.lastOrNull()?.score ?: return ""
-            val yesterday = weekScores.getOrNull(weekScores.size - 2)?.score ?: return ""
+            if (!isViewingToday) return ""
+            val points = graphPoints.filter { it.score > 0 }
+            val today = points.lastOrNull()?.score ?: return ""
+            val yesterday = points.getOrNull(points.size - 2)?.score ?: return ""
             val delta = today - yesterday
             return when {
                 delta > 0 -> "어제보다 ${delta}점 올랐어요"
@@ -149,49 +218,99 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     // ── 4 카드 ─────────────────────────────────────────────────────────────────
 
     val todayItems: List<AnalysisItem>
-        get() = listOf(
-            AnalysisItem(
-                icon      = Icons.Default.BarChart,
-                label     = "종합 위험도",
-                valueText = riskLevel ?: "-",
-                trendText = "",
-                trend     = AnalysisItem.Trend.Steady
-            ),
-            AnalysisItem(
-                icon      = Icons.Default.RecordVoiceOver,
-                label     = "음성 점수",
-                valueText = speechScore?.let { "${(it * 100).roundToInt()}점" } ?: "-",
-                trendText = "",
-                trend     = AnalysisItem.Trend.Steady
-            ),
-            AnalysisItem(
-                icon      = Icons.Default.Psychology,
-                label     = "회상 점수",
-                valueText = recallScore?.let { "${it.roundToInt()}점" } ?: "-",
-                trendText = "",
-                trend     = AnalysisItem.Trend.Steady
-            ),
-            AnalysisItem(
-                icon      = Icons.AutoMirrored.Filled.MenuBook,
-                label     = "텍스트 점수",
-                valueText = textScore?.let { "${(it * 100).roundToInt()}점" } ?: "-",
-                trendText = "",
-                trend     = AnalysisItem.Trend.Steady
+        get() {
+            val sel = selectedDayScore
+            val dRisk    = sel?.riskLevel    ?: riskLevel
+            val dSpeech  = sel?.speechScore  ?: speechScore
+            val dRecall  = sel?.recallScore  ?: recallScore
+            val dText    = sel?.textScore    ?: textScore
+            return listOf(
+                AnalysisItem(
+                    icon      = Icons.Default.BarChart,
+                    label     = "종합 위험도",
+                    valueText = dRisk ?: "-",
+                    trendText = "",
+                    trend     = AnalysisItem.Trend.Steady
+                ),
+                AnalysisItem(
+                    icon      = Icons.Default.RecordVoiceOver,
+                    label     = "음성 점수",
+                    valueText = dSpeech?.let { "${(it * 100).roundToInt()}점" } ?: "-",
+                    trendText = "",
+                    trend     = AnalysisItem.Trend.Steady
+                ),
+                AnalysisItem(
+                    icon      = Icons.Default.Psychology,
+                    label     = "회상 점수",
+                    valueText = dRecall?.let { "${it.roundToInt()}점" } ?: "-",
+                    trendText = "",
+                    trend     = AnalysisItem.Trend.Steady
+                ),
+                AnalysisItem(
+                    icon      = Icons.AutoMirrored.Filled.MenuBook,
+                    label     = "텍스트 점수",
+                    valueText = dText?.let { "${(it * 100).roundToInt()}점" } ?: "-",
+                    trendText = "",
+                    trend     = AnalysisItem.Trend.Steady
+                )
             )
-        )
+        }
 
-    // ── 주간 그래프 (더미 유지 — 히스토리 API 추가 전까지) ────────────────────
+    // ── 주간 그래프 ───────────────────────────────────────────────────────────
 
     var graphRange by mutableStateOf(TrendRange.WEEK)
         private set
 
-    private val weekScores: List<DailyScore> = listOf(
-        DailyScore("월", 70), DailyScore("화", 68), DailyScore("수", 73),
-        DailyScore("목", 71), DailyScore("금", 74), DailyScore("토", 73),
-        DailyScore("일", 75)
-    )
+    var graphPoints by mutableStateOf<List<DailyScore>>(emptyList())
+        private set
 
-    val graphPoints: List<DailyScore> get() = weekScores
+    var streakDays by mutableStateOf(0)
+        private set
+
+    // 포인트 탭 시 선택된 날짜 상세
+    var selectedDayScore by mutableStateOf<DailyScoreResponse?>(null)
+        private set
+    var isDayLoading by mutableStateOf(false)
+        private set
+
+    private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
+    private fun loadWeeklyScores() {
+        val userId = prefs.getUserId()
+        if (userId <= 0) return
+        viewModelScope.launch {
+            runCatching { api.getWeeklyScores(userId) }
+                .onSuccess { resp ->
+                    resp.body()?.data?.let { list ->
+                        graphPoints = list.map { d ->
+                            val date = d.date?.let { LocalDate.parse(it) }
+                            val label = when (date?.dayOfWeek?.value) {
+                                1 -> "월"; 2 -> "화"; 3 -> "수"; 4 -> "목"
+                                5 -> "금"; 6 -> "토"; 7 -> "일"; else -> ""
+                            }
+                            DailyScore(
+                                dayLabel = label,
+                                score    = d.finalRiskScore?.let { (it * 100).roundToInt() } ?: 0,
+                                date     = d.date
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    fun onGraphPointTapped(dateStr: String?) {
+        val userId = prefs.getUserId()
+        if (userId <= 0 || dateStr == null) return
+        viewModelScope.launch {
+            isDayLoading = true
+            runCatching { api.getDailyScore(userId, dateStr) }
+                .onSuccess { resp -> selectedDayScore = resp.body()?.data }
+            isDayLoading = false
+        }
+    }
+
+    fun clearSelectedDay() { selectedDayScore = null }
 
     fun selectRange(range: TrendRange) { graphRange = range }
 

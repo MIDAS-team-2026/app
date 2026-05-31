@@ -52,6 +52,7 @@ fun VoiceChatScreen(
     onBack: () -> Unit,
     onDisconnected: () -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
+    onSessionEnded: () -> Unit = {},
     viewModel: VoiceChatViewModel = viewModel()
 ) {
     val state        = viewModel.state
@@ -85,7 +86,10 @@ fun VoiceChatScreen(
         onDispose {
             ttsManager?.stop()
             viewModel.finishPlaying()
-            viewModel.endSession()
+            if (viewModel.hasUploadedVoice()) {
+                viewModel.endSession()
+                onSessionEnded()
+            }
         }
     }
 

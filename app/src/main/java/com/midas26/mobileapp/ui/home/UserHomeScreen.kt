@@ -1,5 +1,6 @@
 ﻿package com.midas26.mobileapp.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,8 +58,9 @@ fun UserHomeScreen(
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
-    weeklyChecks: List<Boolean> = listOf(false, true, true, true, true, true, false), // 일~토
-    todayIndex: Int = 6, // 토요일이 오늘 (0=일)
+    weeklyChecks: List<Boolean> = List(7) { false },
+    weeklyDayLabels: List<String> = listOf("일", "월", "화", "수", "목", "금", "토"),
+    todayIndex: Int = 6,
     onMenuClick: (UserMenu) -> Unit = {}
 ) {
     Column(
@@ -67,10 +69,11 @@ fun UserHomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         UserHomeHeader(
-            userName = userName,
-            streakDays = streakDays,
-            weeklyChecks = weeklyChecks,
-            todayIndex = todayIndex
+            userName        = userName,
+            streakDays      = streakDays,
+            weeklyChecks    = weeklyChecks,
+            weeklyDayLabels = weeklyDayLabels,
+            todayIndex      = todayIndex
         )
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -87,6 +90,7 @@ private fun UserHomeHeader(
     userName: String,
     streakDays: Int,
     weeklyChecks: List<Boolean>,
+    weeklyDayLabels: List<String>,
     todayIndex: Int
 ) {
     Box(
@@ -111,9 +115,10 @@ private fun UserHomeHeader(
             )
             Spacer(modifier = Modifier.height(12.dp))
             WeekStatusCard(
-                streakDays = streakDays,
-                weeklyChecks = weeklyChecks,
-                todayIndex = todayIndex
+                streakDays      = streakDays,
+                weeklyChecks    = weeklyChecks,
+                weeklyDayLabels = weeklyDayLabels,
+                todayIndex      = todayIndex
             )
         }
     }
@@ -123,16 +128,14 @@ private fun UserHomeHeader(
 private fun WeekStatusCard(
     streakDays: Int,
     weeklyChecks: List<Boolean>,
+    weeklyDayLabels: List<String>,
     todayIndex: Int
 ) {
-    val weekdays = listOf(
-        R.string.weekday_sun, R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed,
-        R.string.weekday_thu, R.string.weekday_fri, R.string.weekday_sat
-    )
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = BrandWhite.copy(alpha = 0.20f)
+        shape = RoundedCornerShape(20.dp),
+        color = BrandWhite.copy(alpha = 0.16f),
+        border = BorderStroke(1.dp, BrandWhite.copy(alpha = 0.28f))
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
@@ -146,11 +149,11 @@ private fun WeekStatusCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                weekdays.forEachIndexed { idx, dayRes ->
+                weeklyDayLabels.forEachIndexed { idx, label ->
                     DayStatusDot(
-                        dayLabel = stringResource(dayRes),
-                        checked = weeklyChecks.getOrNull(idx) == true,
-                        isToday = idx == todayIndex
+                        dayLabel = label,
+                        checked  = weeklyChecks.getOrNull(idx) == true,
+                        isToday  = idx == todayIndex
                     )
                 }
             }
@@ -193,7 +196,8 @@ private fun ScoreCard(score: Int) {
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -335,7 +339,8 @@ private fun MenuCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
         Row(
             modifier = Modifier

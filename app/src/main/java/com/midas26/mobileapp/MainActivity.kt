@@ -2,6 +2,7 @@ package com.midas26.mobileapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -24,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
+import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
 import com.midas26.mobileapp.ui.navigation.AppNavHost
 import com.midas26.mobileapp.ui.navigation.Routes
 import com.midas26.mobileapp.ui.onboarding.SplashScreen
@@ -61,6 +65,7 @@ class MainActivity : ComponentActivity() {
 fun AppRoot(ttsManager: TtsManager? = null) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
+    val analysisViewModel: AnalysisViewModel = viewModel(context as ComponentActivity)
     var fontSizeLevel by remember {
         mutableStateOf(FontSizeLevel.fromIndex(prefs.getAccessibilityFontSize()))
     }
@@ -101,8 +106,9 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             .padding(innerPadding)
                     ) {
                         AppNavHost(
-                            navController = navController,
-                            startDestination = startDestination,
+                            navController     = navController,
+                            startDestination  = startDestination,
+                            analysisViewModel = analysisViewModel,
                             onFontSizeChange = { level ->
                                 fontSizeLevel = level
                                 prefs.setAccessibilityFontSize(level.ordinal)
@@ -150,9 +156,12 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             }
                     ) {
                         SplashScreen(
-                            onNavigateToHome        = { splashVisible = false },
-                            onNavigateToLogin       = { splashVisible = false },
-                            onNavigateToOnboarding  = { splashVisible = false }
+                            onNavigateToHome = {
+                                analysisViewModel.refresh()
+                                splashVisible = false
+                            },
+                            onNavigateToLogin      = { splashVisible = false },
+                            onNavigateToOnboarding = { splashVisible = false }
                         )
                     }
                 }
