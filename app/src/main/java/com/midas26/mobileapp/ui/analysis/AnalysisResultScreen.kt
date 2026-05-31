@@ -13,8 +13,11 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -23,6 +26,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -39,12 +44,15 @@ import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 
 @Composable
 fun AnalysisResultScreen(
     onBack: () -> Unit,
     viewModel: AnalysisViewModel = viewModel()
 ) {
+    val fontScale = LocalFontSizeScale.current.scale
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -106,14 +114,14 @@ fun AnalysisResultScreen(
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
                             text = viewModel.todayScore.toString(),
-                            fontSize = 56.sp,
+                            fontSize = (56 * fontScale).sp,
                             color = BrandWhite,
                             fontWeight = FontWeight.Bold
                         )
                         Spacer(modifier = Modifier.size(4.dp))
                         Text(
                             text = "점",
-                            fontSize = 18.sp,
+                            fontSize = (18 * fontScale).sp,
                             color = BrandWhite,
                             fontWeight = FontWeight.SemiBold,
                             modifier = Modifier.padding(bottom = 12.dp)
@@ -146,9 +154,12 @@ fun AnalysisResultScreen(
         }
 
         // ── 본문 ─────────────────────────────────────────────────────────
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(scrollState)
                 .padding(horizontal = 16.dp)
                 .padding(top = 12.dp, bottom = 24.dp)
         ) {
@@ -202,6 +213,11 @@ fun AnalysisResultScreen(
                 ItemCard(item = items[3], modifier = Modifier.weight(1f))
             }
         }
+        VerticalScrollbar(
+            state = scrollState,
+            modifier = Modifier.align(Alignment.TopEnd)
+        )
+        } // Box
     }
 }
 
@@ -335,18 +351,19 @@ private fun WeeklyLineChart(
 
 @Composable
 private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
+    val fontScale = LocalFontSizeScale.current.scale
     val accent = when (item.trend) {
         AnalysisItem.Trend.Up     -> AppColor.accentDark
         AnalysisItem.Trend.Down   -> AppColor.accent
         AnalysisItem.Trend.Steady -> AppColor.textTertiary
     }
     Surface(
-        modifier = modifier,
+        modifier = modifier.height((126 * fontScale).dp),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
+        Column(modifier = Modifier.padding(14.dp).fillMaxSize()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = item.icon,
@@ -362,14 +379,13 @@ private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.weight(1f))
             Text(
                 text = item.valueText,
-                fontSize = 28.sp,
+                fontSize = (28 * fontScale).sp,
                 color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = item.trendText,
                 style = MaterialTheme.typography.bodySmall,
