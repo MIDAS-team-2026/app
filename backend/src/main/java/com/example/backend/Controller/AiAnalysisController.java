@@ -45,6 +45,24 @@ class AiAnalysisController {
         return ResponseEntity.ok(aiAnalysisService.getSessionSummary(sessionId));
     }
 
+    @GetMapping("/user/{userId}/latest")
+    public ResponseEntity<ApiResponse<SessionAnalysisSummaryResponseDTO>> getLatestSummary(@PathVariable Integer userId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getLatestSummaryByUser(userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
+    @GetMapping("/user/{userId}/today")
+    public ResponseEntity<ApiResponse<SessionAnalysisSummaryResponseDTO>> getTodaySummary(@PathVariable Integer userId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getTodayAverageSummary(userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.ok(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
     @PostMapping("/chat/session/{sessionId}/complete")
     public ResponseEntity<String> completeSession(@PathVariable Long sessionId) {
         chatSessionService.endSession(sessionId);

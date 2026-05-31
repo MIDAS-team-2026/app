@@ -2,7 +2,9 @@ package com.midas26.mobileapp.network
 
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.Path
 
 data class LoginRequest(val phone: String, val password: String)
 data class SignupRequest(
@@ -42,4 +44,13 @@ interface AuthApiService {
 
     @POST("api/auth/withdraw")
     suspend fun withdraw(@Body request: WithdrawRequest): Response<ApiResponse<Any>>
+
+    @GET("api/auth/protectors/{userId}")
+    suspend fun getProtectors(@Path("userId") userId: Int): Response<ApiResponse<List<ProtectorInfo>>>
 }
+
+data class ProtectorInfo(
+    val userId: Int?,
+    val phone: String?,
+    val name: String?
+)

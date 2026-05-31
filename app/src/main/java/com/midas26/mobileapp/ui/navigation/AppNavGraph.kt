@@ -1,11 +1,15 @@
 package com.midas26.mobileapp.ui.navigation
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -139,11 +143,14 @@ fun AppNavHost(
         }
     ) { innerPadding ->
 
-        NavHost(
-            navController    = navController,
-            startDestination = startDestination,
-            modifier         = Modifier.padding(innerPadding)
-        ) {
+        val visibleEntries by navController.visibleEntries.collectAsState()
+        val isTransitioning = visibleEntries.size > 1
+
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            NavHost(
+                navController    = navController,
+                startDestination = startDestination,
+            ) {
 
             // ── 온보딩 ────────────────────────────────────────────────────
             composable(Routes.Onboarding) {
@@ -491,6 +498,17 @@ fun AppNavHost(
                 )
             }
 
-        } // NavHost
+            } // NavHost
+
+            if (isTransitioning) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                        }
+                )
+            }
+        } // Box
     } // Scaffold
 }

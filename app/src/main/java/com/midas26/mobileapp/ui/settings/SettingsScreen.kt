@@ -80,6 +80,8 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
@@ -90,17 +92,30 @@ fun SettingsScreen(
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
-    guardianName: String = "홍철수",
     onBack: () -> Unit = {},
     onLogout: () -> Unit = {},
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
-    onProfileEdit: () -> Unit = {}
+    onProfileEdit: () -> Unit = {},
+    profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
+    val isPatient = role == PrefsManager.ROLE_USER
+    val userId = prefs.getUserId()
+    val protectors by profileViewModel.protectors.collectAsState()
+
+    val guardianLabel = when {
+        protectors.isEmpty() -> "없음"
+        protectors.size == 1 -> protectors[0].name ?: "보호자"
+        else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
+    }
+
+    androidx.compose.runtime.LaunchedEffect(userId) {
+        if (isPatient && userId > 0) profileViewModel.loadProtectors(userId)
+    }
     var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
@@ -293,7 +308,7 @@ fun SettingsScreen(
             role = if (isGuardian) "보호자" else "사용자",
             weeklyScore = weeklyScore,
             streakDays = streakDays,
-            guardianName = guardianName,
+            guardianLabel = guardianLabel,
             onBack = onBack,
             onProfileEdit = onProfileEdit
         )
@@ -307,7 +322,7 @@ private fun CollapsingSettingsHeader(
     role: String,
     weeklyScore: Int,
     streakDays: Int,
-    guardianName: String,
+    guardianLabel: String,
     onBack: () -> Unit,
     onProfileEdit: () -> Unit
 ) {
@@ -447,7 +462,7 @@ private fun CollapsingSettingsHeader(
                     Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
                     StatItem(value = "🔥 ${streakDays}일", label = "연속 점검", modifier = Modifier.weight(1f))
                     Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
-                    StatItem(value = guardianName, label = "연결 보호자", modifier = Modifier.weight(1f))
+                    StatItem(value = guardianLabel, label = "연결 보호자", modifier = Modifier.weight(1f))
                 }
             }
         }

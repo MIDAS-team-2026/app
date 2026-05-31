@@ -6,14 +6,20 @@ import retrofit2.http.Path
 
 interface AnalysisApiService {
 
-    /**
-     * 세션 분석 요약 조회.
-     * GET /api/ai/analysis/session/{sessionId}/summary
-     */
     @GET("api/ai/analysis/session/{sessionId}/summary")
     suspend fun getSessionSummary(
         @Path("sessionId") sessionId: Long
     ): Response<SessionSummaryResponse>
+
+    @GET("api/ai/analysis/user/{userId}/latest")
+    suspend fun getLatestSummary(
+        @Path("userId") userId: Int
+    ): Response<com.midas26.mobileapp.network.ApiResponse<SessionSummaryResponse>>
+
+    @GET("api/ai/analysis/user/{userId}/today")
+    suspend fun getTodaySummary(
+        @Path("userId") userId: Int
+    ): Response<com.midas26.mobileapp.network.ApiResponse<SessionSummaryResponse>>
 }
 
 data class SessionSummaryResponse(

@@ -11,6 +11,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -105,6 +108,14 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(500, "탈퇴 처리 중 오류가 발생했습니다."));
         }
+    }
+
+    @GetMapping("/protectors/{userId}")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getProtectors(@PathVariable Integer userId) {
+        List<UserResponseDTO> protectors = userService.getProtectors(userId).stream()
+                .map(u -> new UserResponseDTO(u.getId(), u.getPhone(), u.getName(), u.getRole(), null))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(protectors));
     }
 
     @PostMapping("/link")
