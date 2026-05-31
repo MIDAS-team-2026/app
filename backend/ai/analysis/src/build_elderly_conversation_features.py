@@ -10,7 +10,6 @@ from text_features import extract_text_features, calculate_basic_speech_features
 # =========================
 # 노인 자유대화 챗봇 데이터 경로 설정
 # =========================
-# 현재 압축 해제된 실제 폴더 기준:
 # 라벨: [라벨]1.AI챗봇
 # 원천: [원천]1.AI챗봇_1, [원천]1.AI챗봇_2
 
@@ -18,10 +17,12 @@ ELDERLY_LABEL_ROOT = Path(
     r"D:\자유대화 음성(노인남녀)\Training\[라벨]1.AI챗봇"
 )
 
+
 ELDERLY_AUDIO_ROOTS = [
     Path(r"D:\자유대화 음성(노인남녀)\Training\[원천]1.AI챗봇_1"),
     Path(r"D:\자유대화 음성(노인남녀)\Training\[원천]1.AI챗봇_2"),
 ]
+
 
 OUTPUT_DIR = Path(r"D:\MIDAS_EXTRACTED")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -114,13 +115,13 @@ def load_elderly_json_files(label_root, audio_roots):
             record_time = utter_info.get("recrdTime", 0)
             audio_file_name = utter_info.get("fileNm", "")
 
-            # JSON의 fileNm과 원천 WAV 파일명 매칭
+            """# JSON의 fileNm과 원천 WAV 파일명 매칭
             audio_path = wav_dict.get(audio_file_name, "NOT_FOUND")
 
             if audio_path == "NOT_FOUND":
                 not_matched_count += 1
             else:
-                matched_count += 1
+                matched_count += 1 """
 
             # 텍스트 특징 추출
             text_feats = extract_text_features(stt)
