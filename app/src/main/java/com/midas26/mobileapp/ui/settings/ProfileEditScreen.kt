@@ -22,6 +22,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -89,6 +91,12 @@ fun ProfileEditScreen(
 
     val state by viewModel.state.collectAsState()
     val isLoading = state is ProfileEditState.Loading
+    val protectors by viewModel.protectors.collectAsState()
+    val userId = prefs.getUserId()
+
+    LaunchedEffect(userId) {
+        if (isPatient && userId > 0) viewModel.loadProtectors(userId)
+    }
 
     LaunchedEffect(state) {
         when (state) {
@@ -186,6 +194,95 @@ fun ProfileEditScreen(
                                     color = AppColor.textSecondary,
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                 )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 연결된 보호자 섹션
+                ProfileSection(title = "연결된 보호자") {
+                    if (protectors.isEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = AppColor.textTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                            Text(
+                                text = "연결된 보호자가 없어요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                    } else {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            protectors.forEachIndexed { index, protector ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        color = AppColor.divider,
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = Green400.copy(alpha = 0.15f),
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Shield,
+                                                    contentDescription = null,
+                                                    tint = Green600,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.size(12.dp))
+                                        Column {
+                                            Text(
+                                                text = protector.name ?: "이름 없음",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = AppColor.textPrimary
+                                            )
+                                            Text(
+                                                text = protector.phone ?: "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = AppColor.textTertiary
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Green400.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "보호자",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Green600,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
