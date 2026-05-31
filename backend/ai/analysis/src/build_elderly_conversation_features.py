@@ -115,13 +115,13 @@ def load_elderly_json_files(label_root, audio_roots):
             record_time = utter_info.get("recrdTime", 0)
             audio_file_name = utter_info.get("fileNm", "")
 
-            """# JSON의 fileNm과 원천 WAV 파일명 매칭
+            # JSON의 fileNm과 원천 WAV 파일명 매칭
             audio_path = wav_dict.get(audio_file_name, "NOT_FOUND")
 
             if audio_path == "NOT_FOUND":
                 not_matched_count += 1
             else:
-                matched_count += 1 """
+                matched_count += 1 
 
             # 텍스트 특징 추출
             text_feats = extract_text_features(stt)
