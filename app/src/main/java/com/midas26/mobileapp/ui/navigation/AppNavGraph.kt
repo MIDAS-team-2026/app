@@ -183,6 +183,7 @@ fun AppNavHost(
             composable(Routes.Login) {
                 LoginScreen(
                     onNavigateToHome = {
+                        analysisViewModel.refresh()
                         val home = if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN)
                             Routes.GuardianHome else Routes.UserHome
                         navController.navigate(home) {
