@@ -1,25 +1,35 @@
 ﻿package com.midas26.mobileapp.ui.voicechat
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,8 +49,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -57,8 +74,17 @@ import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Green100
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.drawBehind
+import android.graphics.BlurMaskFilter
+import androidx.compose.ui.graphics.graphicsLayer
 
 /**
  * 음성 대화 화면 상단 앱바 — ← + "음성 대화" + 우측 시간(옵션).
@@ -68,10 +94,14 @@ fun VoiceChatTopBar(
     onBack: () -> Unit,
     rightLabel: String? = null
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Green600, Green400)
+                )
+            )
     ) {
         Row(
             modifier = Modifier
@@ -84,7 +114,7 @@ fun VoiceChatTopBar(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary,
+                    tint = BrandWhite,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -92,7 +122,7 @@ fun VoiceChatTopBar(
             Text(
                 text = "음성 대화",
                 style = MaterialTheme.typography.titleLarge,
-                color = AppColor.textPrimary,
+                color = BrandWhite,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
@@ -100,7 +130,7 @@ fun VoiceChatTopBar(
                 Text(
                     text = rightLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
+                    color = BrandWhite.copy(alpha = 0.85f),
                     modifier = Modifier.padding(end = 16.dp)
                 )
             }
@@ -306,10 +336,33 @@ fun Waveform(
     }
 }
 
+private fun Modifier.circleGlow(
+    color: Color,
+    blur: Dp = 24.dp,
+    spread: Dp = 0.dp,
+    offsetY: Dp = 12.dp
+): Modifier = this.drawBehind {
+    drawIntoCanvas { canvas ->
+        val paint = Paint().also {
+            it.asFrameworkPaint().apply {
+                isAntiAlias = true
+                this.color = android.graphics.Color.TRANSPARENT
+                maskFilter = BlurMaskFilter(blur.toPx(), BlurMaskFilter.Blur.NORMAL)
+                setShadowLayer(blur.toPx(), 0f, offsetY.toPx(), color.toArgb())
+            }
+        }
+        canvas.drawCircle(
+            center = androidx.compose.ui.geometry.Offset(size.width / 2f, size.height / 2f + offsetY.toPx() / 2f),
+            radius = size.minDimension / 2f + spread.toPx(),
+            paint  = paint
+        )
+    }
+}
+
 /**
- * 큰 마이크 / 정지 버튼 (160dp 외곽 + 132dp 내부 원).
- * - mode = Mic  : 외곽 Green400, 내부 Green600, Mic 아이콘
- * - mode = Stop : 빨간 원 + Stop 아이콘
+ * 마이크 버튼 — 110dp 원형.
+ * - recording = false : 그린(#2d7d31) 배경 + 흰 마이크 아이콘
+ * - recording = true  : 레드(#ef4444) 배경 + 흰 정지 사각형 + 2겹 ripple
  */
 @Composable
 fun BigActionButton(
@@ -317,78 +370,106 @@ fun BigActionButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
-    val outerColor: Color
-    val innerColor: Color
-    val icon: ImageVector
-    when (mode) {
-        BigActionMode.Mic -> {
-            outerColor = if (enabled) Green400 else Gray200
-            innerColor = if (enabled) Green600 else Gray400
-            icon = Icons.Default.Mic
-        }
-        BigActionMode.Stop -> {
-            outerColor = Red400.copy(alpha = 0.18f)
-            innerColor = Red400
-            icon = Icons.Default.Stop
-        }
-    }
+    val recording = mode == BigActionMode.Stop
+    val bgColor   = if (recording) Color(0xFFEF4444) else if (enabled) Color(0xFF2D7D31) else Gray400
+
+    val animatedBgColor by animateColorAsState(
+        targetValue = bgColor,
+        animationSpec = tween(durationMillis = 250),
+        label = "btnColor"
+    )
+    val animatedGlowColor by animateColorAsState(
+        targetValue = if (recording) Color(0xFFEF4444).copy(alpha = 0.55f) else Color(0xFF2D7D31).copy(alpha = 0.55f),
+        animationSpec = tween(durationMillis = 250),
+        label = "glowColor"
+    )
+
+    val btnInteractionSource = remember { MutableInteractionSource() }
+    val isBtnPressed by btnInteractionSource.collectIsPressedAsState()
+    val btnPressScale by animateFloatAsState(
+        targetValue = if (isBtnPressed) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "btnPressScale"
+    )
+
     Box(
         modifier = Modifier
-            .size(160.dp)
-            .clip(CircleShape)
-            .background(outerColor)
-            .clickable(enabled = enabled, onClick = onClick),
+            .size(170.dp)
+            .graphicsLayer { scaleX = btnPressScale; scaleY = btnPressScale },
         contentAlignment = Alignment.Center
     ) {
+        // ripple 링 2겹 — recording 중에만 표시
+        if (recording) {
+            val transition = rememberInfiniteTransition(label = "ripple")
+            repeat(2) { i ->
+                val delayMs = i * 600
+                val scale by transition.animateFloat(
+                    initialValue = 0.82f,
+                    targetValue  = 1.35f,
+                    animationSpec = infiniteRepeatable(
+                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "ripple_scale_$i"
+                )
+                val alpha by transition.animateFloat(
+                    initialValue = 1f,
+                    targetValue  = 0f,
+                    animationSpec = infiniteRepeatable(
+                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart
+                    ),
+                    label = "ripple_alpha_$i"
+                )
+                Box(
+                    modifier = Modifier
+                        .size(110.dp)
+                        .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
+                        .clip(CircleShape)
+                        .border(3.dp, Color(0xFFEF4444).copy(alpha = 0.45f), CircleShape)
+                )
+            }
+        }
+
+        // 버튼 본체
         Box(
             modifier = Modifier
-                .size(132.dp)
+                .size(110.dp)
+                .circleGlow(color = animatedGlowColor, blur = 28.dp, offsetY = 12.dp)
                 .clip(CircleShape)
-                .background(innerColor),
+                .background(animatedBgColor)
+                .clickable(enabled = enabled, interactionSource = btnInteractionSource, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = BrandWhite,
-                modifier = Modifier.size(52.dp)
-            )
+            Crossfade(targetState = recording, animationSpec = tween(250), label = "btnIcon") { isRec ->
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
+                    if (isRec) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(BrandWhite)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = BrandWhite,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
 enum class BigActionMode { Mic, Stop }
 
-/**
- * 녹음 중 펄스 — 빨간 동심원 3개 (확대-축소 애니메이션).
- */
+/** @Deprecated 새 BigActionButton에 ripple이 내장됨. 하위 호환용으로 유지. */
 @Composable
 fun RecordingPulse(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val outerScale by transition.animateFloat(
-        initialValue = 0.85f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "outer"
-    )
-    val midScale by transition.animateFloat(
-        initialValue = 0.95f, targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(tween(1100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "mid"
-    )
-    Box(modifier = modifier.size(220.dp), contentAlignment = Alignment.Center) {
-        Box(
-            modifier = Modifier
-                .size((220 * outerScale).dp.coerceAtLeast(160.dp))
-                .clip(CircleShape)
-                .background(Red400.copy(alpha = 0.10f))
-        )
-        Box(
-            modifier = Modifier
-                .size((180 * midScale).dp.coerceAtLeast(140.dp))
-                .clip(CircleShape)
-                .background(Red400.copy(alpha = 0.18f))
-        )
-    }
+    Box(modifier = modifier.size(220.dp))
 }
 
 /** 녹음 타이머 표시 — 00:07 형식. */
@@ -532,8 +613,13 @@ fun AiSpeechBubble(
 
     val shape = RoundedCornerShape(10.dp)
 
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
     Box(
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxWidth()
             .clip(shape)
             .background(bgFill)
             .border(borderWidth, borderColor, shape)
@@ -587,14 +673,45 @@ fun AiSpeechBubble(
             )
         }
     }
+
+    // 꼬리 삼각형 — 말풍선 하단 중앙에서 캐릭터 방향으로
+    // offset(y = -borderWidth) 로 버블 border 위에 겹쳐서 이음새 선 제거
+    Canvas(
+        modifier = Modifier
+            .size(width = 26.dp, height = 14.dp)
+            .offset(y = -borderWidth)
+    ) {
+        val tailBorderColor = if (highlighted) Green400 else Green400.copy(alpha = 0.55f)
+        val tailFillColor   = if (highlighted) Green400.copy(alpha = pulseAlpha) else BrandWhite
+
+        // 테두리 삼각형
+        val borderPath = Path().apply {
+            moveTo(0f, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width / 2f, size.height)
+            close()
+        }
+        drawPath(borderPath, color = tailBorderColor)
+
+        // 내부 채움 삼각형 — 상단을 버블 안쪽 배경색으로 채워 이음새 완전 제거
+        val inset = 2.5.dp.toPx()
+        val fillPath = Path().apply {
+            moveTo(inset, 0f)
+            lineTo(size.width - inset, 0f)
+            lineTo(size.width / 2f, size.height - inset * 1.2f)
+            close()
+        }
+        drawPath(fillPath, color = tailFillColor)
+    }
+    } // Column 닫기
 }
 
 /**
- * 캐릭터 이미지 — 상태에 따라 다른 drawable 표시.
+ * 캐릭터 이미지 — 별 몸통 위에 눈·입을 레이어로 합성 + 상태별 애니메이션.
  *
- * - char1 : 대기(Idle) / 확인(Reviewing) 상태
- * - char2 : AI 말하는 중(Playing) / 처리 중(Processing) 상태
- * - char3 : 사용자 말하는 중(Recording) 상태
+ * Idle / Processing  : float (위아래) + blink (눈 깜빡)
+ * Playing            : float + blink + talk (입 움직임)
+ * Recording          : pulse (확대/축소) + blink, float 없음
  *
  * [onClick] 이 있으면 탭 시 콜백을 호출한다 (AI 다시 말하기 등).
  */
@@ -604,24 +721,146 @@ fun CharacterImage(
     onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val charRes = when (state) {
-        is VoiceChatState.Playing                                -> R.drawable.char2
-        is VoiceChatState.Processing -> R.drawable.char2
-        is VoiceChatState.Recording                             -> R.drawable.char3
-        else                                                     -> R.drawable.char1
-    }
-    Image(
-        painter = painterResource(id = charRes),
-        contentDescription = "또바기 캐릭터",
+    val isFloating  = state is VoiceChatState.Idle || state is VoiceChatState.Processing || state is VoiceChatState.Playing
+    val isTalking   = state is VoiceChatState.Playing
+    val isListening = state is VoiceChatState.Recording
+
+    val transition = rememberInfiniteTransition(label = "char")
+
+    // ── float: 0 → -10dp → 0 (3.6 s, FastOutSlowIn, Reverse) ──────────
+    val floatOffset by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = -10f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "float"
+    )
+
+    // ── blink: 4.2 s 주기, 94-98% 구간에서 감은 눈 ──────────────────────
+    // 0f = eye_open 표시, 1f = eye_closed 표시
+    val blinkProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 4200
+                0f at 0
+                0f at 3700                          // 88 %
+                1f at 3950 using LinearEasing       // 94 %  (감음)
+                0f at 4200                          // 100 % (뜸)
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "blink"
+    )
+
+    // ── talk: 0.42 s 주기, 50% 경계에서 입 교체 ─────────────────────────
+    // 0f = mouth_smile, 1f = mouth_open
+    val talkProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 420
+                0f at 0
+                0f at 209
+                1f at 210 using LinearEasing
+                1f at 420
+            },
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "talk"
+    )
+
+    // ── pulse: 1 → 1.06 → 1 (1.1 s, FastOutSlowIn, Reverse) ────────────
+    val pulseScale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 550, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    // 눈: blink 진행 중(>0.5)이면 감은 눈, 아니면 뜬 눈
+    //     Recording에서는 기본 뜬 눈 + blink 적용
+    val eyeClosed  = blinkProgress > 0.5f
+    val eyeRes     = if (eyeClosed) R.drawable.char_eye_closed else R.drawable.char_eye_open
+
+    // 입: Playing 상태에서 talk 진행 중(>0.5)이면 벌린 입
+    val mouthOpen  = isTalking && talkProgress > 0.5f
+    val mouthRes   = if (mouthOpen) R.drawable.char_mouth_open else R.drawable.char_mouth_smile
+
+    val density = LocalDensity.current
+    val floatOffsetPx = with(density) { floatOffset.dp.toPx() }
+
+    // 누름 감지 — onClick 있을 때만 (tapToReplay 켜진 경우)
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed && onClick != null) 1.08f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
+        label = "pressScale"
+    )
+
+    val scale = if (isListening) pulseScale else pressScale
+
+    val res = LocalContext.current.resources
+    val bodyBitmap   = remember { ImageBitmap.imageResource(res, R.drawable.char_body) }
+    val eyeOpenBmp   = remember { ImageBitmap.imageResource(res, R.drawable.char_eye_open) }
+    val eyeClosedBmp = remember { ImageBitmap.imageResource(res, R.drawable.char_eye_closed) }
+    val mouthSmileBmp = remember { ImageBitmap.imageResource(res, R.drawable.char_mouth_smile) }
+    val mouthOpenBmp  = remember { ImageBitmap.imageResource(res, R.drawable.char_mouth_open) }
+
+    val eyeBitmap   = if (eyeClosed) eyeClosedBmp else eyeOpenBmp
+    val mouthBitmap = if (mouthOpen) mouthOpenBmp else mouthSmileBmp
+
+    Box(
         modifier = modifier
             .size(260.dp)
-            .then(if (onClick != null) Modifier.clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() },
-                onClick = onClick
-            ) else Modifier),
-        contentScale = ContentScale.Fit
-    )
+            .circleGlow(color = Color(0xFFFFCC00).copy(alpha = 0.25f), blur = 40.dp, spread = -20.dp, offsetY = 12.dp)
+            .graphicsLayer(
+                translationY = if (isFloating) floatOffsetPx else 0f,
+                scaleX = scale,
+                scaleY = scale
+            )
+            .then(
+                if (onClick != null) Modifier.clickable(
+                    indication = null,
+                    interactionSource = interactionSource,
+                    onClick = onClick
+                ) else Modifier
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        // ① 별 몸통
+        Image(
+            bitmap = bodyBitmap,
+            contentDescription = "또바기 캐릭터",
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
+        )
+        // ② 눈 레이어 (중앙 기준으로 약간 크게)
+        Image(
+            bitmap = eyeBitmap,
+            contentDescription = null,
+            modifier = Modifier.requiredSize(340.dp),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
+        )
+        // ③ 입 레이어 (중앙 기준으로 약간 크게)
+        Image(
+            bitmap = mouthBitmap,
+            contentDescription = null,
+            modifier = Modifier.requiredSize(340.dp),
+            contentScale = ContentScale.Fit,
+            filterQuality = FilterQuality.High
+        )
+    }
 }
 
 /**

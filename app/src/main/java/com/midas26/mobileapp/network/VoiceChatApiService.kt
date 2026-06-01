@@ -5,6 +5,7 @@ import retrofit2.Response
 import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.Part
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /** 음성 대화 세션 시작 + 녹음 파일 업로드 API. */
@@ -30,6 +31,15 @@ interface VoiceChatApiService {
         @Query("sessionId") sessionId: Long,
         @Part file: MultipartBody.Part
     ): Response<ApiResponse<VoiceUploadResponse>>
+
+    /**
+     * 세션 종료 + AI 분석 트리거.
+     * 화면 이탈(뒤로가기, 다른 화면 이동 등) 시 호출한다.
+     */
+    @POST("api/ai/analysis/chat/session/{sessionId}/complete")
+    suspend fun completeSession(
+        @Path("sessionId") sessionId: Long
+    ): Response<Unit>
 }
 
 data class VoiceUploadResponse(

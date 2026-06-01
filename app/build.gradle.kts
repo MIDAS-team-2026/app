@@ -58,7 +58,7 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
     implementation("org.osmdroid:osmdroid-android:6.1.17")
-    implementation("com.google.android.gms:play-services-location:21.0.1")
+    implementation(libs.play.services.location)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

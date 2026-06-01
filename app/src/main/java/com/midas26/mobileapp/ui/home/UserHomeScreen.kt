@@ -1,5 +1,6 @@
 ﻿package com.midas26.mobileapp.ui.home
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -54,8 +58,9 @@ fun UserHomeScreen(
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
-    weeklyChecks: List<Boolean> = listOf(true, true, true, true, true, false, false), // 월~일
-    todayIndex: Int = 5, // 토요일이 오늘 (0=월)
+    weeklyChecks: List<Boolean> = List(7) { false },
+    weeklyDayLabels: List<String> = listOf("일", "월", "화", "수", "목", "금", "토"),
+    todayIndex: Int = 6,
     onMenuClick: (UserMenu) -> Unit = {}
 ) {
     Column(
@@ -64,24 +69,14 @@ fun UserHomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         UserHomeHeader(
-            userName = userName,
-            streakDays = streakDays,
-            weeklyChecks = weeklyChecks,
-            todayIndex = todayIndex
+            userName        = userName,
+            streakDays      = streakDays,
+            weeklyChecks    = weeklyChecks,
+            weeklyDayLabels = weeklyDayLabels,
+            todayIndex      = todayIndex
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        ScoreCard(score = weeklyScore)
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Text(
-            text = stringResource(R.string.home_today_check),
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppColor.textTertiary,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 24.dp)
-        )
-        Spacer(modifier = Modifier.height(8.dp))
         MenuGrid(
             onMenuClick = onMenuClick,
             modifier = Modifier.weight(1f)
@@ -95,95 +90,70 @@ private fun UserHomeHeader(
     userName: String,
     streakDays: Int,
     weeklyChecks: List<Boolean>,
+    weeklyDayLabels: List<String>,
     todayIndex: Int
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(240.dp)
-            .background(Green400)
+            .wrapContentHeight()
+            .background(brush = Brush.verticalGradient(
+                colors = listOf(Green600, Green400)
+            ))
     ) {
-        Box(
-            modifier = Modifier
-                .size(200.dp)
-                .offset(x = 240.dp, y = 20.dp)
-                .clip(CircleShape)
-                .background(BrandWhite.copy(alpha = 0.15f))
-        )
-        Box(
-            modifier = Modifier
-                .size(100.dp)
-                .offset(x = (-30).dp, y = 110.dp)
-                .clip(CircleShape)
-                .background(BrandWhite.copy(alpha = 0.10f))
-        )
-
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(top = 48.dp, bottom = 16.dp)
+                .padding(top = 24.dp, bottom = 20.dp)
         ) {
             Text(
-                text = stringResource(R.string.home_hello),
-                style = MaterialTheme.typography.bodyMedium,
-                color = BrandWhite.copy(alpha = 0.9f)
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
                 text = "$userName ${stringResource(R.string.home_user_suffix)}",
-                fontSize = 28.sp,
+                fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 color = BrandWhite
             )
-            Spacer(modifier = Modifier.height(10.dp))
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = BrandWhite.copy(alpha = 0.20f)
-            ) {
-                Text(
-                    text = stringResource(R.string.home_streak),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = BrandWhite,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                )
-            }
-            Spacer(modifier = Modifier.height(14.dp))
-            WeekStatusCard(weeklyChecks = weeklyChecks, todayIndex = todayIndex)
+            Spacer(modifier = Modifier.height(12.dp))
+            WeekStatusCard(
+                streakDays      = streakDays,
+                weeklyChecks    = weeklyChecks,
+                weeklyDayLabels = weeklyDayLabels,
+                todayIndex      = todayIndex
+            )
         }
     }
 }
 
 @Composable
 private fun WeekStatusCard(
+    streakDays: Int,
     weeklyChecks: List<Boolean>,
+    weeklyDayLabels: List<String>,
     todayIndex: Int
 ) {
-    val weekdays = listOf(
-        R.string.weekday_mon, R.string.weekday_tue, R.string.weekday_wed,
-        R.string.weekday_thu, R.string.weekday_fri, R.string.weekday_sat, R.string.weekday_sun
-    )
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = BrandWhite.copy(alpha = 0.20f)
+        shape = RoundedCornerShape(20.dp),
+        color = BrandWhite.copy(alpha = 0.16f),
+        border = BorderStroke(1.dp, BrandWhite.copy(alpha = 0.28f))
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
-                text = stringResource(R.string.home_week_status),
-                style = MaterialTheme.typography.bodySmall,
-                color = BrandWhite.copy(alpha = 0.9f)
+                text = stringResource(R.string.home_streak, streakDays),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = BrandWhite
             )
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                weekdays.forEachIndexed { idx, dayRes ->
+                weeklyDayLabels.forEachIndexed { idx, label ->
                     DayStatusDot(
-                        dayLabel = stringResource(dayRes),
-                        checked = weeklyChecks.getOrNull(idx) == true,
-                        isToday = idx == todayIndex
+                        dayLabel = label,
+                        checked  = weeklyChecks.getOrNull(idx) == true,
+                        isToday  = idx == todayIndex
                     )
                 }
             }
@@ -199,25 +169,19 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
             style = MaterialTheme.typography.bodySmall,
             color = BrandWhite.copy(alpha = 0.85f)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Surface(
-            modifier = Modifier.size(width = 30.dp, height = 24.dp),
-            shape = RoundedCornerShape(12.dp),
-            color = if (isToday) BrandWhite
+            modifier = Modifier
+                .size(36.dp)
+                .then(if (isToday) Modifier.border(2.dp, BrandWhite, CircleShape) else Modifier),
+            shape = CircleShape,
+            color = if (isToday) Color.Transparent
             else if (checked) BrandWhite.copy(alpha = 0.4f)
             else BrandWhite.copy(alpha = 0.15f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                if (isToday) {
-                    Text(
-                        text = "오늘",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.accentDark,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
-                    )
-                } else if (checked) {
-                    Text(text = "✓", color = BrandWhite, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                if (checked) {
+                    Text(text = "✓", color = BrandWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -232,7 +196,8 @@ private fun ScoreCard(score: Int) {
             .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -294,45 +259,67 @@ private fun ScoreCard(score: Int) {
 }
 
 @Composable
+private fun SectionHeader(title: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = Gray400,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(1.dp)
+                .background(Gray200)
+        )
+    }
+}
+
+@Composable
 private fun MenuGrid(
     onMenuClick: (UserMenu) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = modifier.padding(horizontal = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        modifier = modifier
+            .padding(horizontal = 20.dp)
+            .padding(top = 20.dp),
+        verticalArrangement = Arrangement.Top
     ) {
-        // 음성대화 — 회상과제 자리까지 가로 전체 차지
+        SectionHeader(title = stringResource(R.string.home_today_check))
+        Spacer(modifier = Modifier.height(12.dp))
         MenuCard(
             icon = Icons.Default.Mic,
             titleRes = R.string.menu_voice_chat,
-            badge = "N",
+            descRes = R.string.menu_voice_chat_desc,
             onClick = { onMenuClick(UserMenu.VoiceChat) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
+            modifier = Modifier.fillMaxWidth()
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            MenuCard(
-                icon = Icons.Default.BarChart,
-                titleRes = R.string.menu_analysis,
-                onClick = { onMenuClick(UserMenu.Analysis) },
-                modifier = Modifier.weight(1f)
-            )
-            MenuCard(
-                icon = Icons.Default.Settings,
-                titleRes = R.string.menu_settings,
-                onClick = { onMenuClick(UserMenu.Settings) },
-                accent = Gray100,
-                iconTint = Gray400,
-                modifier = Modifier.weight(1f)
-            )
-        }
+        Spacer(modifier = Modifier.height(12.dp))
+        MenuCard(
+            icon = Icons.Default.BarChart,
+            titleRes = R.string.menu_analysis,
+            descRes = R.string.menu_analysis_desc,
+            onClick = { onMenuClick(UserMenu.Analysis) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(40.dp))
+        SectionHeader(title = stringResource(R.string.section_settings))
+        Spacer(modifier = Modifier.height(12.dp))
+        MenuCard(
+            icon = Icons.Default.Settings,
+            titleRes = R.string.menu_settings,
+            descRes = R.string.menu_settings_desc,
+            onClick = { onMenuClick(UserMenu.Settings) },
+            accent = Gray100,
+            iconTint = Gray400,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -340,64 +327,54 @@ private fun MenuGrid(
 private fun MenuCard(
     icon: ImageVector,
     titleRes: Int,
+    descRes: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    badge: String? = null,
     accent: Color = Green50,
     iconTint: Color = Green600
 ) {
     Surface(
         modifier = modifier
-            .fillMaxHeight()
+            .height(104.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
-        Box(modifier = Modifier.padding(12.dp)) {
-            Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    modifier = Modifier.size(72.dp),
-                    shape = RoundedCornerShape(18.dp),
-                    color = accent
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = null,
-                            tint = iconTint,
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(titleRes),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(descRes),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColor.textTertiary
+                )
             }
-            if (badge != null) {
-                Surface(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .align(Alignment.TopEnd),
-                    shape = CircleShape,
-                    color = Red400
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = badge,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = BrandWhite,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+            Surface(
+                modifier = Modifier.size(72.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = accent
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(40.dp)
+                    )
                 }
             }
         }

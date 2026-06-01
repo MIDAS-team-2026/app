@@ -15,9 +15,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Accessibility
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +51,11 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.components.AppTextButton
+import androidx.compose.runtime.CompositionLocalProvider
+import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.Gray200
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.Gray400
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.AppColor
@@ -57,6 +67,7 @@ fun LoginScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToSignup: () -> Unit,
     onForgotPassword: () -> Unit = {},
+    onAccessibility: () -> Unit = {},
     viewModel: AuthViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -78,7 +89,8 @@ fun LoginScreen(
                 prefs.saveUserId(user.userId ?: -1)
                 prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserPhone(user.phone.orEmpty())
-                prefs.saveUserRole(user.role?.lowercase().orEmpty())
+                prefs.saveUserRole(user.role.orEmpty())
+                prefs.saveUserCode(user.patientCode.orEmpty())
                 viewModel.resetState()
                 onNavigateToHome()
             }
@@ -108,11 +120,13 @@ fun LoginScreen(
         return ok
     }
 
+    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(64.dp))
@@ -270,5 +284,40 @@ fun LoginScreen(
                 )
             }
         }
+    }
+    VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
+
+    // 접근성 설정 버튼 — 오른쪽 하단 고정 (항상 매우 크게 사이즈 유지)
+    CompositionLocalProvider(LocalFontSizeScale provides FontSizeLevel.XLARGE) {
+    Surface(
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .navigationBarsPadding()
+            .padding(16.dp)
+            .clickable(onClick = onAccessibility),
+        shape = RoundedCornerShape(14.dp),
+        color = Gray200,
+        shadowElevation = AppColor.cardShadowElevation
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Accessibility,
+                contentDescription = "접근성 설정",
+                tint = Gray800,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.size(6.dp))
+            Text(
+                text = "접근성",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = Gray800
+            )
+        }
+    }
+    } // CompositionLocalProvider
     }
 }

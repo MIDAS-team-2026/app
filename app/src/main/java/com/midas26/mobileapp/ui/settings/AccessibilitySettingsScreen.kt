@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
@@ -40,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
@@ -60,6 +62,7 @@ fun AccessibilitySettingsScreen(
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
+    onTapToReplayChange: (Boolean) -> Unit = {},
     onSpeedChange: (Float) -> Unit = {},
     onVoiceChatEnabledChange: (Boolean) -> Unit = {},
     onPreviewTts: () -> Unit = {}
@@ -82,10 +85,12 @@ fun AccessibilitySettingsScreen(
     ) {
         AccessibilityTopBar(onBack = onBack)
 
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -172,6 +177,7 @@ fun AccessibilitySettingsScreen(
                             onCheckedChange = {
                                 tapToReplay = it
                                 prefs.setTapToReplay(it)
+                                onTapToReplayChange(it)
                             }
                         )
                     }
@@ -194,6 +200,8 @@ fun AccessibilitySettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+        VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }
@@ -245,7 +253,8 @@ private fun AccessibilitySection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 1.dp
+            shadowElevation = AppColor.cardShadowElevation,
+            border = AppColor.cardBorder
         ) {
             Column { content() }
         }

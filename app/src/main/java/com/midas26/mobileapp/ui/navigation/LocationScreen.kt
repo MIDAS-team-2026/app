@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
@@ -206,13 +207,13 @@ fun LocationListScreen(
         },
         containerColor = Color.White   // 사진 3번 연한 파란 배경
     ) { innerPadding ->
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .verticalScroll(scrollState),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // ── 상단 안내 배너 (사진 3번의 노란 배너) ────────────────
             Surface(
@@ -239,6 +240,8 @@ fun LocationListScreen(
             users.forEach { user ->
                 UserLocationCard(user = user, onClick = { onUserClick(user) })
             }
+        }
+        VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }
@@ -531,41 +534,39 @@ fun LocationRouteScreen(user: LinkedUser, onBack: () -> Unit) {
         },
         containerColor = Color.White
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp)
-                .padding(top = 16.dp, bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // ── 이동 요약 카드 3개 ────────────────────────────────────
-            SummaryRow("총 경로",   "${user.totalDistanceKm} km")
-            SummaryRow("방문 장소", "${user.visitedPlaces} 곳")
-            SummaryRow("이동 시간", "${user.travelHours} 시간")
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // ── 타임라인 ─────────────────────────────────────────────
-            Text("타임 라인", fontSize = 18.sp,
-                fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
-
-            Column {
-                user.timeline.forEachIndexed { idx, item ->
-                    TimelineRow(item = item, isLast = idx == user.timeline.size - 1)
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = Color(0xFFF0F7EC)
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("📍 위치는 5분마다 자동으로 업데이트돼요",
-                    fontSize = 13.sp, color = Green600,
-                    modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center)
+                SummaryRow("총 경로",   "${user.totalDistanceKm} km")
+                SummaryRow("방문 장소", "${user.visitedPlaces} 곳")
+                SummaryRow("이동 시간", "${user.travelHours} 시간")
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("타임 라인", fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Column {
+                    user.timeline.forEachIndexed { idx, item ->
+                        TimelineRow(item = item, isLast = idx == user.timeline.size - 1)
+                    }
+                }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF0F7EC)
+                ) {
+                    Text("📍 위치는 5분마다 자동으로 업데이트돼요",
+                        fontSize = 13.sp, color = Green600,
+                        modifier = Modifier.padding(12.dp), textAlign = TextAlign.Center)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
             }
+            VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
         }
     }
 }

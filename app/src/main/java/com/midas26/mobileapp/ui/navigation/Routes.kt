@@ -11,9 +11,10 @@ package com.midas26.mobileapp.ui.navigation
  *   Login (이미 가입됨) → 역할에 따라 UserHome / GuardianHome
  */
 object Routes {
-    const val Splash      = "splash"
-    const val Onboarding  = "onboarding"
-    const val Login       = "login"
+    const val Splash               = "splash"
+    const val Onboarding           = "onboarding"
+    const val OnboardingPermission = "onboarding_permission"
+    const val Login                = "login"
     const val SignupRole  = "signup_role"
 
     // Signup info: role 을 path arg 로 전달
@@ -53,7 +54,6 @@ object Routes {
     const val RecallResult   = "recall_result"
 
     // 분석
-    const val AnalysisLoading = "analysis_loading"
     const val AnalysisResult  = "analysis_result"
     const val AnalysisGraph   = "analysis_graph"
 

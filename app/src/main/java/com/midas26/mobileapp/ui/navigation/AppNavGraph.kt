@@ -1,12 +1,17 @@
 package com.midas26.mobileapp.ui.navigation
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,9 +19,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.midas26.mobileapp.ui.analysis.AnalysisGraphScreen
-import com.midas26.mobileapp.ui.analysis.AnalysisLoadingScreen
+import androidx.activity.ComponentActivity
+import java.time.LocalDate
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
+import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
@@ -62,7 +69,7 @@ private val mainRoutes = setOf(
     Routes.UserHome, Routes.GuardianHome,
     Routes.VoiceChat, Routes.VoiceChatDisconnected,
     Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-    Routes.AnalysisLoading, Routes.AnalysisResult, Routes.AnalysisGraph,
+    Routes.AnalysisResult,
     Routes.Settings, Routes.AccessibilitySettings, Routes.ProfileEdit,
     // ── 위치 정보 화면들도 하단 바 유지 ──
     Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute
@@ -72,9 +79,11 @@ private val mainRoutes = setOf(
 fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.Login,
+    analysisViewModel: AnalysisViewModel = viewModel(LocalContext.current as ComponentActivity),
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
+    onTapToReplayChange: (Boolean) -> Unit = {},
     onSpeedChange: (Float) -> Unit = {},
     onVoiceChatEnabledChange: (Boolean) -> Unit = {},
     onPreviewTts: () -> Unit = {}
@@ -82,6 +91,10 @@ fun AppNavHost(
     val context = LocalContext.current
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
+
+    // 회원가입 화면들 간 공유 ViewModel (Activity 스코프)
+    val authViewModel: AuthViewModel = viewModel()
+
 
     val role      = PrefsManager.from(context).getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
@@ -92,7 +105,7 @@ fun AppNavHost(
             if (isGuardian) GuardianHomeTab.Home else UserHomeTab.Home
         Routes.VoiceChat, Routes.VoiceChatDisconnected -> UserHomeTab.Chat
         Routes.RecallStart, Routes.RecallQuestion, Routes.RecallResult,
-        Routes.AnalysisLoading, Routes.AnalysisResult, Routes.AnalysisGraph ->
+        Routes.AnalysisResult ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
         // ── 위치 화면들은 Location 탭 선택 상태 유지 ──
         Routes.LocationList, Routes.LocationDetail, Routes.LocationRoute ->
@@ -105,7 +118,7 @@ fun AppNavHost(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (currentRoute in mainRoutes) {
+            if (currentRoute in mainRoutes && PrefsManager.from(context).isLoggedIn()) {
                 AppBottomBar(
                     tabs        = if (isGuardian) guardianTabs else userTabs,
                     selectedTab = selectedTab,
@@ -135,18 +148,32 @@ fun AppNavHost(
         }
     ) { innerPadding ->
 
-        NavHost(
-            navController    = navController,
-            startDestination = startDestination,
-            modifier         = Modifier.padding(innerPadding)
-        ) {
+        val visibleEntries by navController.visibleEntries.collectAsState()
+        val isTransitioning = visibleEntries.size > 1
+
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            NavHost(
+                navController    = navController,
+                startDestination = startDestination,
+            ) {
 
             // ── 온보딩 ────────────────────────────────────────────────────
             composable(Routes.Onboarding) {
                 OnboardingScreen(
                     onFinish = {
-                        navController.navigate(Routes.Login) {
+                        navController.navigate(Routes.OnboardingPermission) {
                             popUpTo(Routes.Onboarding) { inclusive = true }
+                        }
+                    }
+                )
+            }
+
+            // ── 온보딩 후 권한 설명 화면 ──────────────────────────────────
+            composable(Routes.OnboardingPermission) {
+                PermissionScreen(
+                    onNext = {
+                        navController.navigate(Routes.Login) {
+                            popUpTo(Routes.OnboardingPermission) { inclusive = true }
                         }
                     }
                 )
@@ -163,7 +190,8 @@ fun AppNavHost(
                         }
                     },
                     onNavigateToSignup = { navController.navigate(Routes.SignupRole) },
-                    onForgotPassword   = { navController.navigate(Routes.ForgotPassword) }
+                    onForgotPassword   = { navController.navigate(Routes.ForgotPassword) },
+                    onAccessibility    = { navController.navigate(Routes.AccessibilitySettings) }
                 )
             }
 
@@ -219,9 +247,10 @@ fun AppNavHost(
             ) { back ->
                 val role = back.arguments?.getString(Routes.SignupInfoArgRole) ?: PrefsManager.ROLE_USER
                 SignupInfoScreen(
-                    role   = role,
-                    onBack = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
-                    onVerify = { phone -> navController.navigate(Routes.phoneVerification(phone, role)) }
+                    role      = role,
+                    onBack    = { navController.popBackStackIfCurrent(Routes.SignupInfo) },
+                    onVerify  = { phone -> navController.navigate(Routes.phoneVerification(phone, role)) },
+                    viewModel = authViewModel
                 )
             }
             composable(
@@ -237,7 +266,7 @@ fun AppNavHost(
                     phone      = phone,
                     onBack     = { navController.popBackStack() },
                     onVerified = {
-                        navController.navigate(Routes.permission(role)) {
+                        navController.navigate(Routes.privacy(role)) {
                             popUpTo(Routes.SignupRole) { inclusive = true }
                         }
                     }
@@ -273,10 +302,10 @@ fun AppNavHost(
             }
             composable(Routes.SignupComplete) {
                 SignupCompleteScreen(
-                    userCode = "842716",
-                    onGoHome = {
-                        navController.navigate(Routes.UserHome) {
-                            popUpTo(Routes.SignupComplete) { inclusive = true }
+                    viewModel = authViewModel,
+                    onGoHome  = {
+                        navController.navigate(Routes.Login) {
+                            popUpTo(0) { inclusive = true }
                         }
                     }
                 )
@@ -285,12 +314,16 @@ fun AppNavHost(
             // ── 사용자 홈 ──────────────────────────────────────────────────
             composable(Routes.UserHome) {
                 UserHomeScreen(
-                    userName    = PrefsManager.from(context).getUserName(),
-                    onMenuClick = { menu ->
+                    userName        = PrefsManager.from(context).getUserName(),
+                    streakDays      = analysisViewModel.streakDays,
+                    weeklyChecks    = analysisViewModel.weeklyChecks,
+                    weeklyDayLabels = analysisViewModel.weeklyDayLabels,
+                    todayIndex      = analysisViewModel.todayDayIndex,
+                    onMenuClick  = { menu ->
                         when (menu) {
                             UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
                             UserMenu.Recall    -> navController.navigate(Routes.RecallStart)
-                            UserMenu.Analysis  -> navController.navigate(Routes.AnalysisLoading)
+                            UserMenu.Analysis  -> navController.navigate(Routes.AnalysisResult)
                             UserMenu.Settings  -> navController.navigate(Routes.Settings)
                         }
                     }
@@ -362,9 +395,11 @@ fun AppNavHost(
             // ── 설정 ──────────────────────────────────────────────────────
             composable(Routes.Settings) {
                 SettingsScreen(
-                    userName  = PrefsManager.from(context).getUserName(),
-                    onBack    = { navController.popBackStackIfCurrent(Routes.Settings) },
-                    onLogout  = {
+                    userName     = PrefsManager.from(context).getUserName(),
+                    weeklyScore  = analysisViewModel.displayScore,
+                    streakDays   = analysisViewModel.streakDays,
+                    onBack       = { navController.popBackStackIfCurrent(Routes.Settings) },
+                    onLogout     = {
                         navController.navigate(Routes.Login) { popUpTo(0) { inclusive = true } }
                     },
                     onDeleteAccount  = { navController.navigate(Routes.Withdraw) },
@@ -407,18 +442,21 @@ fun AppNavHost(
                     onBack               = { navController.popBackStackIfCurrent(Routes.AccessibilitySettings) },
                     onFontSizeChange     = onFontSizeChange,
                     onHighContrastChange = onHighContrastChange,
-                    onHapticChange       = onHapticChange,
-                    onSpeedChange        = onSpeedChange,
+                    onHapticChange           = onHapticChange,
+                    onTapToReplayChange      = onTapToReplayChange,
+                    onSpeedChange            = onSpeedChange,
                     onVoiceChatEnabledChange = onVoiceChatEnabledChange,
-                    onPreviewTts         = onPreviewTts
+                    onPreviewTts             = onPreviewTts
                 )
             }
 
             // ── 음성 대화 ──────────────────────────────────────────────────
             composable(Routes.VoiceChat) {
                 VoiceChatScreen(
-                    onBack        = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
-                    onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) }
+                    onBack               = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
+                    onDisconnected       = { navController.navigate(Routes.VoiceChatDisconnected) },
+                    onNavigateToSettings = { navController.navigate(Routes.AccessibilitySettings) },
+                    onSessionEnded       = { analysisViewModel.refresh() }
                 )
             }
             composable(Routes.VoiceChatDisconnected) {
@@ -462,32 +500,29 @@ fun AppNavHost(
                             popUpTo(Routes.UserHome) { inclusive = true }
                         }
                     },
-                    onSeeDetails = { navController.navigate(Routes.AnalysisLoading) }
+                    onSeeDetails = { navController.navigate(Routes.AnalysisResult) }
                 )
             }
 
             // ── 분석 ──────────────────────────────────────────────────────
-            composable(Routes.AnalysisLoading) {
-                AnalysisLoadingScreen(
-                    onFinished = {
-                        navController.navigate(Routes.AnalysisResult) {
-                            popUpTo(Routes.AnalysisLoading) { inclusive = true }
-                        }
-                    }
-                )
-            }
             composable(Routes.AnalysisResult) {
                 AnalysisResultScreen(
-                    onBack      = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
-                    onShowGraph = { navController.navigate(Routes.AnalysisGraph) }
-                )
-            }
-            composable(Routes.AnalysisGraph) {
-                AnalysisGraphScreen(
-                    onBack = { navController.popBackStackIfCurrent(Routes.AnalysisGraph) }
+                    onBack    = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
+                    viewModel = analysisViewModel
                 )
             }
 
-        } // NavHost
+            } // NavHost
+
+            if (isTransitioning) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitPointerEventScope { while (true) { awaitPointerEvent() } }
+                        }
+                )
+            }
+        } // Box
     } // Scaffold
 }

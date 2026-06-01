@@ -1,6 +1,7 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.*;
+import com.example.backend.Model.DTO.auth.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
 import com.example.backend.Util.JwtTokenProvider;
@@ -9,6 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -48,12 +52,19 @@ public class AuthController {
 
             String token = jwtTokenProvider.createToken(user.getPhone(), user.getRole());
 
+            String patientCode = null;
+            
+            if ("PATIENT".equalsIgnoreCase(user.getRole())) {
+                patientCode = user.getPatientCode(); // User 엔티티에 getPatientCode()가 있다고 가정
+            }
+
             LoginResponse loginDTO1 = new LoginResponse(
                     user.getPhone(),
                     user.getName(),
                     token,
                     user.getRole(),
-                    user.getId()
+                    user.getId(),
+                    patientCode
             );
             return ResponseEntity.ok(ApiResponse.success(loginDTO1));
         } else {
@@ -97,6 +108,14 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.fail(500, "탈퇴 처리 중 오류가 발생했습니다."));
         }
+    }
+
+    @GetMapping("/protectors/{userId}")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getProtectors(@PathVariable Integer userId) {
+        List<UserResponseDTO> protectors = userService.getProtectors(userId).stream()
+                .map(u -> new UserResponseDTO(u.getId(), u.getPhone(), u.getName(), u.getRole(), null))
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(protectors));
     }
 
     @PostMapping("/link")

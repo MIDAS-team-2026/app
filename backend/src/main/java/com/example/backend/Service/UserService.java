@@ -118,4 +118,9 @@ public class UserService {
                 .filter(u -> passwordEncoder.matches(password, u.getPassword()))
                 .orElse(null);
     }
+
+    // 환자에 연결된 보호자 목록
+    public List<User> getProtectors(Integer patientId) {
+        return userRepository.findByTargetPatient_Id(patientId);
+    }
 }

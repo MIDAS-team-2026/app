@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">똑똑</string>
     <string name="app_tagline">매일 대화하며 인지 건강 지키기</string>
@@ -15,7 +15,7 @@
     <string name="btn_skip">건너뛰기</string>
 
     <!-- 로그인 -->
-    <string name="login_title">다시 만나서 반가워요 😊</string>
+    <string name="login_title">다시 만나서 반가워요</string>
     <string name="login_subtitle">로그인하고 오늘의 점검을 시작해요</string>
     <string name="hint_email">이메일</string>
     <string name="hint_password">비밀번호</string>
@@ -91,12 +91,12 @@
     <string name="signup_complete_code_label">내 사용자 코드</string>
     <string name="signup_complete_code_desc">보호자에게 코드를 전달하면\n분석 결과가 자동 공유돼요</string>
     <string name="btn_copy_code">📋 코드 복사</string>
-    <string name="btn_go_home">홈으로 시작하기</string>
+    <string name="btn_go_home">로그인하러 가기</string>
 
     <!-- 사용자 홈 -->
     <string name="home_hello">안녕하세요 👋</string>
     <string name="home_user_suffix">님</string>
-    <string name="home_streak">🔥 4일 연속 점검 중</string>
+    <string name="home_streak">🔥 %1$d일 연속 점검 중!</string>
     <string name="home_week_status">이번 주 점검 현황</string>
     <string name="home_today">오늘</string>
     <string name="home_week_score_label">이번 주 인지 점수</string>
@@ -105,9 +105,13 @@
     <string name="home_score_normal">정상 범위</string>
     <string name="home_today_check">오늘의 점검</string>
     <string name="menu_voice_chat">음성 대화</string>
+    <string name="menu_voice_chat_desc">AI와 대화하며 인지 기능을 훈련해요</string>
     <string name="menu_recall">회상 과제</string>
     <string name="menu_analysis">분석 결과</string>
+    <string name="menu_analysis_desc">대화 결과와 인지 점수를 확인해요</string>
     <string name="menu_settings">설정</string>
+    <string name="menu_settings_desc">앱 환경과 알림을 설정해요</string>
+    <string name="section_settings">환경설정</string>
     <string name="tab_home">홈</string>
     <string name="tab_chat">대화</string>
     <string name="tab_analysis">분석</string>

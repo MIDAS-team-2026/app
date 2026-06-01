@@ -4,7 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,15 +18,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.core.content.ContextCompat
+import com.midas26.mobileapp.location.LocationForegroundService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.graphics.Brush
+import com.midas26.mobileapp.ui.theme.Green500
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -45,13 +51,22 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.BrandWhite
@@ -65,6 +80,9 @@ import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midas26.mobileapp.R
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.util.PrefsManager
@@ -72,24 +90,51 @@ import com.midas26.mobileapp.util.PrefsManager
 @Composable
 fun SettingsScreen(
     userName: String = "홍길동",
+    weeklyScore: Int = 75,
+    streakDays: Int = 4,
     onBack: () -> Unit = {},
     onLogout: () -> Unit = {},
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
-    onProfileEdit: () -> Unit = {}
+    onProfileEdit: () -> Unit = {},
+    profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
-    val userCode = prefs.getUserCode().ifEmpty { "842716" } // 백엔드 연동 전 임시 기본값
+    val isPatient = role == PrefsManager.ROLE_USER
+    val userId = prefs.getUserId()
+    val protectors by profileViewModel.protectors.collectAsState()
 
+    val guardianLabel = when {
+        protectors.isEmpty() -> "없음"
+        protectors.size == 1 -> protectors[0].name ?: "보호자"
+        else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
+    }
+
+    androidx.compose.runtime.LaunchedEffect(userId) {
+        if (isPatient && userId > 0) profileViewModel.loadProtectors(userId)
+    }
+    var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
+
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            prefs.setLocationSharingEnabled(true)
+            context.startForegroundService(Intent(context, LocationForegroundService::class.java))
+        } else {
+            locationSharingEnabled = false
+            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -102,6 +147,10 @@ fun SettingsScreen(
             Toast.makeText(context, "알림 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
     }
+
+    val scrollState = rememberScrollState()
+    val rangePx = with(LocalDensity.current) { 180.dp.toPx() }
+    val p = (scrollState.value / rangePx).coerceIn(0f, 1f)
 
     if (showLogoutDialog) {
         ConfirmDialog(
@@ -116,33 +165,20 @@ fun SettingsScreen(
         )
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Gray100)
+            .background(BrandWhite)
     ) {
-        SettingsTopBar(onBack = onBack)
-
+        // ── 스크롤 콘텐츠 ────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            ProfileCard(
-                userName = userName,
-                role = if (isGuardian) "보호자" else "사용자",
-                userCode = userCode
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            SettingsSection(title = "계정") {
-                SettingsRow(label = "프로필 편집", onClick = onProfileEdit)
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
+            // 헤더 펼침 높이만큼 상단 공간 확보
+            Spacer(modifier = Modifier.height(252.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(title = "접근성") {
                 SettingsRow(label = "접근성 설정", onClick = onAccessibility)
@@ -151,6 +187,36 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "앱 설정") {
+                if (!isGuardian) {
+                    SettingsToggleRow(
+                        label = "보호자에게 위치 정보 제공",
+                        description = "보호자가 내 위치를 확인할 수 있어요",
+                        checked = locationSharingEnabled,
+                        onCheckedChange = { enabled ->
+                            locationSharingEnabled = enabled
+                            if (enabled) {
+                                val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                                    ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                if (bgGranted) {
+                                    prefs.setLocationSharingEnabled(true)
+                                    context.startForegroundService(
+                                        Intent(context, LocationForegroundService::class.java)
+                                    )
+                                } else {
+                                    backgroundLocationLauncher.launch(
+                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    )
+                                }
+                            } else {
+                                prefs.setLocationSharingEnabled(false)
+                                context.stopService(Intent(context, LocationForegroundService::class.java))
+                            }
+                        }
+                    )
+                    HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                }
                 SettingsToggleRow(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
@@ -225,36 +291,193 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+
+        // ── 스크롤바 오버레이 (헤더 접힘 모션과 동기화) ─────────────
+        val settingsHeaderHeight = (252.dp - 180.dp * p).coerceAtLeast(72.dp)
+        VerticalScrollbar(
+            state = scrollState,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = settingsHeaderHeight)
+        )
+
+        // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
+        CollapsingSettingsHeader(
+            p = p,
+            userName = userName,
+            role = if (isGuardian) "보호자" else "사용자",
+            weeklyScore = weeklyScore,
+            streakDays = streakDays,
+            guardianLabel = guardianLabel,
+            onBack = onBack,
+            onProfileEdit = onProfileEdit
+        )
     }
 }
 
 @Composable
-private fun SettingsTopBar(onBack: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+private fun CollapsingSettingsHeader(
+    p: Float,
+    userName: String,
+    role: String,
+    weeklyScore: Int,
+    streakDays: Int,
+    guardianLabel: String,
+    onBack: () -> Unit,
+    onProfileEdit: () -> Unit
+) {
+    val maxH = 252.dp
+    val minH = 72.dp
+    val range = maxH - minH
+    val headerHeight = (maxH - range * p).coerceAtLeast(minH)
+
+    // pe: 프로필 카드 페이드아웃 (p=0→0.55에서 완료)
+    val pe = (p / 0.55f).coerceIn(0f, 1f)
+    // pm: 미니 아바타 페이드인 (p=0.5→1.0)
+    val pm = ((p - 0.5f) / 0.5f).coerceIn(0f, 1f)
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(headerHeight)
+            .background(brush = Brush.verticalGradient(colors = listOf(Green600, Green400)))
     ) {
+        // ── 네비 행 (항상 상단 고정) ──────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp),
+                .align(Alignment.TopStart)
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary
+                    tint = BrandWhite,
+                    modifier = Modifier.size(28.dp)
                 )
             }
             Text(
                 text = "설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
+                color = BrandWhite,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp)
             )
+            // 미니 아바타 (접힘 상태에서만 등장)
+            Surface(
+                shape = CircleShape,
+                color = BrandWhite,
+                shadowElevation = AppColor.cardShadowElevation,
+                modifier = Modifier
+                    .size(40.dp)
+                    .offset(x = (8f * (1f - pm)).dp)
+                    .alpha(pm)
+                    .then(if (pm > 0f) Modifier.clickable(onClick = onProfileEdit) else Modifier)
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.char1),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
+
+        // ── 펼침 프로필 카드 (스크롤 시 페이드아웃) ──────────────
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 64.dp, start = 20.dp, end = 20.dp)
+                .offset(y = (-16f * pe).dp)
+                .alpha((1f - pe).coerceAtLeast(0f))
+                .then(if (pe < 1f) Modifier.clickable(onClick = onProfileEdit) else Modifier),
+            shape = RoundedCornerShape(20.dp),
+            color = BrandWhite.copy(alpha = 0.16f),
+            border = BorderStroke(1.dp, BrandWhite.copy(alpha = 0.28f))
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                // 상단 행: 아바타 + 이름 + 역할 배지 + 화살표
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = BrandWhite,
+                        shadowElevation = AppColor.cardShadowElevation,
+                        modifier = Modifier.size(54.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.char1),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = userName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = BrandWhite
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = BrandWhite.copy(alpha = 0.9f)
+                        ) {
+                            Text(
+                                text = role,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Green600,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = BrandWhite.copy(alpha = 0.85f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                // 구분선
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 12.dp),
+                    color = BrandWhite.copy(alpha = 0.22f),
+                    thickness = 1.dp
+                )
+                // 통계 행
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    StatItem(value = if (weeklyScore > 0) "${weeklyScore}점" else "-", label = "오늘 점수", modifier = Modifier.weight(1f))
+                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
+                    StatItem(value = "🔥 ${streakDays}일", label = "연속 점검", modifier = Modifier.weight(1f))
+                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
+                    StatItem(value = guardianLabel, label = "연결 보호자", modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatItem(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = BrandWhite)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = BrandWhite.copy(alpha = 0.85f))
     }
 }
 
@@ -262,18 +485,17 @@ private fun SettingsTopBar(onBack: () -> Unit) {
 private fun ProfileCard(
     userName: String,
     role: String,
-    userCode: String
+    onClick: () -> Unit
 ) {
-    val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 16.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation,
+        border = AppColor.cardBorder
     ) {
         Row(
             modifier = Modifier
@@ -284,16 +506,14 @@ private fun ProfileCard(
             Surface(
                 modifier = Modifier.size(64.dp),
                 shape = CircleShape,
-                color = Green50
+                color = BrandWhite
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = userName.take(1),
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = AppColor.accentDark
-                    )
-                }
+                Image(
+                    painter = painterResource(R.drawable.char1),
+                    contentDescription = "프로필 이미지",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
             }
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -320,41 +540,12 @@ private fun ProfileCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .clickable {
-                        clipboardManager.setText(AnnotatedString(userCode))
-                        Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
-                    },
-                shape = RoundedCornerShape(12.dp),
-                color = Gray100
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "사용자 코드",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.textTertiary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = userCode,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = AppColor.textSecondary,
-                        letterSpacing = 2.sp
-                    )
-                }
-            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -376,7 +567,8 @@ private fun SettingsSection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 1.dp
+            shadowElevation = AppColor.cardShadowElevation,
+            border = AppColor.cardBorder
         ) {
             Column { content() }
         }
