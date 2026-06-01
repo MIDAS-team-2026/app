@@ -57,7 +57,10 @@ import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.util.lerp
+import kotlin.math.abs
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
@@ -215,6 +218,7 @@ fun AnalysisResultScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     WeeklyLineChart(
                         points = viewModel.graphPoints,
+                        selectedDate = viewModel.selectedDayScore?.date,
                         onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -294,15 +298,43 @@ private fun DayDetailRow(label: String, value: String) {
 @Composable
 private fun WeeklyLineChart(
     points: List<DailyScore>,
+    selectedDate: String? = null,
     onPointTapped: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (points.isEmpty()) return
 
+    // 강조할 인덱스: 선택된 날짜 → 없으면 마지막(오늘)
+    val highlightIdx = if (selectedDate != null)
+        points.indexOfFirst { it.date?.startsWith(selectedDate.take(10)) == true }
+            .takeIf { it >= 0 } ?: points.lastIndex
+    else
+        points.lastIndex
+
+    // score == 0인 날 = 데이터 없음
+    val hasData = points.map { it.score > 0 }
+
+    // 그래프용 점수: 데이터 없는 날은 이전 값으로 채움 (forward-fill)
+    val filledScores = run {
+        val result = points.map { it.score }.toMutableList()
+        for (i in result.indices) {
+            if (result[i] == 0) {
+                result[i] = if (i > 0) result[i - 1] else
+                    result.firstOrNull { it > 0 } ?: 0
+            }
+        }
+        result
+    }
+
+    // 강조 인덱스를 float으로 애니메이션 → 포인트 크기 서서히 변화
+    val animatedHighlight by animateFloatAsState(
+        targetValue = highlightIdx.toFloat(),
+        animationSpec = tween(durationMillis = 300),
+        label = "highlight"
+    )
+
     // 탭 감지용 xs 공유
     var computedXs = remember { listOf<Float>() }
-    var computedPad = remember { 16f }
-    var computedW = remember { 0f }
 
     Column(modifier = modifier) {
         Canvas(
@@ -315,26 +347,25 @@ private fun WeeklyLineChart(
                         if (computedXs.isEmpty()) return@detectTapGestures
                         val tapRadius = 40f
                         val idx = computedXs.indexOfFirst { kotlin.math.abs(it - offset.x) < tapRadius }
-                        if (idx >= 0) onPointTapped(points[idx].date)
+                        // 데이터 있는 날만 탭 이벤트 전달
+                        if (idx >= 0 && hasData[idx]) onPointTapped(points[idx].date)
                     }
                 }
         ) {
             val w = size.width
             val h = size.height
             val pad = 16f
-            computedW = w
-            computedPad = pad
 
-            val minScore = points.minOf { it.score }.toFloat() - 4f
-            val maxScore = points.maxOf { it.score }.toFloat() + 4f
+            val minScore = filledScores.minOf { it }.toFloat() - 4f
+            val maxScore = filledScores.maxOf { it }.toFloat() + 4f
             val span = (maxScore - minScore).coerceAtLeast(1f)
 
             val xs = points.indices.map { i ->
                 pad + (w - 2 * pad) * i / (points.size - 1).coerceAtLeast(1)
             }
             computedXs = xs
-            val ys = points.map { p ->
-                h - pad - (h - 2 * pad) * (p.score - minScore) / span
+            val ys = filledScores.map { score ->
+                h - pad - (h - 2 * pad) * (score - minScore) / span
             }
 
             // 영역 채움
@@ -373,18 +404,19 @@ private fun WeeklyLineChart(
                 style = Stroke(width = 8f)
             )
 
-            // 데이터 포인트
+            // 데이터 포인트: animatedHighlight 기준으로 크기 서서히 변화
             for (i in points.indices) {
-                val isLast = i == points.lastIndex
-                if (isLast) {
-                    // 바깥 흰 원 (테두리 역할)
-                    drawCircle(color = BrandWhite, radius = 22f, center = Offset(xs[i], ys[i]))
-                    // 초록 채움 원
-                    drawCircle(color = Green500, radius = 15f, center = Offset(xs[i], ys[i]))
+                // 0~1 사이 강조 비율 (1 = 완전 강조, 0 = 일반)
+                val fraction = (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f)
+                val dotColor = if (hasData[i]) {
+                    if (fraction > 0.5f) Green500 else Green600
                 } else {
-                    drawCircle(color = BrandWhite, radius = 12f, center = Offset(xs[i], ys[i]))
-                    drawCircle(color = Green600, radius = 8f, center = Offset(xs[i], ys[i]))
+                    Gray400
                 }
+                val outerRadius = lerp(12f, 28f, fraction)
+                val innerRadius = lerp(8f,  19f, fraction)
+                drawCircle(color = BrandWhite, radius = outerRadius, center = Offset(xs[i], ys[i]))
+                drawCircle(color = dotColor,   radius = innerRadius,  center = Offset(xs[i], ys[i]))
             }
         }
 
@@ -395,11 +427,11 @@ private fun WeeklyLineChart(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            points.forEach { p ->
+            points.forEachIndexed { i, p ->
                 Text(
                     text = p.dayLabel,
                     style = MaterialTheme.typography.bodySmall,
-                    color = AppColor.textTertiary
+                    color = if (hasData[i]) AppColor.textTertiary else Gray400
                 )
             }
         }
