@@ -14,7 +14,10 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -137,6 +140,27 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                     }
                 }
 
+                // ── 서버 연결 실패 다이얼로그 ─────────────────────────────────────
+                val networkError = analysisViewModel.networkError
+                if (networkError != null) {
+                    AlertDialog(
+                        onDismissRequest = { },
+                        title = { Text("서버 연결 실패") },
+                        text  = { Text("서버 연결에 실패했습니다.\n오류코드: $networkError") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                analysisViewModel.clearNetworkError()
+                                splashVisible = false
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }) {
+                                Text("확인")
+                            }
+                        }
+                    )
+                }
+
                 // ── Splash 오버레이 — Scaffold/BottomBar 포함 전체 화면을 덮음 ──
                 // NavHost는 이미 startDestination에서 시작하므로 오버레이만 제거하면 됨
                 AnimatedVisibility(
@@ -156,12 +180,11 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             }
                     ) {
                         SplashScreen(
-                            onNavigateToHome = {
-                                analysisViewModel.refresh()
-                                splashVisible = false
-                            },
+                            onNavigateToHome       = { splashVisible = false },
                             onNavigateToLogin      = { splashVisible = false },
-                            onNavigateToOnboarding = { splashVisible = false }
+                            onNavigateToOnboarding = { splashVisible = false },
+                            isDataReady            = analysisViewModel.isInitialLoadDone,
+                            hasNetworkError        = analysisViewModel.networkError != null,
                         )
                     }
                 }

@@ -17,7 +17,10 @@ import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.network.DailyScoreResponse
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToInt
@@ -64,6 +67,15 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     var isLoading by mutableStateOf(false)
         private set
 
+    /** 초기 로드(summary + weekly + streak) 완료 여부 — 스플래시 대기용 */
+    var isInitialLoadDone by mutableStateOf(false)
+        private set
+
+    var networkError by mutableStateOf<String?>(null)
+        private set
+
+    fun clearNetworkError() { networkError = null }
+
     // ── API 데이터 ─────────────────────────────────────────────────────────────
 
     private var finalRiskScore by mutableStateOf<Float?>(null)
@@ -74,52 +86,61 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private var analyzedAt     by mutableStateOf<String?>(null)
 
     init {
-        loadSummary()
-        loadWeeklyScores()
-        loadStreak()
-    }
-
-    fun loadSummary() {
-        val userId = prefs.getUserId()
-        if (userId <= 0) return
-        viewModelScope.launch {
-            isLoading = true
-            var loaded = false
-
-            // 오늘 데이터 시도
-            runCatching { api.getTodaySummary(userId) }
-                .onSuccess { resp ->
-                    resp.body()?.data?.let { body ->
-                        applyBody(body)
-                        loaded = true
-                    }
-                }
-
-            // 없으면 최신 데이터로 폴백
-            if (!loaded) {
-                runCatching { api.getLatestSummary(userId) }
-                    .onSuccess { resp ->
-                        resp.body()?.data?.let { body -> applyBody(body) }
-                    }
-            }
-
-            isLoading = false
-        }
+        viewModelScope.launch { doLoad() }
     }
 
     fun refresh() {
-        loadSummary()
-        loadWeeklyScores()
-        loadStreak()
+        isInitialLoadDone = false
+        networkError = null
+        viewModelScope.launch { doLoad() }
     }
 
-    private fun loadStreak() {
+    fun loadSummary() {
+        viewModelScope.launch { doLoadSummary() }
+    }
+
+    private suspend fun doLoad() {
+        val userId = prefs.getUserId()
+        if (userId <= 0) { isInitialLoadDone = true; return }
+        isLoading = true
+        coroutineScope {
+            launch { doLoadSummary() }
+            launch { doLoadWeeklyScores() }
+            launch { doLoadStreak() }
+        }
+        isLoading = false
+        isInitialLoadDone = true
+    }
+
+    private suspend fun doLoadSummary() {
         val userId = prefs.getUserId()
         if (userId <= 0) return
-        viewModelScope.launch {
-            runCatching { api.getStreakDays(userId) }
-                .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
+        var loaded = false
+
+        runCatching { api.getTodaySummary(userId) }
+            .onSuccess { resp ->
+                resp.body()?.data?.let { body ->
+                    applyBody(body)
+                    loaded = true
+                }
+            }
+            .onFailure { e -> networkError = toErrorCode(e) }
+
+        if (!loaded && networkError == null) {
+            runCatching { api.getLatestSummary(userId) }
+                .onSuccess { resp ->
+                    resp.body()?.data?.let { body -> applyBody(body) }
+                }
+                .onFailure { e -> networkError = toErrorCode(e) }
         }
+    }
+
+    private suspend fun doLoadStreak() {
+        val userId = prefs.getUserId()
+        if (userId <= 0) return
+        runCatching { api.getStreakDays(userId) }
+            .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
+            .onFailure { e -> networkError = toErrorCode(e) }
     }
 
     // ── 홈 화면용 ─────────────────────────────────────────────────────────────
@@ -275,28 +296,34 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-    private fun loadWeeklyScores() {
+    private suspend fun doLoadWeeklyScores() {
         val userId = prefs.getUserId()
         if (userId <= 0) return
-        viewModelScope.launch {
-            runCatching { api.getWeeklyScores(userId) }
-                .onSuccess { resp ->
-                    resp.body()?.data?.let { list ->
-                        graphPoints = list.map { d ->
-                            val date = d.date?.let { LocalDate.parse(it) }
-                            val label = when (date?.dayOfWeek?.value) {
-                                1 -> "월"; 2 -> "화"; 3 -> "수"; 4 -> "목"
-                                5 -> "금"; 6 -> "토"; 7 -> "일"; else -> ""
-                            }
-                            DailyScore(
-                                dayLabel = label,
-                                score    = d.finalRiskScore?.let { (it * 100).roundToInt() } ?: 0,
-                                date     = d.date
-                            )
+        runCatching { api.getWeeklyScores(userId) }
+            .onSuccess { resp ->
+                resp.body()?.data?.let { list ->
+                    graphPoints = list.map { d ->
+                        val date = d.date?.let { LocalDate.parse(it) }
+                        val label = when (date?.dayOfWeek?.value) {
+                            1 -> "월"; 2 -> "화"; 3 -> "수"; 4 -> "목"
+                            5 -> "금"; 6 -> "토"; 7 -> "일"; else -> ""
                         }
+                        DailyScore(
+                            dayLabel = label,
+                            score    = d.finalRiskScore?.let { (it * 100).roundToInt() } ?: 0,
+                            date     = d.date
+                        )
                     }
                 }
-        }
+            }
+            .onFailure { e -> networkError = toErrorCode(e) }
+    }
+
+    private fun toErrorCode(e: Throwable): String = when (e) {
+        is HttpException -> e.code().toString()
+        is java.net.SocketTimeoutException -> "TIMEOUT"
+        is IOException -> "NETWORK_ERROR"
+        else -> "UNKNOWN"
     }
 
     fun onGraphPointTapped(dateStr: String?) {
