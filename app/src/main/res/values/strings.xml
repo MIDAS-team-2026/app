@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">똑똑</string>
     <string name="app_tagline">매일 대화하며 인지 건강 지키기</string>
@@ -15,7 +15,7 @@
     <string name="btn_skip">건너뛰기</string>
 
     <!-- 로그인 -->
-    <string name="login_title">다시 만나서 반가워요 😊</string>
+    <string name="login_title">다시 만나서 반가워요</string>
     <string name="login_subtitle">로그인하고 오늘의 점검을 시작해요</string>
     <string name="hint_email">이메일</string>
     <string name="hint_password">비밀번호</string>

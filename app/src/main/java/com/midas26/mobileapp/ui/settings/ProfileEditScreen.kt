@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
+import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray200
@@ -550,7 +551,8 @@ private fun ProfileSection(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             color = BrandWhite,
-            shadowElevation = 3.dp
+            shadowElevation = AppColor.cardShadowElevation,
+            border = AppColor.cardBorder
         ) {
             content()
         }

@@ -20,17 +20,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -38,10 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
@@ -49,12 +49,24 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun AnalysisLoadingScreen(
+    isLoading: Boolean,
     onFinished: () -> Unit
 ) {
-    // 더미 진행 — 4초 후 결과로 이동
+    var step1 by remember { mutableStateOf(false) } // 서버 연결 완료
+    var step2 by remember { mutableStateOf(false) } // 분석 데이터 수신 완료
+    var step3 by remember { mutableStateOf(false) } // 결과 화면 준비 완료
+
     LaunchedEffect(Unit) {
-        delay(4000)
-        onFinished()
+        delay(400)
+        step1 = true
+    }
+
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            step2 = true
+            delay(400)
+            step3 = true
+        }
     }
 
     Column(
@@ -69,7 +81,7 @@ fun AnalysisLoadingScreen(
         Spacer(modifier = Modifier.height(28.dp))
 
         Text(
-            text = "결과를 분석하고\n있어요",
+            text = "분석 결과를\n불러오는 중이에요",
             fontSize = 28.sp,
             color = AppColor.textPrimary,
             fontWeight = FontWeight.Bold,
@@ -78,19 +90,18 @@ fun AnalysisLoadingScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = "발화 속도, 어휘 다양성, 기억\n일치도를 종합 점검 중입니다",
+            text = "오늘의 인지 건강 점수를\n가져오고 있어요",
             style = MaterialTheme.typography.bodyMedium,
             color = AppColor.textTertiary,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(36.dp))
 
-        // 진행 항목
-        ProgressItem(label = "음성 인식 완료",   done = true)
+        ProgressItem(label = "서버 연결 완료",       done = step1)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "어휘 분석 완료",   done = true)
+        ProgressItem(label = "분석 데이터 수신 완료", done = step2)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "인지 점수 계산 중…", done = false)
+        ProgressItem(label = "결과 화면 준비 완료",   done = step3)
     }
 }
 
@@ -147,19 +158,17 @@ private fun ProgressItem(label: String, done: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
-                .size(16.dp)
+                .size(20.dp)
                 .clip(CircleShape)
-                .background(if (done) Green400 else Color.Transparent),
+                .background(if (done) Green400 else Gray200),
             contentAlignment = Alignment.Center
         ) {
             if (done) {
-                Text(text = "✓", color = BrandWhite, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Gray200)
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = BrandWhite,
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }

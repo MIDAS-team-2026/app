@@ -141,7 +141,8 @@ private fun StatusItem(label: String, done: Boolean) {
 @Composable
 private fun GuardianScoreCard(score: Int) {
     Surface(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(20.dp), color = BrandWhite, shadowElevation = 2.dp) {
+        shape = RoundedCornerShape(20.dp), color = BrandWhite,
+        shadowElevation = AppColor.cardShadowElevation, border = AppColor.cardBorder) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(modifier = Modifier.size(72.dp), shape = CircleShape, color = GuardianAccentLight) {
                 Box(contentAlignment = Alignment.Center) {
@@ -211,7 +212,8 @@ private fun GuardianMenuCard(
     iconTint: Color = GuardianAccentDark
 ) {
     Surface(modifier = modifier.fillMaxHeight().clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp), color = BrandWhite, shadowElevation = 2.dp) {
+        shape = RoundedCornerShape(20.dp), color = BrandWhite,
+        shadowElevation = AppColor.cardShadowElevation, border = AppColor.cardBorder) {
         Column(modifier = Modifier.fillMaxSize().padding(12.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally) {

@@ -59,6 +59,9 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     private val userId: Int  get() = prefs.getUserId()
     private var sessionId: Long    = -1L
     private var sessionEnded       = false
+    private var voiceUploaded      = false
+
+    fun hasUploadedVoice(): Boolean = voiceUploaded
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
 
@@ -143,7 +146,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                     val body = file.asRequestBody("audio/wav".toMediaType())
                     val part = MultipartBody.Part.createFormData("file", file.name, body)
                     api.uploadVoice(userId, sessionId, part)
-                }
+                }.onSuccess { voiceUploaded = true }
             }
             delay(2000L) // TODO: AI 응답 구현 후 제거
             dispatchAiReply("AI답변 구현 예정입니다. 조금만기다려주세요!")

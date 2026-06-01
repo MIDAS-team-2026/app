@@ -22,13 +22,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import kotlin.math.roundToInt
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -42,8 +51,15 @@ import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
+import com.midas26.mobileapp.ui.theme.Gray400
+import com.midas26.mobileapp.ui.theme.Gray600
 import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.ui.theme.Green600
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 
 @Composable
@@ -53,21 +69,39 @@ fun AnalysisResultScreen(
 ) {
     val fontScale = LocalFontSizeScale.current.scale
 
+    var minTimeElapsed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(2000)
+        minTimeElapsed = true
+    }
+
+    val showLoading = viewModel.isLoading || !minTimeElapsed
+
+    Crossfade(
+        targetState = showLoading,
+        animationSpec = tween(durationMillis = 500),
+        label = "analysis_crossfade"
+    ) { loading ->
+        if (loading) {
+            AnalysisLoadingScreen(isLoading = viewModel.isLoading, onFinished = {})
+            return@Crossfade
+        }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(BrandWhite)
     ) {
-        // ── 상단 녹색 헤더 ──────────────────────────────────────────────
+        // ── 상단 헤더 (오늘=초록, 다른 날=회색, 애니메이션) ────────────
+        val isToday = viewModel.isViewingToday
+        val animSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 400)
+        val topColor by animateColorAsState(if (isToday) Green600 else Gray600, animSpec)
+        val botColor by animateColorAsState(if (isToday) Green400 else Gray400, animSpec)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(Green600, Green400)
-                    )
-                )
+                .background(brush = Brush.verticalGradient(colors = listOf(topColor, botColor)))
         ) {
             Column(modifier = Modifier.wrapContentHeight()) {
                 // 앱바
@@ -78,10 +112,13 @@ fun AnalysisResultScreen(
                         .height(56.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                    IconButton(
+                        onClick = { if (!isToday) viewModel.clearSelectedDay() else onBack() },
+                        modifier = Modifier.size(48.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "뒤로가기",
+                            contentDescription = if (isToday) "뒤로가기" else "오늘로 돌아가기",
                             tint = BrandWhite,
                             modifier = Modifier.size(28.dp)
                         )
@@ -106,14 +143,14 @@ fun AnalysisResultScreen(
                         .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
                 ) {
                     Text(
-                        text = viewModel.todayDateLabel,
+                        text = viewModel.displayDateLabel,
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrandWhite.copy(alpha = 0.92f)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
                         Text(
-                            text = viewModel.todayScore.toString(),
+                            text = viewModel.displayScore.toString(),
                             fontSize = (56 * fontScale).sp,
                             color = BrandWhite,
                             fontWeight = FontWeight.Bold
@@ -133,21 +170,13 @@ fun AnalysisResultScreen(
                             modifier = Modifier.padding(bottom = 14.dp)
                         ) {
                             Text(
-                                text = viewModel.scoreDeltaText,
+                                text = viewModel.displayRiskLevel,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = AppColor.accentDark,
+                                color = if (isToday) AppColor.accentDark else Gray600,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
                         }
-                    }
-                    if (viewModel.yesterdayCompareText.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = viewModel.yesterdayCompareText,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = BrandWhite.copy(alpha = 0.85f)
-                        )
                     }
                 }
             }
@@ -179,13 +208,14 @@ fun AnalysisResultScreen(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "최근 7일",
+                        text = "최근 7일 · 포인트를 눌러 상세 확인",
                         style = MaterialTheme.typography.bodySmall,
                         color = AppColor.textTertiary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     WeeklyLineChart(
                         points = viewModel.graphPoints,
+                        onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(160.dp)
@@ -219,6 +249,7 @@ fun AnalysisResultScreen(
         )
         } // Box
     }
+    } // Crossfade
 }
 
 // ── 주간 그래프 카드 ────────────────────────────────────────────────────────
@@ -229,7 +260,7 @@ private fun WeeklyChartCard(points: List<DailyScore>) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
-        shadowElevation = 2.dp
+        shadowElevation = AppColor.cardShadowElevation
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
             Text(
@@ -250,11 +281,28 @@ private fun WeeklyChartCard(points: List<DailyScore>) {
 }
 
 @Composable
+private fun DayDetailRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = AppColor.textTertiary)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppColor.textPrimary)
+    }
+}
+
+@Composable
 private fun WeeklyLineChart(
     points: List<DailyScore>,
+    onPointTapped: (String?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (points.isEmpty()) return
+
+    // 탭 감지용 xs 공유
+    var computedXs = remember { listOf<Float>() }
+    var computedPad = remember { 16f }
+    var computedW = remember { 0f }
 
     Column(modifier = modifier) {
         Canvas(
@@ -262,10 +310,20 @@ private fun WeeklyLineChart(
                 .fillMaxWidth()
                 .weight(1f)
                 .padding(horizontal = 4.dp, vertical = 8.dp)
+                .pointerInput(points) {
+                    detectTapGestures { offset ->
+                        if (computedXs.isEmpty()) return@detectTapGestures
+                        val tapRadius = 40f
+                        val idx = computedXs.indexOfFirst { kotlin.math.abs(it - offset.x) < tapRadius }
+                        if (idx >= 0) onPointTapped(points[idx].date)
+                    }
+                }
         ) {
             val w = size.width
             val h = size.height
             val pad = 16f
+            computedW = w
+            computedPad = pad
 
             val minScore = points.minOf { it.score }.toFloat() - 4f
             val maxScore = points.maxOf { it.score }.toFloat() + 4f
@@ -274,6 +332,7 @@ private fun WeeklyLineChart(
             val xs = points.indices.map { i ->
                 pad + (w - 2 * pad) * i / (points.size - 1).coerceAtLeast(1)
             }
+            computedXs = xs
             val ys = points.map { p ->
                 h - pad - (h - 2 * pad) * (p.score - minScore) / span
             }

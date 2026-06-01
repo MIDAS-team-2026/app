@@ -19,7 +19,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.activity.ComponentActivity
+import java.time.LocalDate
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -76,6 +79,7 @@ private val mainRoutes = setOf(
 fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.Login,
+    analysisViewModel: AnalysisViewModel = viewModel(LocalContext.current as ComponentActivity),
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
@@ -90,6 +94,7 @@ fun AppNavHost(
 
     // 회원가입 화면들 간 공유 ViewModel (Activity 스코프)
     val authViewModel: AuthViewModel = viewModel()
+
 
     val role      = PrefsManager.from(context).getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
@@ -113,7 +118,7 @@ fun AppNavHost(
     Scaffold(
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
-            if (currentRoute in mainRoutes) {
+            if (currentRoute in mainRoutes && PrefsManager.from(context).isLoggedIn()) {
                 AppBottomBar(
                     tabs        = if (isGuardian) guardianTabs else userTabs,
                     selectedTab = selectedTab,
@@ -185,7 +190,8 @@ fun AppNavHost(
                         }
                     },
                     onNavigateToSignup = { navController.navigate(Routes.SignupRole) },
-                    onForgotPassword   = { navController.navigate(Routes.ForgotPassword) }
+                    onForgotPassword   = { navController.navigate(Routes.ForgotPassword) },
+                    onAccessibility    = { navController.navigate(Routes.AccessibilitySettings) }
                 )
             }
 
@@ -308,8 +314,12 @@ fun AppNavHost(
             // ── 사용자 홈 ──────────────────────────────────────────────────
             composable(Routes.UserHome) {
                 UserHomeScreen(
-                    userName    = PrefsManager.from(context).getUserName(),
-                    onMenuClick = { menu ->
+                    userName        = PrefsManager.from(context).getUserName(),
+                    streakDays      = analysisViewModel.streakDays,
+                    weeklyChecks    = analysisViewModel.weeklyChecks,
+                    weeklyDayLabels = analysisViewModel.weeklyDayLabels,
+                    todayIndex      = analysisViewModel.todayDayIndex,
+                    onMenuClick  = { menu ->
                         when (menu) {
                             UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
                             UserMenu.Recall    -> navController.navigate(Routes.RecallStart)
@@ -385,9 +395,11 @@ fun AppNavHost(
             // ── 설정 ──────────────────────────────────────────────────────
             composable(Routes.Settings) {
                 SettingsScreen(
-                    userName  = PrefsManager.from(context).getUserName(),
-                    onBack    = { navController.popBackStackIfCurrent(Routes.Settings) },
-                    onLogout  = {
+                    userName     = PrefsManager.from(context).getUserName(),
+                    weeklyScore  = analysisViewModel.displayScore,
+                    streakDays   = analysisViewModel.streakDays,
+                    onBack       = { navController.popBackStackIfCurrent(Routes.Settings) },
+                    onLogout     = {
                         navController.navigate(Routes.Login) { popUpTo(0) { inclusive = true } }
                     },
                     onDeleteAccount  = { navController.navigate(Routes.Withdraw) },
@@ -441,9 +453,10 @@ fun AppNavHost(
             // ── 음성 대화 ──────────────────────────────────────────────────
             composable(Routes.VoiceChat) {
                 VoiceChatScreen(
-                    onBack        = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
-                    onDisconnected = { navController.navigate(Routes.VoiceChatDisconnected) },
-                    onNavigateToSettings = { navController.navigate(Routes.AccessibilitySettings) }
+                    onBack               = { navController.popBackStackIfCurrent(Routes.VoiceChat) },
+                    onDisconnected       = { navController.navigate(Routes.VoiceChatDisconnected) },
+                    onNavigateToSettings = { navController.navigate(Routes.AccessibilitySettings) },
+                    onSessionEnded       = { analysisViewModel.refresh() }
                 )
             }
             composable(Routes.VoiceChatDisconnected) {
@@ -494,7 +507,8 @@ fun AppNavHost(
             // ── 분석 ──────────────────────────────────────────────────────
             composable(Routes.AnalysisResult) {
                 AnalysisResultScreen(
-                    onBack = { navController.popBackStackIfCurrent(Routes.AnalysisResult) }
+                    onBack    = { navController.popBackStackIfCurrent(Routes.AnalysisResult) },
+                    viewModel = analysisViewModel
                 )
             }
 

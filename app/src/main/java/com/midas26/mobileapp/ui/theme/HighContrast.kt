@@ -1,8 +1,11 @@
 package com.midas26.mobileapp.ui.theme
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 val LocalHighContrast = compositionLocalOf { false }
 val LocalHapticEnabled = compositionLocalOf { true }
@@ -29,4 +32,13 @@ object AppColor {
         @Composable get() = if (LocalHighContrast.current) Green600 else Green400
     val accentDark: Color
         @Composable get() = if (LocalHighContrast.current) Green900 else Green600
+
+    /** 고대비: 그림자 대신 검은 테두리, 일반: 그림자 */
+    val cardShadowElevation: Dp
+        @Composable get() = if (LocalHighContrast.current) 0.dp else 3.dp
+
+    val cardBorder: BorderStroke?
+        @Composable get() = if (LocalHighContrast.current)
+            BorderStroke(1.5.dp, BrandBlack)
+        else null
 }
