@@ -57,6 +57,9 @@ object Routes {
     const val AnalysisResult  = "analysis_result"
     const val AnalysisGraph   = "analysis_graph"
 
+    // 보호자 분석 - 사용자 선택
+    const val AnalysisUserSelect = "analysis_user_select"
+
     // 설정
     const val Settings              = "settings"
     const val AccessibilitySettings = "accessibility_settings"

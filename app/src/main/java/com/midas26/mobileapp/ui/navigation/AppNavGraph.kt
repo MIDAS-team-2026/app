@@ -20,8 +20,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.midas26.mobileapp.ui.analysis.AnalysisLinkedUser
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
+import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
+import com.midas26.mobileapp.ui.analysis.analysisUserSamples
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -73,7 +76,8 @@ private val mainRoutes = setOf(
     Routes.ProfileEdit,
     Routes.LocationList,
     Routes.LocationDetail,
-    Routes.LocationRoute
+    Routes.LocationRoute,
+    Routes.AnalysisUserSelect
 )
 
 @Composable
@@ -109,7 +113,8 @@ fun AppNavHost(
         Routes.RecallStart,
         Routes.RecallQuestion,
         Routes.RecallResult,
-        Routes.AnalysisResult ->
+        Routes.AnalysisResult,
+        Routes.AnalysisUserSelect ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
 
         Routes.LocationList,
@@ -140,7 +145,7 @@ fun AppNavHost(
                             UserHomeTab.Settings -> Routes.Settings
 
                             GuardianHomeTab.Home -> Routes.GuardianHome
-                            GuardianHomeTab.Analysis -> Routes.AnalysisResult
+                            GuardianHomeTab.Analysis -> Routes.AnalysisUserSelect
                             GuardianHomeTab.Location -> Routes.LocationList
                             GuardianHomeTab.Settings -> Routes.Settings
 
@@ -420,7 +425,7 @@ fun AppNavHost(
                         onMenuClick = { menu ->
                             when (menu) {
                                 GuardianMenu.Analysis -> {
-                                    navController.navigate(Routes.AnalysisResult)
+                                    navController.navigate(Routes.AnalysisUserSelect)
                                 }
 
                                 GuardianMenu.Location -> {
@@ -646,6 +651,17 @@ fun AppNavHost(
                             }
                         },
                         onSeeDetails = {
+                            navController.navigate(Routes.AnalysisResult)
+                        }
+                    )
+                }
+
+                composable(Routes.AnalysisUserSelect) {
+                    AnalysisUserSelectScreen(
+                        onBack = {
+                            navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
+                        },
+                        onUserClick = { _ ->
                             navController.navigate(Routes.AnalysisResult)
                         }
                     )
