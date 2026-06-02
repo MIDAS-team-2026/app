@@ -85,6 +85,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
+import com.midas26.mobileapp.ui.theme.GuardianAccent
+import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -309,6 +311,7 @@ fun SettingsScreen(
             weeklyScore = weeklyScore,
             streakDays = streakDays,
             guardianLabel = guardianLabel,
+            isGuardian = isGuardian,
             onBack = onBack,
             onProfileEdit = onProfileEdit
         )
@@ -323,6 +326,7 @@ private fun CollapsingSettingsHeader(
     weeklyScore: Int,
     streakDays: Int,
     guardianLabel: String,
+    isGuardian: Boolean = false,
     onBack: () -> Unit,
     onProfileEdit: () -> Unit
 ) {
@@ -340,7 +344,10 @@ private fun CollapsingSettingsHeader(
         modifier = Modifier
             .fillMaxWidth()
             .height(headerHeight)
-            .background(brush = Brush.verticalGradient(colors = listOf(Green600, Green400)))
+            .background(brush = Brush.verticalGradient(
+            colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
+                     else listOf(Green600, Green400)
+        ))
     ) {
         // ── 네비 행 (항상 상단 고정) ──────────────────────────────
         Row(

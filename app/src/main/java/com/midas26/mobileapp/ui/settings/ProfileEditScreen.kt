@@ -65,6 +65,8 @@ import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green600
+import com.midas26.mobileapp.ui.theme.GuardianAccent
+import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.foundation.layout.offset
 
@@ -428,7 +430,7 @@ fun ProfileEditScreen(
         )
 
         // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
-        CollapsingProfileHeader(p = p, userName = initialName, onBack = onBack)
+        CollapsingProfileHeader(p = p, userName = initialName, isGuardian = !isPatient, onBack = onBack)
     }
 }
 
@@ -436,6 +438,7 @@ fun ProfileEditScreen(
 private fun CollapsingProfileHeader(
     p: Float,
     userName: String,
+    isGuardian: Boolean = false,
     onBack: () -> Unit
 ) {
     val maxH = 200.dp
@@ -452,7 +455,10 @@ private fun CollapsingProfileHeader(
         modifier = Modifier
             .fillMaxWidth()
             .height(headerHeight)
-            .background(brush = Brush.verticalGradient(colors = listOf(Green600, Green400)))
+            .background(brush = Brush.verticalGradient(
+                colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
+                         else listOf(Green600, Green400)
+            ))
     ) {
         // ── 확장 아바타 (헤더 하단 중앙에 반 걸침, 접힐수록 사라짐) ──
         Surface(
