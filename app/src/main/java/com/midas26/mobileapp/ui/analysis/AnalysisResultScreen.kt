@@ -63,7 +63,11 @@ import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
+import com.midas26.mobileapp.ui.theme.GuardianAccent
+import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import androidx.compose.ui.platform.LocalContext
+import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun AnalysisResultScreen(
@@ -71,6 +75,8 @@ fun AnalysisResultScreen(
     viewModel: AnalysisViewModel = viewModel()
 ) {
     val fontScale = LocalFontSizeScale.current.scale
+    val context = LocalContext.current
+    val isGuardian = PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN
 
     var minTimeElapsed by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
@@ -98,8 +104,16 @@ fun AnalysisResultScreen(
         // ── 상단 헤더 (오늘=초록, 다른 날=회색, 애니메이션) ────────────
         val isToday = viewModel.isViewingToday
         val animSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 400)
-        val topColor by animateColorAsState(if (isToday) Green600 else Gray600, animSpec)
-        val botColor by animateColorAsState(if (isToday) Green400 else Gray400, animSpec)
+        val topColor by animateColorAsState(
+            if (isGuardian) GuardianAccentDark
+            else if (isToday) Green600 else Gray600,
+            animSpec
+        )
+        val botColor by animateColorAsState(
+            if (isGuardian) GuardianAccent
+            else if (isToday) Green400 else Gray400,
+            animSpec
+        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
