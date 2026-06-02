@@ -1,3 +1,6 @@
+import argparse
+from typing import Dict, List
+
 import requests
 
 from recall_score_calculator import (
@@ -8,13 +11,37 @@ from recall_score_calculator import (
 BASE_URL = "http://localhost:8080"
 
 
+def get_session_records(session_id: int, base_url: str = BASE_URL) -> List[dict]:
+    response = requests.get(
+        f"{base_url}/api/voice/session/{session_id}/records",
+        timeout=10,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_recall_questions(user_id: int, base_url: str = BASE_URL) -> Dict[int, dict]:
+    response = requests.get(
+        f"{base_url}/api/recall/questions/{user_id}",
+        timeout=10,
+    )
+    response.raise_for_status()
+
+    questions = response.json()
+    return {
+        int(question["questionId"]): question
+        for question in questions
+    }
+
+
 def send_recall_result(
-    recall_question_id,
-    past_record_id,
-    current_record_id,
-    similarity_score,
-    keyword_score,
-    final_recall_score,
+    recall_question_id: int,
+    past_record_id: int,
+    current_record_id: int,
+    similarity_score: float,
+    keyword_score: float,
+    final_recall_score: float,
+    base_url: str = BASE_URL,
 ):
     body = {
         "recallQuestionId": recall_question_id,
@@ -25,80 +52,162 @@ def send_recall_result(
         "finalRecallScore": final_recall_score,
     }
 
-    response = requests.post(
-        f"{BASE_URL}/api/ai/analysis/recall",
+    return requests.post(
+        f"{base_url}/api/ai/analysis/recall",
         json=body,
         timeout=10,
     )
 
-    return response
-
 
 def send_risk_result(
-    session_id,
-    speech_score,
-    text_score,
-    recall_score,
-    final_risk_score,
-    risk_level,
+    session_id: int,
+    speech_risk_score: float,
+    recall_score: float,
+    final_risk_score: float,
+    risk_level: str,
+    base_url: str = BASE_URL,
 ):
     body = {
         "sessionId": session_id,
-        "speechScore": speech_score,
-        "textScore": text_score,
+        "speechScore": speech_risk_score,
+        "textScore": 0.0,
         "recallScore": recall_score,
         "finalRiskScore": final_risk_score,
         "riskLevel": risk_level,
     }
 
-    response = requests.post(
-        f"{BASE_URL}/api/ai/analysis/risk",
+    return requests.post(
+        f"{base_url}/api/ai/analysis/risk",
         json=body,
         timeout=10,
     )
 
-    return response
+
+def find_recall_pairs(records: List[dict]) -> List[tuple]:
+    initial_by_question: Dict[int, dict] = {}
+    recall_by_question: Dict[int, dict] = {}
+
+    for record in records:
+        question_id = record.get("recallQuestionId")
+        answer_role = record.get("answerRole")
+
+        if question_id is None or answer_role is None:
+            continue
+
+        question_id = int(question_id)
+
+        if answer_role == "INITIAL":
+            initial_by_question[question_id] = record
+        elif answer_role == "RECALL":
+            recall_by_question[question_id] = record
+
+    pairs = []
+
+    for question_id, recall_record in recall_by_question.items():
+        initial_record = initial_by_question.get(question_id)
+
+        if initial_record is None:
+            continue
+
+        pairs.append((question_id, initial_record, recall_record))
+
+    return pairs
 
 
-if __name__ == "__main__":
-    past_text = "대구에서 태어났어요"
-    current_text = "대구요"
-    keywords = ["대구"]
-    question_type = "FACT"
+def analyze_session_recall(
+    user_id: int,
+    session_id: int,
+    speech_risk_score: float,
+    base_url: str = BASE_URL,
+) -> None:
+    records = get_session_records(session_id, base_url)
+    questions = get_recall_questions(user_id, base_url)
 
-    recall_scores = calculate_final_recall_score(
-        past_text=past_text,
-        current_text=current_text,
-        keywords=keywords,
-        question_type=question_type,
-    )
+    pairs = find_recall_pairs(records)
 
-    recall_response = send_recall_result(
-        recall_question_id=1,
-        past_record_id=1,
-        current_record_id=2,
-        similarity_score=recall_scores["similarityScore"],
-        keyword_score=recall_scores["keywordScore"],
-        final_recall_score=recall_scores["finalRecallScore"],
-    )
+    if not pairs:
+        print("분석 가능한 INITIAL/RECALL 답변 쌍이 없습니다.")
+        print("INITIAL과 RECALL은 같은 recallQuestionId를 사용해야 합니다.")
+        return
 
-    print("recall status:", recall_response.status_code)
-    print(recall_response.text)
+    final_recall_scores = []
+
+    for question_id, initial_record, recall_record in pairs:
+        question = questions.get(question_id, {})
+
+        past_text = initial_record.get("transcriptText") or ""
+        current_text = recall_record.get("transcriptText") or ""
+
+        keywords = question.get("keywords") or []
+        question_type = question.get("questionType") or "DEFAULT"
+
+        recall_scores = calculate_final_recall_score(
+            past_text=past_text,
+            current_text=current_text,
+            keywords=keywords,
+            question_type=question_type,
+        )
+
+        recall_response = send_recall_result(
+            recall_question_id=question_id,
+            past_record_id=initial_record["recordId"],
+            current_record_id=recall_record["recordId"],
+            similarity_score=recall_scores["similarityScore"],
+            keyword_score=recall_scores["keywordScore"],
+            final_recall_score=recall_scores["finalRecallScore"],
+            base_url=base_url,
+        )
+
+        print(
+            f"recall question {question_id} status:",
+            recall_response.status_code,
+            recall_response.text,
+        )
+        recall_response.raise_for_status()
+
+        final_recall_scores.append(recall_scores["finalRecallScore"])
+
+    recall_score = round(sum(final_recall_scores) / len(final_recall_scores), 2)
 
     risk_scores = calculate_final_risk_score(
-        speech_score=90.0,
-        text_score=90.0,
-        recall_score=recall_scores["finalRecallScore"],
+        speech_risk_score=speech_risk_score,
+        recall_score=recall_score,
     )
 
     risk_response = send_risk_result(
-        session_id=1,
-        speech_score=90.0,
-        text_score=90.0,
-        recall_score=recall_scores["finalRecallScore"],
+        session_id=session_id,
+        speech_risk_score=speech_risk_score,
+        recall_score=recall_score,
         final_risk_score=risk_scores["finalRiskScore"],
         risk_level=risk_scores["riskLevel"],
+        base_url=base_url,
     )
 
-    print("risk status:", risk_response.status_code)
-    print(risk_response.text)
+    print("risk status:", risk_response.status_code, risk_response.text)
+    risk_response.raise_for_status()
+
+    print("분석 완료")
+    print("recallScore:", recall_score)
+    print("finalRiskScore:", risk_scores["finalRiskScore"])
+    print("riskLevel:", risk_scores["riskLevel"])
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--user-id", type=int, required=True)
+    parser.add_argument("--session-id", type=int, required=True)
+    parser.add_argument("--speech-risk-score", type=float, default=0.0)
+    parser.add_argument("--base-url", default=BASE_URL)
+
+    args = parser.parse_args()
+
+    analyze_session_recall(
+        user_id=args.user_id,
+        session_id=args.session_id,
+        speech_risk_score=args.speech_risk_score,
+        base_url=args.base_url,
+    )
+
+
+if __name__ == "__main__":
+    main()
