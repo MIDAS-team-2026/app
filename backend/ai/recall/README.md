@@ -106,3 +106,43 @@ model/midas_recall_model/
 ```
 
 학습된 모델 파일은 용량이 커질 수 있으므로 필요 시 별도 클라우드 저장소에 보관하고 README에 경로만 작성한다.
+
+## 6. GPT 기반 대화형 회상 질문 생성
+
+`conversation_recall_generator.py`는 사용자의 자유 대화 내용을 기반으로 기억 포인트를 추출하고, 이후 다시 물어볼 자연스러운 회상 질문을 생성한다.
+
+### 6.1 기능
+
+- 자유 대화 transcript 기반 기억 포인트 추출
+- 정답을 직접 포함하지 않는 자연스러운 회상 질문 생성
+- YNU API Gateway 기반 GPT 호출
+- 생성된 질문은 이후 사용자의 답변과 비교하여 회상 일치도 계산에 활용 가능
+
+### 6.2 실행 전 환경변수 설정
+
+```powershell
+$env:YNU_API_KEY="발급받은키"
+```
+
+### 6.3 실행 방법
+
+```powershell
+python conversation_recall_generator.py
+```
+
+### 6.4 처리 흐름
+
+```text
+자유 대화 transcript
+→ GPT 기억 포인트 추출
+→ 자연스러운 회상 질문 생성
+→ 이후 사용자 답변 수집
+→ 기존 대화 내용과 답변 비교
+→ 회상 일치도 계산
+```
+
+### 6.5 주의사항
+
+- YNU API 키는 GitHub에 업로드하지 않는다.
+- 앱에는 API 키를 포함하지 않는다.
+- GPT Gateway 호출은 서버 또는 Python 모듈에서만 수행한다.
