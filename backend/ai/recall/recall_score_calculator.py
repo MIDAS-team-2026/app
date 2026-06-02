@@ -86,17 +86,15 @@ def calculate_final_recall_score(
 
 
 def calculate_final_risk_score(
-    speech_score: float,
-    text_score: float,
+    speech_risk_score: float,
     recall_score: float,
 ) -> dict:
-    health_score = (
-        speech_score * 0.3
-        + text_score * 0.2
-        + recall_score * 0.5
-    )
+    recall_risk_score = 100 - recall_score
 
-    final_risk_score = 100 - health_score
+    final_risk_score = (
+        speech_risk_score * 0.3
+        + recall_risk_score * 0.7
+    )
 
     if final_risk_score < 30:
         risk_level = "LOW"
