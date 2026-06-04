@@ -84,6 +84,7 @@ fun GuardianSettingsScreen(
     onLogout: () -> Unit = {},
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
+    onManagedUsers: () -> Unit = {},
     onProfileEdit: () -> Unit = {},
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
@@ -192,18 +193,23 @@ fun GuardianSettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "사용자 설정") {
-                SettingsRow(label = "관리 중인 사용자", onClick = {})
+                SettingsRow(
+                    label = "관리 중인 사용자",
+                    onClick = onManagedUsers
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "위치 설정") {
                 SettingsRow(label = "주소 등록", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "생활 반경 설정", onClick = {})
             }
 
@@ -223,6 +229,7 @@ fun GuardianSettingsScreen(
                             } else {
                                 prefs.setNotificationEnabled(true)
                             }
+
                             AlarmScheduler.schedule(context, locationHour, locationMinute)
                         } else {
                             if (!analysisAlertEnabled) {
@@ -245,9 +252,7 @@ fun GuardianSettingsScreen(
                             title = "위치 알림 시간",
                             hour = locationHour,
                             minute = locationMinute,
-                            onClick = {
-                                showLocationTimePicker = true
-                            }
+                            onClick = { showLocationTimePicker = true }
                         )
                     }
                 }
@@ -269,6 +274,7 @@ fun GuardianSettingsScreen(
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             }
+
                             AlarmScheduler.schedule(context, analysisHour, analysisMinute)
                         } else {
                             if (!locationAlertEnabled) {
@@ -290,9 +296,7 @@ fun GuardianSettingsScreen(
                             title = "분석 알림 시간",
                             hour = analysisHour,
                             minute = analysisMinute,
-                            onClick = {
-                                showAnalysisTimePicker = true
-                            }
+                            onClick = { showAnalysisTimePicker = true }
                         )
                     }
                 }
@@ -310,17 +314,21 @@ fun GuardianSettingsScreen(
 
             SettingsSection(title = "지원") {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "이용 약관", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "문의하기", onClick = {})
             }
 
@@ -432,11 +440,7 @@ private fun WheelTimePickerDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(selectedHour, selectedMinute)
-                }
-            ) {
+            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
                 Text(
                     text = "확인",
                     color = GuardianAccentDark,

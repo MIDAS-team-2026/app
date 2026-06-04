@@ -52,6 +52,7 @@ import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianAccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
+import com.midas26.mobileapp.ui.settings.ManagedUserScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
@@ -62,6 +63,8 @@ import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
+
+private const val GuardianManagedUsersRoute = "guardian_managed_users"
 
 private val mainRoutes = setOf(
     Routes.UserHome,
@@ -78,7 +81,8 @@ private val mainRoutes = setOf(
     Routes.LocationList,
     Routes.LocationDetail,
     Routes.LocationRoute,
-    Routes.AnalysisUserSelect
+    Routes.AnalysisUserSelect,
+    GuardianManagedUsersRoute
 )
 
 @Composable
@@ -126,7 +130,8 @@ fun AppNavHost(
             GuardianHomeTab.Location
 
         Routes.Settings,
-        Routes.AccessibilitySettings ->
+        Routes.AccessibilitySettings,
+        GuardianManagedUsersRoute ->
             if (isGuardian) GuardianHomeTab.Settings else UserHomeTab.Settings
 
         else ->
@@ -285,8 +290,8 @@ fun AppNavHost(
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.SignupRole)
                         },
-                        onNext = { role ->
-                            navController.navigate(Routes.signupInfo(role))
+                        onNext = { signupRole ->
+                            navController.navigate(Routes.signupInfo(signupRole))
                         }
                     )
                 }
@@ -506,6 +511,9 @@ fun AppNavHost(
                             onAccessibility = {
                                 navController.navigate(Routes.AccessibilitySettings)
                             },
+                            onManagedUsers = {
+                                navController.navigate(GuardianManagedUsersRoute)
+                            },
                             onProfileEdit = {
                                 navController.navigate(Routes.ProfileEdit)
                             }
@@ -534,6 +542,14 @@ fun AppNavHost(
                             }
                         )
                     }
+                }
+
+                composable(GuardianManagedUsersRoute) {
+                    ManagedUserScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
                 }
 
                 composable(Routes.ProfileEdit) {
