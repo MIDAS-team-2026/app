@@ -20,11 +20,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.midas26.mobileapp.ui.analysis.AnalysisLinkedUser
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
-import com.midas26.mobileapp.ui.analysis.analysisUserSamples
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -51,6 +49,7 @@ import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
 import com.midas26.mobileapp.ui.recall.RecallResultScreen
 import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
+import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
@@ -496,28 +495,53 @@ fun AppNavHost(
                 }
 
                 composable(Routes.Settings) {
-                    SettingsScreen(
-                        userName = PrefsManager.from(context).getUserName(),
-                        weeklyScore = analysisViewModel.displayScore,
-                        streakDays = analysisViewModel.streakDays,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.Settings)
-                        },
-                        onLogout = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(0) { inclusive = true }
+                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                        GuardianSettingsScreen(
+                            userName = PrefsManager.from(context).getUserName(),
+                            weeklyScore = analysisViewModel.displayScore,
+                            streakDays = analysisViewModel.streakDays,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.Settings)
+                            },
+                            onLogout = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onDeleteAccount = {
+                                navController.navigate(Routes.Withdraw)
+                            },
+                            onAccessibility = {
+                                navController.navigate(Routes.AccessibilitySettings)
+                            },
+                            onProfileEdit = {
+                                navController.navigate(Routes.ProfileEdit)
                             }
-                        },
-                        onDeleteAccount = {
-                            navController.navigate(Routes.Withdraw)
-                        },
-                        onAccessibility = {
-                            navController.navigate(Routes.AccessibilitySettings)
-                        },
-                        onProfileEdit = {
-                            navController.navigate(Routes.ProfileEdit)
-                        }
-                    )
+                        )
+                    } else {
+                        SettingsScreen(
+                            userName = PrefsManager.from(context).getUserName(),
+                            weeklyScore = analysisViewModel.displayScore,
+                            streakDays = analysisViewModel.streakDays,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.Settings)
+                            },
+                            onLogout = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onDeleteAccount = {
+                                navController.navigate(Routes.Withdraw)
+                            },
+                            onAccessibility = {
+                                navController.navigate(Routes.AccessibilitySettings)
+                            },
+                            onProfileEdit = {
+                                navController.navigate(Routes.ProfileEdit)
+                            }
+                        )
+                    }
                 }
 
                 composable(Routes.ProfileEdit) {
