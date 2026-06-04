@@ -1,16 +1,29 @@
 package com.midas26.mobileapp.ui.settings
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.NumberPicker
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,22 +31,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.midas26.mobileapp.ui.components.VerticalScrollbar
-import android.Manifest
-import android.app.TimePickerDialog
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
-import android.widget.Toast
-import androidx.core.content.ContextCompat
-import com.midas26.mobileapp.location.LocationForegroundService
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.ui.graphics.Brush
-import com.midas26.mobileapp.ui.theme.Green500
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -46,47 +45,42 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.Image
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.offset
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midas26.mobileapp.R
+import com.midas26.mobileapp.location.LocationForegroundService
+import com.midas26.mobileapp.notification.AlarmScheduler
+import com.midas26.mobileapp.notification.NotificationHelper
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray100
 import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.Red400
-import com.midas26.mobileapp.ui.theme.AppColor
-import androidx.compose.runtime.collectAsState
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.midas26.mobileapp.R
-import com.midas26.mobileapp.notification.AlarmScheduler
-import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
+import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -115,23 +109,43 @@ fun SettingsScreen(
         else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
     }
 
-    androidx.compose.runtime.LaunchedEffect(userId) {
-        if (isPatient && userId > 0) profileViewModel.loadProtectors(userId)
+    LaunchedEffect(userId) {
+        if (isPatient && userId > 0) {
+            profileViewModel.loadProtectors(userId)
+        }
     }
+
     var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
+    var showTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
+
+    if (showTimePicker) {
+        WheelTimePickerDialog(
+            title = "알림 시간",
+            initialHour = notifHour,
+            initialMinute = notifMinute,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { hour, minute ->
+                notifHour = hour
+                notifMinute = minute
+                prefs.setNotificationTime(hour, minute)
+                AlarmScheduler.schedule(context, hour, minute)
+                showTimePicker = false
+            }
+        )
+    }
 
     val backgroundLocationLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             prefs.setLocationSharingEnabled(true)
-            context.startForegroundService(Intent(context, LocationForegroundService::class.java))
+            startLocationService(context)
         } else {
             locationSharingEnabled = false
             Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
@@ -172,13 +186,11 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(BrandWhite)
     ) {
-        // ── 스크롤 콘텐츠 ────────────────────────────────────────────
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
         ) {
-            // 헤더 펼침 높이만큼 상단 공간 확보
             Spacer(modifier = Modifier.height(252.dp))
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -196,16 +208,17 @@ fun SettingsScreen(
                         checked = locationSharingEnabled,
                         onCheckedChange = { enabled ->
                             locationSharingEnabled = enabled
+
                             if (enabled) {
                                 val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                                    ContextCompat.checkSelfPermission(
-                                        context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                                    ) == PackageManager.PERMISSION_GRANTED
+                                        ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                        ) == PackageManager.PERMISSION_GRANTED
+
                                 if (bgGranted) {
                                     prefs.setLocationSharingEnabled(true)
-                                    context.startForegroundService(
-                                        Intent(context, LocationForegroundService::class.java)
-                                    )
+                                    startLocationService(context)
                                 } else {
                                     backgroundLocationLauncher.launch(
                                         Manifest.permission.ACCESS_BACKGROUND_LOCATION
@@ -213,18 +226,27 @@ fun SettingsScreen(
                                 }
                             } else {
                                 prefs.setLocationSharingEnabled(false)
-                                context.stopService(Intent(context, LocationForegroundService::class.java))
+                                context.stopService(
+                                    Intent(context, LocationForegroundService::class.java)
+                                )
                             }
                         }
                     )
-                    HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                    HorizontalDivider(
+                        color = AppColor.divider,
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
                 }
+
                 SettingsToggleRow(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
                     checked = notificationEnabled,
                     onCheckedChange = { enabled ->
                         notificationEnabled = enabled
+
                         if (enabled) {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -238,30 +260,32 @@ fun SettingsScreen(
                         }
                     }
                 )
+
                 AnimatedVisibility(visible = notificationEnabled) {
                     Column {
-                        HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
                         NotifTimeRow(
+                            title = "알림 시간",
                             hour = notifHour,
                             minute = notifMinute,
                             onClick = {
-                                TimePickerDialog(
-                                    context,
-                                    { _, hour, minute ->
-                                        notifHour = hour
-                                        notifMinute = minute
-                                        prefs.setNotificationTime(hour, minute)
-                                        AlarmScheduler.schedule(context, hour, minute)
-                                    },
-                                    notifHour,
-                                    notifMinute,
-                                    false
-                                ).show()
+                                showTimePicker = true
                             }
                         )
                     }
                 }
-                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
                 SettingsRow(label = "앱 버전", trailingText = "1.0.0", onClick = null)
             }
 
@@ -269,9 +293,17 @@ fun SettingsScreen(
 
             SettingsSection(title = "지원") {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
-                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 SettingsRow(label = "이용 약관", onClick = {})
-                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
                 SettingsRow(label = "문의하기", onClick = {})
             }
 
@@ -283,7 +315,13 @@ fun SettingsScreen(
                     labelColor = Gray800,
                     onClick = { showLogoutDialog = true }
                 )
-                HorizontalDivider(color = AppColor.divider, thickness = 1.dp, modifier = Modifier.padding(horizontal = 16.dp))
+
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
                 SettingsRow(
                     label = "회원탈퇴",
                     labelColor = Red400,
@@ -294,8 +332,8 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // ── 스크롤바 오버레이 (헤더 접힘 모션과 동기화) ─────────────
         val settingsHeaderHeight = (252.dp - 180.dp * p).coerceAtLeast(72.dp)
+
         VerticalScrollbar(
             state = scrollState,
             modifier = Modifier
@@ -303,7 +341,6 @@ fun SettingsScreen(
                 .padding(top = settingsHeaderHeight)
         )
 
-        // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
         CollapsingSettingsHeader(
             p = p,
             userName = userName,
@@ -316,6 +353,129 @@ fun SettingsScreen(
             onProfileEdit = onProfileEdit
         )
     }
+}
+
+@Composable
+private fun WheelTimePickerDialog(
+    title: String,
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (hour: Int, minute: Int) -> Unit
+) {
+    var selectedHour by remember { mutableIntStateOf(initialHour) }
+    var selectedMinute by remember { mutableIntStateOf(initialMinute) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppColor.textPrimary
+            )
+        },
+        text = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(170.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                WheelNumberPicker(
+                    value = selectedHour,
+                    range = 0..23,
+                    displayedValues = (0..23).map { it.toString().padStart(2, '0') },
+                    onValueChange = { selectedHour = it }
+                )
+
+                Text(
+                    text = "시",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+
+                WheelNumberPicker(
+                    value = selectedMinute,
+                    range = 0..59,
+                    displayedValues = (0..59).map { it.toString().padStart(2, '0') },
+                    onValueChange = { selectedMinute = it }
+                )
+
+                Text(
+                    text = "분",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 8.dp)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(selectedHour, selectedMinute)
+                }
+            ) {
+                Text(
+                    text = "확인",
+                    color = Green400,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "취소",
+                    color = AppColor.textTertiary
+                )
+            }
+        },
+        containerColor = BrandWhite,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+private fun WheelNumberPicker(
+    value: Int,
+    range: IntRange,
+    displayedValues: List<String>,
+    onValueChange: (Int) -> Unit
+) {
+    AndroidView(
+        modifier = Modifier
+            .width(80.dp)
+            .height(150.dp),
+        factory = { context ->
+            NumberPicker(context).apply {
+                minValue = range.first
+                maxValue = range.last
+                wrapSelectorWheel = true
+                this.displayedValues = displayedValues.toTypedArray()
+                this.value = value
+                descendantFocusability = NumberPicker.FOCUS_BLOCK_DESCENDANTS
+
+                setOnValueChangedListener { _, _, newVal ->
+                    onValueChange(newVal)
+                }
+            }
+        },
+        update = { picker ->
+            picker.minValue = range.first
+            picker.maxValue = range.last
+            picker.displayedValues = displayedValues.toTypedArray()
+
+            if (picker.value != value) {
+                picker.value = value
+            }
+        }
+    )
 }
 
 @Composable
@@ -335,21 +495,23 @@ private fun CollapsingSettingsHeader(
     val range = maxH - minH
     val headerHeight = (maxH - range * p).coerceAtLeast(minH)
 
-    // pe: 프로필 카드 페이드아웃 (p=0→0.55에서 완료)
     val pe = (p / 0.55f).coerceIn(0f, 1f)
-    // pm: 미니 아바타 페이드인 (p=0.5→1.0)
     val pm = ((p - 0.5f) / 0.5f).coerceIn(0f, 1f)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(headerHeight)
-            .background(brush = Brush.verticalGradient(
-            colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
-                     else listOf(Green600, Green400)
-        ))
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = if (isGuardian) {
+                        listOf(GuardianAccentDark, GuardianAccent)
+                    } else {
+                        listOf(Green600, Green400)
+                    }
+                )
+            )
     ) {
-        // ── 네비 행 (항상 상단 고정) ──────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -366,6 +528,7 @@ private fun CollapsingSettingsHeader(
                     modifier = Modifier.size(28.dp)
                 )
             }
+
             Text(
                 text = "설정",
                 style = MaterialTheme.typography.titleLarge,
@@ -375,7 +538,7 @@ private fun CollapsingSettingsHeader(
                     .weight(1f)
                     .padding(start = 4.dp)
             )
-            // 미니 아바타 (접힘 상태에서만 등장)
+
             Surface(
                 shape = CircleShape,
                 color = BrandWhite,
@@ -395,7 +558,6 @@ private fun CollapsingSettingsHeader(
             }
         }
 
-        // ── 펼침 프로필 카드 (스크롤 시 페이드아웃) ──────────────
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
@@ -408,7 +570,6 @@ private fun CollapsingSettingsHeader(
             border = BorderStroke(1.dp, BrandWhite.copy(alpha = 0.28f))
         ) {
             Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                // 상단 행: 아바타 + 이름 + 역할 배지 + 화살표
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = CircleShape,
@@ -423,7 +584,9 @@ private fun CollapsingSettingsHeader(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
+
                     Spacer(modifier = Modifier.width(12.dp))
+
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = userName,
@@ -431,7 +594,9 @@ private fun CollapsingSettingsHeader(
                             fontWeight = FontWeight.Bold,
                             color = BrandWhite
                         )
+
                         Spacer(modifier = Modifier.height(4.dp))
+
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = BrandWhite.copy(alpha = 0.9f)
@@ -445,6 +610,7 @@ private fun CollapsingSettingsHeader(
                             )
                         }
                     }
+
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = null,
@@ -452,24 +618,50 @@ private fun CollapsingSettingsHeader(
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                // 구분선
+
                 HorizontalDivider(
                     modifier = Modifier.padding(top = 12.dp),
                     color = BrandWhite.copy(alpha = 0.22f),
                     thickness = 1.dp
                 )
-                // 통계 행
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StatItem(value = if (weeklyScore > 0) "${weeklyScore}점" else "-", label = "오늘 점수", modifier = Modifier.weight(1f))
-                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
-                    StatItem(value = "🔥 ${streakDays}일", label = "연속 점검", modifier = Modifier.weight(1f))
-                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(BrandWhite.copy(alpha = 0.22f)))
-                    StatItem(value = guardianLabel, label = "연결 보호자", modifier = Modifier.weight(1f))
+                    StatItem(
+                        value = if (weeklyScore > 0) "${weeklyScore}점" else "-",
+                        label = "오늘 점수",
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(36.dp)
+                            .background(BrandWhite.copy(alpha = 0.22f))
+                    )
+
+                    StatItem(
+                        value = "🔥 ${streakDays}일",
+                        label = "연속 점검",
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(36.dp)
+                            .background(BrandWhite.copy(alpha = 0.22f))
+                    )
+
+                    StatItem(
+                        value = guardianLabel,
+                        label = "연결 보호자",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -477,14 +669,29 @@ private fun CollapsingSettingsHeader(
 }
 
 @Composable
-private fun StatItem(value: String, label: String, modifier: Modifier = Modifier) {
+private fun StatItem(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = BrandWhite)
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = BrandWhite
+        )
+
         Spacer(modifier = Modifier.height(2.dp))
-        Text(text = label, style = MaterialTheme.typography.bodySmall, color = BrandWhite.copy(alpha = 0.85f))
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = BrandWhite.copy(alpha = 0.85f)
+        )
     }
 }
 
@@ -532,7 +739,9 @@ private fun ProfileCard(
                     fontWeight = FontWeight.Bold,
                     color = AppColor.textPrimary
                 )
+
                 Spacer(modifier = Modifier.height(6.dp))
+
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Green50
@@ -570,6 +779,7 @@ private fun SettingsSection(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
         )
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
@@ -604,6 +814,7 @@ private fun SettingsRow(
             color = labelColor,
             fontWeight = FontWeight.Medium
         )
+
         if (trailingText != null) {
             Text(
                 text = trailingText,
@@ -641,13 +852,16 @@ private fun SettingsToggleRow(
                 color = AppColor.textPrimary,
                 fontWeight = FontWeight.Medium
             )
+
             Spacer(modifier = Modifier.height(2.dp))
+
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodySmall,
                 color = AppColor.textTertiary
             )
         }
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -658,6 +872,55 @@ private fun SettingsToggleRow(
                 uncheckedTrackColor = Gray200
             )
         )
+    }
+}
+
+@Composable
+private fun NotifTimeRow(
+    title: String,
+    hour: Int,
+    minute: Int,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            color = AppColor.textPrimary,
+            fontWeight = FontWeight.Medium
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Green50
+            ) {
+                Text(
+                    text = formatNotifTime(hour, minute),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppColor.accentDark,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                )
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -706,58 +969,24 @@ private fun ConfirmDialog(
     )
 }
 
-@Composable
-private fun NotifTimeRow(
-    hour: Int,
-    minute: Int,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = "알림 시간",
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppColor.textPrimary,
-            fontWeight = FontWeight.Medium
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(10.dp),
-                color = Green50
-            ) {
-                Text(
-                    text = formatNotifTime(hour, minute),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppColor.accentDark,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = AppColor.textTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
 private fun formatNotifTime(hour: Int, minute: Int): String {
     val period = if (hour < 12) "오전" else "오후"
+
     val h = when {
         hour == 0 -> 12
         hour > 12 -> hour - 12
         else -> hour
     }
+
     return "$period $h:${minute.toString().padStart(2, '0')}"
+}
+
+private fun startLocationService(context: Context) {
+    val intent = Intent(context, LocationForegroundService::class.java)
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        context.startForegroundService(intent)
+    } else {
+        context.startService(intent)
+    }
 }
