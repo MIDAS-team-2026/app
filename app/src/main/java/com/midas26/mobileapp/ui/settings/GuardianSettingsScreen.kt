@@ -1,9 +1,6 @@
 package com.midas26.mobileapp.ui.settings
 
 import android.Manifest
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -17,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,7 +41,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -64,10 +59,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.location.LocationForegroundService
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
@@ -77,14 +70,13 @@ import com.midas26.mobileapp.ui.theme.Gray200
 import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
-fun SettingsScreen(
+fun GuardianSettingsScreen(
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
@@ -97,10 +89,6 @@ fun SettingsScreen(
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
-    val role = prefs.getUserRole()
-    val isGuardian = role == PrefsManager.ROLE_GUARDIAN
-    val isPatient = role == PrefsManager.ROLE_USER
-    val userId = prefs.getUserId()
     val protectors by profileViewModel.protectors.collectAsState()
 
     val guardianLabel = when {
@@ -109,59 +97,62 @@ fun SettingsScreen(
         else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
     }
 
-    LaunchedEffect(userId) {
-        if (isPatient && userId > 0) {
-            profileViewModel.loadProtectors(userId)
-        }
-    }
+    var locationAlertEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
+    var analysisAlertEnabled by remember { mutableStateOf(false) }
 
-    var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
-    var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
-    var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
-    var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var locationHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
+    var locationMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
+
+    var analysisHour by remember { mutableIntStateOf(9) }
+    var analysisMinute by remember { mutableIntStateOf(0) }
+
+    var showLocationTimePicker by remember { mutableStateOf(false) }
+    var showAnalysisTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
-
-    if (showTimePicker) {
-        WheelTimePickerDialog(
-            title = "알림 시간",
-            initialHour = notifHour,
-            initialMinute = notifMinute,
-            onDismiss = { showTimePicker = false },
-            onConfirm = { hour, minute ->
-                notifHour = hour
-                notifMinute = minute
-                prefs.setNotificationTime(hour, minute)
-                AlarmScheduler.schedule(context, hour, minute)
-                showTimePicker = false
-            }
-        )
-    }
-
-    val backgroundLocationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            prefs.setLocationSharingEnabled(true)
-            startLocationService(context)
-        } else {
-            locationSharingEnabled = false
-            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-        }
-    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             prefs.setNotificationEnabled(true)
-            AlarmScheduler.schedule(context, notifHour, notifMinute)
         } else {
-            notificationEnabled = false
+            locationAlertEnabled = false
+            analysisAlertEnabled = false
             Toast.makeText(context, "알림 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    if (showLocationTimePicker) {
+        WheelTimePickerDialog(
+            title = "위치 알림 시간",
+            initialHour = locationHour,
+            initialMinute = locationMinute,
+            onDismiss = { showLocationTimePicker = false },
+            onConfirm = { hour, minute ->
+                locationHour = hour
+                locationMinute = minute
+                prefs.setNotificationTime(hour, minute)
+                AlarmScheduler.schedule(context, hour, minute)
+                showLocationTimePicker = false
+            }
+        )
+    }
+
+    if (showAnalysisTimePicker) {
+        WheelTimePickerDialog(
+            title = "분석 알림 시간",
+            initialHour = analysisHour,
+            initialMinute = analysisMinute,
+            onDismiss = { showAnalysisTimePicker = false },
+            onConfirm = { hour, minute ->
+                analysisHour = hour
+                analysisMinute = minute
+                AlarmScheduler.schedule(context, hour, minute)
+                showAnalysisTimePicker = false
+            }
+        )
     }
 
     val scrollState = rememberScrollState()
@@ -200,68 +191,49 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+            SettingsSection(title = "사용자 설정") {
+                SettingsRow(label = "관리 중인 사용자", onClick = {})
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            SettingsSection(title = "위치 설정") {
+                SettingsRow(label = "주소 등록", onClick = {})
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                SettingsRow(label = "생활 반경 설정", onClick = {})
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
             SettingsSection(title = "앱 설정") {
-                if (!isGuardian) {
-                    SettingsToggleRow(
-                        label = "보호자에게 위치 정보 제공",
-                        description = "보호자가 내 위치를 확인할 수 있어요",
-                        checked = locationSharingEnabled,
-                        onCheckedChange = { enabled ->
-                            locationSharingEnabled = enabled
-
-                            if (enabled) {
-                                val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                                        ) == PackageManager.PERMISSION_GRANTED
-
-                                if (bgGranted) {
-                                    prefs.setLocationSharingEnabled(true)
-                                    startLocationService(context)
-                                } else {
-                                    backgroundLocationLauncher.launch(
-                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                                    )
-                                }
-                            } else {
-                                prefs.setLocationSharingEnabled(false)
-                                context.stopService(
-                                    Intent(context, LocationForegroundService::class.java)
-                                )
-                            }
-                        }
-                    )
-
-                    HorizontalDivider(
-                        color = AppColor.divider,
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-
                 SettingsToggleRow(
-                    label = "점검 알림",
-                    description = "매일 점검 시간에 알림을 받아요",
-                    checked = notificationEnabled,
+                    label = "위치 알림",
+                    description = "사용자의 위치 관련 알림을 받아요",
+                    checked = locationAlertEnabled,
                     onCheckedChange = { enabled ->
-                        notificationEnabled = enabled
+                        locationAlertEnabled = enabled
 
                         if (enabled) {
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                             } else {
                                 prefs.setNotificationEnabled(true)
-                                AlarmScheduler.schedule(context, notifHour, notifMinute)
                             }
+                            AlarmScheduler.schedule(context, locationHour, locationMinute)
                         } else {
-                            prefs.setNotificationEnabled(false)
-                            AlarmScheduler.cancel(context)
+                            if (!analysisAlertEnabled) {
+                                prefs.setNotificationEnabled(false)
+                                AlarmScheduler.cancel(context)
+                            }
                         }
                     }
                 )
 
-                AnimatedVisibility(visible = notificationEnabled) {
+                AnimatedVisibility(visible = locationAlertEnabled) {
                     Column {
                         HorizontalDivider(
                             color = AppColor.divider,
@@ -270,11 +242,56 @@ fun SettingsScreen(
                         )
 
                         NotifTimeRow(
-                            title = "알림 시간",
-                            hour = notifHour,
-                            minute = notifMinute,
+                            title = "위치 알림 시간",
+                            hour = locationHour,
+                            minute = locationMinute,
                             onClick = {
-                                showTimePicker = true
+                                showLocationTimePicker = true
+                            }
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsToggleRow(
+                    label = "분석 알림",
+                    description = "인지 분석 결과 관련 알림을 받아요",
+                    checked = analysisAlertEnabled,
+                    onCheckedChange = { enabled ->
+                        analysisAlertEnabled = enabled
+
+                        if (enabled) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            AlarmScheduler.schedule(context, analysisHour, analysisMinute)
+                        } else {
+                            if (!locationAlertEnabled) {
+                                AlarmScheduler.cancel(context)
+                            }
+                        }
+                    }
+                )
+
+                AnimatedVisibility(visible = analysisAlertEnabled) {
+                    Column {
+                        HorizontalDivider(
+                            color = AppColor.divider,
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+
+                        NotifTimeRow(
+                            title = "분석 알림 시간",
+                            hour = analysisHour,
+                            minute = analysisMinute,
+                            onClick = {
+                                showAnalysisTimePicker = true
                             }
                         )
                     }
@@ -341,14 +358,13 @@ fun SettingsScreen(
                 .padding(top = settingsHeaderHeight)
         )
 
-        CollapsingSettingsHeader(
+        CollapsingGuardianSettingsHeader(
             p = p,
             userName = userName,
-            role = if (isGuardian) "보호자" else "사용자",
+            role = "보호자",
             weeklyScore = weeklyScore,
             streakDays = streakDays,
             guardianLabel = guardianLabel,
-            isGuardian = isGuardian,
             onBack = onBack,
             onProfileEdit = onProfileEdit
         )
@@ -423,7 +439,7 @@ private fun WheelTimePickerDialog(
             ) {
                 Text(
                     text = "확인",
-                    color = Green400,
+                    color = GuardianAccentDark,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -479,14 +495,13 @@ private fun WheelNumberPicker(
 }
 
 @Composable
-private fun CollapsingSettingsHeader(
+private fun CollapsingGuardianSettingsHeader(
     p: Float,
     userName: String,
     role: String,
     weeklyScore: Int,
     streakDays: Int,
     guardianLabel: String,
-    isGuardian: Boolean = false,
     onBack: () -> Unit,
     onProfileEdit: () -> Unit
 ) {
@@ -504,11 +519,7 @@ private fun CollapsingSettingsHeader(
             .height(headerHeight)
             .background(
                 brush = Brush.verticalGradient(
-                    colors = if (isGuardian) {
-                        listOf(GuardianAccentDark, GuardianAccent)
-                    } else {
-                        listOf(Green600, Green400)
-                    }
+                    colors = listOf(GuardianAccentDark, GuardianAccent)
                 )
             )
     ) {
@@ -605,7 +616,7 @@ private fun CollapsingSettingsHeader(
                                 text = role,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Green600,
+                                color = GuardianAccentDark,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                             )
                         }
@@ -692,77 +703,6 @@ private fun StatItem(
             style = MaterialTheme.typography.bodySmall,
             color = BrandWhite.copy(alpha = 0.85f)
         )
-    }
-}
-
-@Composable
-private fun ProfileCard(
-    userName: String,
-    role: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(64.dp),
-                shape = CircleShape,
-                color = BrandWhite
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.char1),
-                    contentDescription = "프로필 이미지",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Green50
-                ) {
-                    Text(
-                        text = role,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.accentDark,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = AppColor.textTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
     }
 }
 
@@ -971,7 +911,6 @@ private fun ConfirmDialog(
 
 private fun formatNotifTime(hour: Int, minute: Int): String {
     val period = if (hour < 12) "오전" else "오후"
-
     val h = when {
         hour == 0 -> 12
         hour > 12 -> hour - 12
@@ -979,14 +918,4 @@ private fun formatNotifTime(hour: Int, minute: Int): String {
     }
 
     return "$period $h:${minute.toString().padStart(2, '0')}"
-}
-
-private fun startLocationService(context: Context) {
-    val intent = Intent(context, LocationForegroundService::class.java)
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
 }
