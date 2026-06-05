@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -14,8 +15,7 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.network.LocationRequest as LocationBody
-import com.midas26.mobileapp.network.RetrofitClient
+import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +27,7 @@ class LocationForegroundService : Service() {
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var fusedClient: FusedLocationProviderClient
-    private lateinit var locationCallback: LocationCallback
+    private var locationCallback: LocationCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -42,7 +42,9 @@ class LocationForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        fusedClient.removeLocationUpdates(locationCallback)
+        locationCallback?.let { callback ->
+            fusedClient.removeLocationUpdates(callback)
+        }
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -50,42 +52,58 @@ class LocationForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startLocationUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, INTERVAL_MS)
+        val request = LocationRequest.Builder(
+            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
+            INTERVAL_MS
+        )
             .setMinUpdateIntervalMillis(INTERVAL_MS)
             .build()
 
-        locationCallback = object : LocationCallback() {
+        val callback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val location = result.lastLocation ?: return
+
                 val prefs = PrefsManager.from(applicationContext)
                 val userId = prefs.getUserId()
+
                 if (userId == -1) return
 
                 serviceScope.launch {
-                    runCatching {
-                        RetrofitClient.location.saveLocation(
-                            LocationBody(
-                                userId = userId,
-                                latitude = location.latitude,
-                                longitude = location.longitude
-                            )
-                        )
-                    }
+                    LocationRepository.saveLocation(
+                        userId = userId,
+                        latitude = location.latitude,
+                        longitude = location.longitude
+                    )
                 }
             }
         }
 
+        locationCallback = callback
+
         try {
-            fusedClient.requestLocationUpdates(request, locationCallback, mainLooper)
+            fusedClient.requestLocationUpdates(
+                request,
+                callback,
+                mainLooper
+            )
         } catch (e: SecurityException) {
             stopSelf()
         }
     }
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "위치 공유", NotificationManager.IMPORTANCE_LOW)
-        channel.description = "보호자에게 위치를 공유하는 동안 표시됩니다"
-        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_ID,
+                "위치 공유",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "보호자에게 위치를 공유하는 동안 표시됩니다"
+            }
+
+            getSystemService(NotificationManager::class.java)
+                .createNotificationChannel(channel)
+        }
     }
 
     private fun buildNotification(): Notification =
@@ -99,6 +117,6 @@ class LocationForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "location_sharing"
         private const val NOTIF_ID = 2001
-        private const val INTERVAL_MS = 300_000L // 5분마다 전송
+        private const val INTERVAL_MS = 300_000L
     }
 }

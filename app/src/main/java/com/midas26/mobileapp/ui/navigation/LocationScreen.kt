@@ -11,18 +11,43 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,14 +60,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.*
-import com.midas26.mobileapp.ui.theme.*
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.midas26.mobileapp.network.LocationRepository
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
+import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.Green500
+import com.midas26.mobileapp.ui.theme.Green600
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Polygon
 import org.osmdroid.views.overlay.Polyline
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class LinkedUser(
     val id: String,
@@ -58,6 +95,7 @@ data class LinkedUser(
     val latitude: Double = 37.5700,
     val longitude: Double = 126.9820,
     val routePoints: List<GeoPoint> = emptyList(),
+    val livingRadiusMeter: Double = 500.0,
     val status: UserStatus = UserStatus.NORMAL
 )
 
@@ -68,6 +106,14 @@ data class TimelineItem(
     val label: String,
     val address: String,
     val isCurrent: Boolean = false
+)
+
+data class GpsState(
+    val latitude: Double = 37.5700,
+    val longitude: Double = 126.9820,
+    val isLoading: Boolean = true,
+    val hasPermission: Boolean = false,
+    val errorMsg: String = ""
 )
 
 val sampleUsers = listOf(
@@ -94,6 +140,7 @@ val sampleUsers = listOf(
             GeoPoint(37.5691, 126.9808),
             GeoPoint(37.5700, 126.9820)
         ),
+        livingRadiusMeter = 500.0,
         status = UserStatus.NORMAL
     ),
     LinkedUser(
@@ -117,43 +164,59 @@ val sampleUsers = listOf(
             GeoPoint(37.5746, 126.9350),
             GeoPoint(37.5760, 126.9368)
         ),
+        livingRadiusMeter = 1500.0,
         status = UserStatus.WARNING
     )
 )
 
-data class GpsState(
-    val latitude: Double = 37.5700,
-    val longitude: Double = 126.9820,
-    val isLoading: Boolean = true,
-    val hasPermission: Boolean = false,
-    val errorMsg: String = ""
-)
-
 @SuppressLint("MissingPermission")
 @Composable
-fun rememberGpsState(): GpsState {
+fun rememberGpsState(
+    userId: Int = 5,
+    saveToServer: Boolean = true
+): GpsState {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var gpsState by remember { mutableStateOf(GpsState()) }
+
+    fun saveLocationToServer(latitude: Double, longitude: Double) {
+        if (!saveToServer) return
+
+        scope.launch {
+            LocationRepository.saveLocation(
+                userId = userId,
+                latitude = latitude,
+                longitude = longitude
+            )
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { perms ->
-        val granted = perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        val granted =
+            perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                    perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
 
         gpsState = gpsState.copy(
             hasPermission = granted,
+            isLoading = !granted,
             errorMsg = if (!granted) "위치 권한이 필요해요" else ""
         )
     }
 
     LaunchedEffect(Unit) {
-        val hasPermission = ContextCompat.checkSelfPermission(
+        val fineGranted = ContextCompat.checkSelfPermission(
             context,
             Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
-        if (hasPermission) {
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (fineGranted || coarseGranted) {
             gpsState = gpsState.copy(hasPermission = true)
         } else {
             permissionLauncher.launch(
@@ -165,38 +228,63 @@ fun rememberGpsState(): GpsState {
         }
     }
 
-    LaunchedEffect(gpsState.hasPermission) {
-        if (!gpsState.hasPermission) return@LaunchedEffect
+    DisposableEffect(gpsState.hasPermission) {
+        if (!gpsState.hasPermission) {
+            onDispose { }
+        } else {
+            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
 
-        val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+            fusedClient.lastLocation.addOnSuccessListener { location ->
+                location?.let {
+                    gpsState = gpsState.copy(
+                        latitude = it.latitude,
+                        longitude = it.longitude,
+                        isLoading = false,
+                        errorMsg = ""
+                    )
 
-        fusedClient.lastLocation.addOnSuccessListener { location ->
-            location?.let {
-                gpsState = gpsState.copy(
-                    latitude = it.latitude,
-                    longitude = it.longitude,
-                    isLoading = false
-                )
+                    saveLocationToServer(
+                        latitude = it.latitude,
+                        longitude = it.longitude
+                    )
+                }
+            }
+
+            val request = LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                5 * 60 * 1000L
+            )
+                .setMinUpdateIntervalMillis(60 * 1000L)
+                .build()
+
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    val loc = result.lastLocation ?: return
+
+                    gpsState = gpsState.copy(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude,
+                        isLoading = false,
+                        errorMsg = ""
+                    )
+
+                    saveLocationToServer(
+                        latitude = loc.latitude,
+                        longitude = loc.longitude
+                    )
+                }
+            }
+
+            fusedClient.requestLocationUpdates(
+                request,
+                callback,
+                Looper.getMainLooper()
+            )
+
+            onDispose {
+                fusedClient.removeLocationUpdates(callback)
             }
         }
-
-        val request = LocationRequest.Builder(
-            Priority.PRIORITY_HIGH_ACCURACY,
-            5 * 60 * 1000L
-        ).setMinUpdateIntervalMillis(60 * 1000L).build()
-
-        val callback = object : LocationCallback() {
-            override fun onLocationResult(result: LocationResult) {
-                val loc = result.lastLocation ?: return
-                gpsState = gpsState.copy(
-                    latitude = loc.latitude,
-                    longitude = loc.longitude,
-                    isLoading = false
-                )
-            }
-        }
-
-        fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
     }
 
     return gpsState
@@ -215,7 +303,9 @@ fun LocationListScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📍", fontSize = 24.sp)
+
                         Spacer(modifier = Modifier.width(8.dp))
+
                         Text(
                             text = "GPS 위치 확인",
                             fontWeight = FontWeight.Bold,
@@ -258,7 +348,9 @@ fun LocationListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("📡", fontSize = 26.sp)
+
                         Spacer(modifier = Modifier.width(10.dp))
+
                         Text(
                             text = "실시간 위치를 확인하세요",
                             fontSize = 20.sp,
@@ -396,7 +488,52 @@ fun LocationDetailScreen(
 ) {
     val context = LocalContext.current
     var showCallDialog by remember { mutableStateOf(false) }
-    val gpsState = rememberGpsState()
+
+    val userId = user.id.toIntOrNull() ?: 0
+
+    var serverLatitude by remember { mutableStateOf(user.latitude) }
+    var serverLongitude by remember { mutableStateOf(user.longitude) }
+    var isLoadingLocation by remember { mutableStateOf(true) }
+    var locationError by remember { mutableStateOf("") }
+
+    var isLoadingSafeZone by remember { mutableStateOf(true) }
+    var isOutsideSafeZone by remember { mutableStateOf(false) }
+    var safeZoneError by remember { mutableStateOf("") }
+
+    LaunchedEffect(userId) {
+        isLoadingLocation = true
+        locationError = ""
+
+        LocationRepository.getCurrentLocation(userId)
+            .onSuccess { location ->
+                if (location != null) {
+                    serverLatitude = location.latitude
+                    serverLongitude = location.longitude
+                } else {
+                    locationError = "저장된 위치가 아직 없어요"
+                }
+            }
+            .onFailure {
+                locationError = "서버 위치 조회에 실패했어요"
+            }
+
+        isLoadingLocation = false
+    }
+
+    LaunchedEffect(userId) {
+        isLoadingSafeZone = true
+        safeZoneError = ""
+
+        LocationRepository.checkSafeZone(userId)
+            .onSuccess { outside ->
+                isOutsideSafeZone = outside
+            }
+            .onFailure {
+                safeZoneError = "생활 반경 확인에 실패했어요"
+            }
+
+        isLoadingSafeZone = false
+    }
 
     LaunchedEffect(Unit) {
         Configuration.getInstance().load(
@@ -433,17 +570,30 @@ fun LocationDetailScreen(
                     .padding(innerPadding)
             ) {
                 when {
-                    gpsState.isLoading -> LoadingBar()
-                    else -> StatusBar("현재 위치 표시 중 · 5분마다 업데이트", isError = false)
+                    isLoadingLocation -> {
+                        LoadingBar()
+                    }
+
+                    locationError.isNotBlank() -> {
+                        StatusBar(locationError, isError = true)
+                    }
+
+                    else -> {
+                        StatusBar("서버에서 최신 위치 조회 완료", isError = false)
+                    }
                 }
 
-                val displayLat = if (gpsState.isLoading) user.latitude else gpsState.latitude
-                val displayLng = if (gpsState.isLoading) user.longitude else gpsState.longitude
+                SafeZoneStatusCard(
+                    isLoading = isLoadingSafeZone,
+                    isOutside = isOutsideSafeZone,
+                    errorMessage = safeZoneError
+                )
 
                 HighlightLocationMap(
-                    latitude = displayLat,
-                    longitude = displayLng,
+                    latitude = serverLatitude,
+                    longitude = serverLongitude,
                     routePoints = user.routePoints,
+                    livingRadiusMeter = user.livingRadiusMeter,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -506,6 +656,154 @@ fun LocationDetailScreen(
             )
         }
     }
+}
+
+@Composable
+private fun SafeZoneStatusCard(
+    isLoading: Boolean,
+    isOutside: Boolean,
+    errorMessage: String
+) {
+    val isWarning = errorMessage.isNotBlank() || isOutside
+
+    val title = when {
+        isLoading -> "생활 반경 확인 중..."
+        errorMessage.isNotBlank() -> errorMessage
+        isOutside -> "생활 반경 이탈 감지"
+        else -> "생활 반경 내 위치"
+    }
+
+    val description = when {
+        isLoading -> "서버에서 안심구역 상태를 확인하고 있어요."
+        errorMessage.isNotBlank() -> "잠시 후 다시 확인해주세요."
+        isOutside -> "설정한 생활 반경을 벗어났어요. 보호자의 확인이 필요해요."
+        else -> "설정한 생활 반경 안에 있어요."
+    }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isWarning) Color(0xFFFFF5F5) else Color(0xFFF0F7EC),
+        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isWarning) "⚠️" else "✅",
+                fontSize = 22.sp
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isWarning) Color(0xFFD9534F) else Green600
+                )
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = description,
+                    fontSize = 12.sp,
+                    color = AppColor.textTertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HighlightLocationMap(
+    latitude: Double,
+    longitude: Double,
+    routePoints: List<GeoPoint>,
+    livingRadiusMeter: Double,
+    modifier: Modifier = Modifier
+) {
+    val currentPoint = GeoPoint(latitude, longitude)
+
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            MapView(ctx).apply {
+                setTileSource(TileSourceFactory.MAPNIK)
+                setMultiTouchControls(true)
+                isClickable = true
+                minZoomLevel = 4.0
+                maxZoomLevel = 20.0
+                controller.setZoom(17.0)
+                controller.setCenter(currentPoint)
+            }
+        },
+        update = { mapView ->
+            mapView.overlays.clear()
+
+            if (routePoints.size >= 2) {
+                mapView.overlays.add(
+                    Polyline().apply {
+                        setPoints(routePoints)
+                        outlinePaint.color = 0xFF1689D9.toInt()
+                        outlinePaint.strokeWidth = 13f
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+                    }
+                )
+            }
+
+            mapView.overlays.add(
+                Polygon().apply {
+                    points = Polygon.pointsAsCircle(currentPoint, livingRadiusMeter)
+                    fillColor = 0x2255C878
+                    strokeColor = 0xFF2FA84F.toInt()
+                    strokeWidth = 3f
+                }
+            )
+
+            mapView.overlays.add(
+                Polygon().apply {
+                    points = Polygon.pointsAsCircle(currentPoint, 85.0)
+                    fillColor = 0x334CAF50
+                    strokeColor = 0xFF2FA84F.toInt()
+                    strokeWidth = 4f
+                }
+            )
+
+            mapView.overlays.add(
+                Polygon().apply {
+                    points = Polygon.pointsAsCircle(currentPoint, 9.0)
+                    fillColor = 0xFFFFFFFF.toInt()
+                    strokeColor = 0xFFFFFFFF.toInt()
+                    strokeWidth = 2f
+                }
+            )
+
+            mapView.overlays.add(
+                Polygon().apply {
+                    points = Polygon.pointsAsCircle(currentPoint, 6.0)
+                    fillColor = 0xFF2FA84F.toInt()
+                    strokeColor = 0xFF1E7F3A.toInt()
+                    strokeWidth = 2f
+                }
+            )
+
+            val zoom = when {
+                livingRadiusMeter <= 500.0 -> 16.0
+                livingRadiusMeter <= 1500.0 -> 14.5
+                else -> 13.5
+            }
+
+            mapView.controller.setZoom(zoom)
+            mapView.controller.animateTo(currentPoint)
+            mapView.invalidate()
+        }
+    )
 }
 
 @Composable
@@ -572,83 +870,43 @@ private fun LoadingBar() {
     }
 }
 
-@Composable
-private fun HighlightLocationMap(
-    latitude: Double,
-    longitude: Double,
-    routePoints: List<GeoPoint>,
-    modifier: Modifier = Modifier
-) {
-    val currentPoint = GeoPoint(latitude, longitude)
-
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx ->
-            MapView(ctx).apply {
-                setTileSource(TileSourceFactory.MAPNIK)
-                setMultiTouchControls(true)
-                isClickable = true
-                minZoomLevel = 4.0
-                maxZoomLevel = 20.0
-                controller.setZoom(17.0)
-                controller.setCenter(currentPoint)
-            }
-        },
-        update = { mapView ->
-            mapView.overlays.clear()
-
-            if (routePoints.size >= 2) {
-                mapView.overlays.add(
-                    Polyline().apply {
-                        setPoints(routePoints)
-                        outlinePaint.color = 0xFF1689D9.toInt()
-                        outlinePaint.strokeWidth = 13f
-                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
-                    }
-                )
-            }
-
-            mapView.overlays.add(
-                Polygon().apply {
-                    points = Polygon.pointsAsCircle(currentPoint, 85.0)
-                    fillColor = 0x334CAF50
-                    strokeColor = 0xFF2FA84F.toInt()
-                    strokeWidth = 4f
-                }
-            )
-
-            mapView.overlays.add(
-                Polygon().apply {
-                    points = Polygon.pointsAsCircle(currentPoint, 9.0)
-                    fillColor = 0xFFFFFFFF.toInt()
-                    strokeColor = 0xFFFFFFFF.toInt()
-                    strokeWidth = 2f
-                }
-            )
-
-            mapView.overlays.add(
-                Polygon().apply {
-                    points = Polygon.pointsAsCircle(currentPoint, 6.0)
-                    fillColor = 0xFF2FA84F.toInt()
-                    strokeColor = 0xFF1E7F3A.toInt()
-                    strokeWidth = 2f
-                }
-            )
-
-            mapView.controller.setZoom(17.0)
-            mapView.controller.animateTo(currentPoint)
-            mapView.invalidate()
-        }
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationRouteScreen(
     user: LinkedUser,
     onBack: () -> Unit
 ) {
+    val today = remember {
+        SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
+    }
+
+    val userId = user.id.toIntOrNull() ?: 0
+
+    var routePoints by remember { mutableStateOf(user.routePoints) }
+    var isLoadingRoute by remember { mutableStateOf(true) }
+    var routeError by remember { mutableStateOf("") }
+
+    LaunchedEffect(userId) {
+        isLoadingRoute = true
+        routeError = ""
+
+        LocationRepository.getRoute(userId, today)
+            .onSuccess { points ->
+                routePoints = points.map {
+                    GeoPoint(it.latitude, it.longitude)
+                }
+
+                if (routePoints.isEmpty()) {
+                    routeError = "오늘 저장된 이동 경로가 없어요"
+                }
+            }
+            .onFailure {
+                routeError = "이동 경로 조회에 실패했어요"
+            }
+
+        isLoadingRoute = false
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -683,6 +941,33 @@ fun LocationRouteScreen(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                when {
+                    isLoadingRoute -> {
+                        LoadingBar()
+                    }
+
+                    routeError.isNotBlank() -> {
+                        StatusBar(routeError, isError = true)
+                    }
+
+                    else -> {
+                        StatusBar("서버에서 이동 경로 조회 완료", isError = false)
+                    }
+                }
+
+                if (routePoints.isNotEmpty()) {
+                    HighlightLocationMap(
+                        latitude = routePoints.last().latitude,
+                        longitude = routePoints.last().longitude,
+                        routePoints = routePoints,
+                        livingRadiusMeter = user.livingRadiusMeter,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+                }
+
                 SummaryRow("총 경로", "${user.totalDistanceKm} km")
                 SummaryRow("방문 장소", "${user.visitedPlaces} 곳")
                 SummaryRow("이동 시간", "${user.travelHours} 시간")
