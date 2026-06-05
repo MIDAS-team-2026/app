@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -146,7 +147,7 @@ fun LoginScreen(
                 .verticalScroll(scrollState)
                 .padding(horizontal = 24.dp)
         ) {
-            Spacer(modifier = Modifier.height(64.dp))
+            Spacer(modifier = Modifier.height(36.dp))
 
             // 앱 로고
             Box(
@@ -156,11 +157,11 @@ fun LoginScreen(
                 Image(
                     painter = painterResource(R.drawable.splash_logo),
                     contentDescription = "앱 로고",
-                    modifier = Modifier.size(180.dp)
+                    modifier = Modifier.size(200.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = stringResource(R.string.login_title),
@@ -169,7 +170,7 @@ fun LoginScreen(
                 fontWeight = FontWeight.Bold
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Text(
                 text = stringResource(R.string.login_subtitle),
@@ -177,7 +178,7 @@ fun LoginScreen(
                 color = AppColor.textTertiary
             )
 
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             AppOutlinedTextField(
                 value = phone,
@@ -227,7 +228,7 @@ fun LoginScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (isLoading) {
                 Box(
@@ -247,7 +248,7 @@ fun LoginScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -275,12 +276,12 @@ fun LoginScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 40.dp),
+                    .padding(bottom = 24.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -312,8 +313,8 @@ fun LoginScreen(
         CompositionLocalProvider(LocalFontSizeScale provides FontSizeLevel.XLARGE) {
             Surface(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .navigationBarsPadding()
+                    .align(Alignment.TopEnd)
+                    .statusBarsPadding()
                     .padding(16.dp)
                     .clickable(onClick = onAccessibility),
                 shape = RoundedCornerShape(14.dp),

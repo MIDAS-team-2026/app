@@ -235,7 +235,7 @@ fun AppNavHost(
                             navController.navigate(Routes.ForgotPassword)
                         },
                         onAccessibility = {
-                            navController.navigate(Routes.AccessibilitySettings)
+                            navController.navigate(Routes.LoginAccessibilitySettings)
                         }
                     )
                 }
@@ -505,7 +505,7 @@ fun AppNavHost(
                     if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
                         GuardianSettingsScreen(
                             userName = PrefsManager.from(context).getUserName(),
-                            weeklyScore = analysisViewModel.displayScore,
+                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                             streakDays = analysisViewModel.streakDays,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.Settings)
@@ -537,7 +537,7 @@ fun AppNavHost(
                     } else {
                         SettingsScreen(
                             userName = PrefsManager.from(context).getUserName(),
-                            weeklyScore = analysisViewModel.displayScore,
+                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                             streakDays = analysisViewModel.streakDays,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.Settings)
@@ -652,6 +652,17 @@ fun AppNavHost(
                             onPreviewTts = onPreviewTts
                         )
                     }
+                }
+
+                composable(Routes.LoginAccessibilitySettings) {
+                    GuardianAccessibilitySettingsScreen(
+                        onBack = {
+                            navController.popBackStackIfCurrent(Routes.LoginAccessibilitySettings)
+                        },
+                        onFontSizeChange = onFontSizeChange,
+                        onHighContrastChange = onHighContrastChange,
+                        onHapticChange = onHapticChange
+                    )
                 }
 
                 composable(Routes.VoiceChat) {

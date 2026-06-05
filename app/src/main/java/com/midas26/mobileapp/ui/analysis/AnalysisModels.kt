@@ -71,6 +71,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     var isInitialLoadDone by mutableStateOf(false)
         private set
 
+    /**
+     * 분석 화면 진입 시 로딩 화면을 보여줄지 여부.
+     * 앱 최초 진입(init) 또는 음성 대화 후 refresh() 시에만 true.
+     * 단순 화면 재진입 시에는 false 유지 → 로딩 화면 생략.
+     */
+    var showLoadingScreen by mutableStateOf(true)
+        private set
+
     var networkError by mutableStateOf<String?>(null)
         private set
 
@@ -85,12 +93,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private var recallScore    by mutableStateOf<Float?>(null)
     private var analyzedAt     by mutableStateOf<String?>(null)
 
+    /** 오늘 날짜 분석 데이터가 실제로 존재하는지 여부 */
+    var hasTodayData by mutableStateOf(false)
+        private set
+
     init {
         viewModelScope.launch { doLoad() }
     }
 
     fun refresh() {
         isInitialLoadDone = false
+        showLoadingScreen = true
         networkError = null
         viewModelScope.launch { doLoad() }
     }
@@ -98,6 +111,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     fun loadSummary() {
         viewModelScope.launch { doLoadSummary() }
     }
+
+    fun dismissLoadingScreen() { showLoadingScreen = false }
 
     private suspend fun doLoad() {
         val userId = prefs.getUserId()
@@ -121,12 +136,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             .onSuccess { resp ->
                 resp.body()?.data?.let { body ->
                     applyBody(body)
+                    hasTodayData = true
                     loaded = true
                 }
             }
             .onFailure { e -> networkError = toErrorCode(e) }
 
         if (!loaded && networkError == null) {
+            hasTodayData = false
             runCatching { api.getLatestSummary(userId) }
                 .onSuccess { resp ->
                     resp.body()?.data?.let { body -> applyBody(body) }
@@ -208,10 +225,39 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     /** 헤더 배지 — 위험 등급 */
     val displayRiskLevel: String get() = selectedDayScore?.riskLevel ?: riskLevel ?: "─"
 
+    /**
+     * 그래프에서 강조할 인덱스.
+     * - 날짜 직접 선택 중: 해당 날짜의 인덱스
+     * - 오늘 데이터 있음: 마지막 인덱스(오늘)
+     * - fallback(latest): latest의 날짜가 그래프 범위 안이면 해당 인덱스, 밖이면 -1(강조 없음)
+     */
+    val graphHighlightIndex: Int
+        get() {
+            // 드래그 중: 현재 호버 중인 날짜 우선
+            val dragDate = dragHighlightDate
+            if (dragDate != null) {
+                val idx = graphPoints.indexOfFirst { it.date?.startsWith(dragDate.take(10)) == true }
+                if (idx >= 0) return idx
+            }
+            // 날짜 직접 선택 중
+            val selDate = selectedDayScore?.date
+            if (selDate != null) {
+                val idx = graphPoints.indexOfFirst { it.date?.startsWith(selDate.take(10)) == true }
+                return if (idx >= 0) idx else graphPoints.lastIndex
+            }
+            // 오늘 데이터가 있으면 오늘(마지막) 강조
+            if (hasTodayData) return graphPoints.lastIndex
+            // fallback: latest 날짜가 그래프 안에 있는지 확인
+            val latestDate = analyzedAt?.take(10) ?: return -1
+            val idx = graphPoints.indexOfFirst { it.date?.startsWith(latestDate) == true }
+            return if (idx >= 0) idx else -1
+        }
+
     /** 헤더 날짜 라벨 */
     val displayDateLabel: String
         get() {
-            if (isViewingToday) return "오늘의 분석 결과"
+            dragPreviewDateLabel?.let { return it }
+            if (isViewingToday && hasTodayData) return "오늘의 분석 결과"
             val raw = selectedDayScore?.date ?: analyzedAt ?: return "분석 결과"
             return try {
                 val date = LocalDate.parse(raw.substring(0, 10))
@@ -338,6 +384,53 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun clearSelectedDay() { selectedDayScore = null }
+
+    // ── 그래프 롱프레스 드래그 ─────────────────────────────────────────────────
+
+    /** 현재 그래프를 롱프레스+드래그 중인지 여부 */
+    var isDraggingGraph by mutableStateOf(false)
+        private set
+
+    /** 드래그 중 헤더에 미리 보여줄 날짜 문자열 (점수는 바뀌지 않음) */
+    var dragPreviewDateLabel by mutableStateOf<String?>(null)
+        private set
+
+    var dragHighlightDate by mutableStateOf<String?>(null)
+        private set
+
+    fun onGraphDragStart() {
+        isDraggingGraph = true
+    }
+
+    fun onGraphDragMove(dateStr: String?) {
+        dragHighlightDate = dateStr
+        dragPreviewDateLabel = dateStr?.let { formatDragLabel(it) }
+    }
+
+    fun onGraphDragEnd(dateStr: String?) {
+        isDraggingGraph = false
+        dragHighlightDate = null
+        dragPreviewDateLabel = null
+        onGraphPointTapped(dateStr)
+    }
+
+    fun onGraphDragCancel() {
+        isDraggingGraph = false
+        dragHighlightDate = null
+        dragPreviewDateLabel = null
+    }
+
+    private fun formatDragLabel(dateStr: String): String {
+        return try {
+            val d = LocalDate.parse(dateStr.take(10))
+            val today = LocalDate.now()
+            when {
+                d == today -> "오늘의 분석 결과"
+                d.year != today.year -> "${d.year}년 ${d.monthValue}월 ${d.dayOfMonth}일 분석 결과"
+                else -> "${d.monthValue}월 ${d.dayOfMonth}일 분석 결과"
+            }
+        } catch (e: Exception) { "분석 결과" }
+    }
 
     fun selectRange(range: TrendRange) { graphRange = range }
 
