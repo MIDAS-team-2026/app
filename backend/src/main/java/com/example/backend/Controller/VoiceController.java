@@ -1,6 +1,8 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
+import com.example.backend.Model.DTO.analysis.AiReplyRequestDTO;
+import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.analysis.SttResponseDTO;
 import com.example.backend.Model.DTO.analysis.SttUpdateRequestDTO;

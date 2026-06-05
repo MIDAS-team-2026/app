@@ -3,6 +3,7 @@ package com.example.backend.Service;
 import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
+import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
 import com.example.backend.Model.DTO.analysis.RiskAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.SessionAnalysisSummaryResponseDTO;
 import com.example.backend.Model.Entity.analysis.RiskAnalysisResult;
@@ -13,9 +14,9 @@ import com.example.backend.Model.Entity.chat.ChatSession;
 import com.example.backend.Model.Entity.recall.RecallAnalysisResult;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.*;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,17 +45,15 @@ public class AiAnalysisService {
         AudioRecord record = audioRecordRepository.findById(dto.getRecordId())
                 .orElseThrow(() -> new IllegalArgumentException("녹음 기록을 찾을 수 없습니다."));
 
-        // STT 텍스트 업데이트
         if (dto.getTranscriptText() != null) {
             record.setTranscriptText(dto.getTranscriptText());
         }
 
-        // 음성 특징(Speech) 분석 결과 저장
         if (dto.getSpeechAnalysis() != null) {
             RecordAnalysisDTO.SpeechAnalysisData speechDto = dto.getSpeechAnalysis();
             SpeechAnalysisResult speechResult = new SpeechAnalysisResult();
 
-            speechResult.setAudioRecord(record); // FK 연결
+            speechResult.setAudioRecord(record);
             speechResult.setPauseCount(speechDto.getPauseCount());
             speechResult.setTotalPauseDuration(speechDto.getTotalPauseDuration());
             speechResult.setAvgPauseDuration(speechDto.getAvgPauseDuration());
@@ -66,7 +65,6 @@ public class AiAnalysisService {
             speechResult.setSpectralCentroidMean(speechDto.getSpectralCentroidMean());
             speechResult.setSpectralCentroidStd(speechDto.getSpectralCentroidStd());
 
-            // === MFCC Mean 매핑 (1 ~ 13) ===
             speechResult.setMfcc1Mean(speechDto.getMfcc1Mean());
             speechResult.setMfcc2Mean(speechDto.getMfcc2Mean());
             speechResult.setMfcc3Mean(speechDto.getMfcc3Mean());
@@ -81,7 +79,6 @@ public class AiAnalysisService {
             speechResult.setMfcc12Mean(speechDto.getMfcc12Mean());
             speechResult.setMfcc13Mean(speechDto.getMfcc13Mean());
 
-            // === MFCC Std 매핑 (1 ~ 13) ===
             speechResult.setMfcc1Std(speechDto.getMfcc1Std());
             speechResult.setMfcc2Std(speechDto.getMfcc2Std());
             speechResult.setMfcc3Std(speechDto.getMfcc3Std());
@@ -110,12 +107,11 @@ public class AiAnalysisService {
             speechAnalysisResultRepository.save(speechResult);
         }
 
-        // 텍스트(Text) 분석 결과 저장
         if (dto.getTextAnalysis() != null) {
             RecordAnalysisDTO.TextAnalysisData textDto = dto.getTextAnalysis();
             TextAnalysisResult textResult = new TextAnalysisResult();
 
-            textResult.setAudioRecord(record); // FK 연결
+            textResult.setAudioRecord(record);
             textResult.setWordCount(textDto.getWordCount());
             textResult.setSentenceCount(textDto.getSentenceCount());
             textResult.setAvgSentenceLength(textDto.getAvgSentenceLength());
@@ -170,9 +166,6 @@ public class AiAnalysisService {
 
         riskAnalysisRepository.save(result);
 
-        // --- 알림 로직 추가 ---
-        // 임시 기준 점수 70점 설정 -> 추후 결정한 risk score로 교체
-        
         if (dto.getFinalRiskScore() >= 70.0) {
             User patient = session.getUser();
             String title = "인지 건강 위험 알림";
@@ -316,15 +309,37 @@ public class AiAnalysisService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
+    public List<RecentRiskAnalysisResponseDTO> getRecent7DaysAnalysis(Integer userId) {
+        LocalDateTime startDate = LocalDateTime.now().minusDays(7);
+
+        List<RiskAnalysisResult> results =
+                riskAnalysisRepository.findByChatSession_User_IdAndAnalyzedAtAfterOrderByAnalyzedAtDesc(
+                        userId,
+                        startDate
+                );
+
+        return results.stream()
+                .map(risk -> RecentRiskAnalysisResponseDTO.builder()
+                        .date(risk.getAnalyzedAt().toLocalDate())
+                        .sessionId(risk.getChatSession().getId())
+                        .finalRiskScore(risk.getFinalRiskScore())
+                        .riskLevel(risk.getRiskLevel())
+                        .speechScore(risk.getSpeechScore())
+                        .textScore(risk.getTextScore())
+                        .recallScore(risk.getRecallScore())
+                        .analyzedAt(risk.getAnalyzedAt())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public void completeSessionAndTriggerBatch(Long sessionId) {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        // 임시 주소 (파이썬 분석 주소로 추후 수정)
         String pythonServerUrl = "http://localhost:8000/api/ai/batch-analysis";
 
-        // 파이썬에게 줄 데이터 조립
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("sessionId", sessionId);
         requestBody.put("userId", session.getUser().getId());

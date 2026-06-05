@@ -1,12 +1,19 @@
 import os
 from typing import Dict, List
 
+import requests
 from openai import OpenAI
 
 
 YNU_API_KEY = os.getenv("YNU_API_KEY")
+
+if not YNU_API_KEY:
+    raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
+
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
+
+BASE_URL = "http://localhost:8080"
 
 
 client = OpenAI(
@@ -104,6 +111,30 @@ question: 자연스러운 회상 질문
     }
 
 
+def save_recall_question_to_spring(
+    user_id: int,
+    memory_point: str,
+    question_text: str,
+    base_url: str = BASE_URL,
+) -> Dict:
+    body = {
+        "userId": user_id,
+        "questionText": question_text,
+        "questionType": "RECALL",
+        "category": "CONVERSATION",
+        "expectedAnswer": memory_point,
+    }
+
+    response = requests.post(
+        f"{base_url}/api/recall/questions",
+        json=body,
+        timeout=10,
+    )
+
+    response.raise_for_status()
+    return response.json()
+
+
 if __name__ == "__main__":
     sample_conversation = [
         "오늘 아들이랑 통화했어요.",
@@ -115,3 +146,11 @@ if __name__ == "__main__":
 
     print("memoryPoint:", result["memoryPoint"])
     print("question:", result["question"])
+
+    saved_question = save_recall_question_to_spring(
+        user_id=1,
+        memory_point=result["memoryPoint"],
+        question_text=result["question"],
+    )
+
+    print("savedQuestion:", saved_question)

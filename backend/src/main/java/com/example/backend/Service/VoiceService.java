@@ -1,5 +1,6 @@
 package com.example.backend.Service;
 
+import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
 import com.example.backend.Model.Entity.chat.AudioRecord;
@@ -9,6 +10,9 @@ import com.example.backend.Model.Repository.AiAnalysisRepository.AudioRecordRepo
 import com.example.backend.Model.Repository.AiAnalysisRepository.ChatSessionRepository;
 import com.example.backend.Model.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -16,15 +20,21 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class VoiceService {
 
     private static final String ANSWER_ROLE_INITIAL = "INITIAL";
     private static final String ANSWER_ROLE_RECALL = "RECALL";
+
+    @Value("${ai.python.url:http://localhost:8000}")
+    private String pythonBaseUrl;
 
     private final S3Service s3Service;
     private final AudioRecordRepository audioRecordRepository;
@@ -71,6 +81,9 @@ public class VoiceService {
         AudioRecord savedRecord = audioRecordRepository.save(record);
         STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
 
+        // Python AI에 답변 생성 요청 (비동기 — 업로드 응답에 영향 없음)
+        triggerAiReply(savedRecord.getId(), sessionId, userId);
+
         return VoiceResponseDTO.builder()
                 .audioRecordId(savedRecord.getId())
                 .audioFilePath(savedRecord.getAudioFilePath())
@@ -78,6 +91,20 @@ public class VoiceService {
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
+    }
+
+    /** Python FastAPI 서버에 AI 답변 생성 요청. 실패해도 업로드 흐름에 영향 없음. */
+    @Async
+    public void triggerAiReply(Long recordId, Long sessionId, Integer userId) {
+        try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("recordId", recordId);
+            body.put("sessionId", sessionId);
+            body.put("userId", userId);
+            restTemplate.postForEntity(pythonBaseUrl + "/process", body, String.class);
+        } catch (Exception e) {
+            log.warn("Python AI 답변 생성 요청 실패 recordId={}: {}", recordId, e.getMessage());
+        }
     }
 
     @Transactional
@@ -88,9 +115,27 @@ public class VoiceService {
         audioRecordRepository.save(record);
     }
 
+    /** 특정 recordId에 대해 수동으로 STT 변환 수행 */
     @Transactional
     public String transcribeRecord(Long recordId) {
         return sttService.transcribeAndSave(recordId).getTranscriptText();
+    }
+
+    /** Python AI가 답변 생성 완료 후 호출 — recordId에 해당하는 레코드에 replyText 저장. */
+    @Transactional
+    public void saveAiReply(Long recordId, String replyText) {
+        AudioRecord record = audioRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
+        record.setAiReplyText(replyText);
+        audioRecordRepository.save(record);
+    }
+
+    /** 앱 폴링용 — replyText가 null이면 아직 생성 중. */
+    @Transactional(readOnly = true)
+    public AiReplyResponseDTO getAiReply(Long recordId) {
+        AudioRecord record = audioRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
+        return new AiReplyResponseDTO(record.getId(), record.getAiReplyText());
     }
 
     @Transactional(readOnly = true)

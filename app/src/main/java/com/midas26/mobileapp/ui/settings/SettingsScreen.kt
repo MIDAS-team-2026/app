@@ -17,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -273,9 +272,7 @@ fun SettingsScreen(
                             title = "알림 시간",
                             hour = notifHour,
                             minute = notifMinute,
-                            onClick = {
-                                showTimePicker = true
-                            }
+                            onClick = { showTimePicker = true }
                         )
                     }
                 }
@@ -293,17 +290,21 @@ fun SettingsScreen(
 
             SettingsSection(title = "지원") {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "이용 약관", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "문의하기", onClick = {})
             }
 
@@ -696,77 +697,6 @@ private fun StatItem(
 }
 
 @Composable
-private fun ProfileCard(
-    userName: String,
-    role: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(64.dp),
-                shape = CircleShape,
-                color = BrandWhite
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.char1),
-                    contentDescription = "프로필 이미지",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Green50
-                ) {
-                    Text(
-                        text = role,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.accentDark,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = AppColor.textTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
 private fun SettingsSection(
     title: String,
     content: @Composable () -> Unit
@@ -983,10 +913,5 @@ private fun formatNotifTime(hour: Int, minute: Int): String {
 
 private fun startLocationService(context: Context) {
     val intent = Intent(context, LocationForegroundService::class.java)
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
+    context.startForegroundService(intent)
 }

@@ -22,9 +22,18 @@ keystore.properties
 *.keystore
 *.jks
 
+# Firebase 서비스 계정 키 (민감 정보)
+firebase-adminsdk.json
+google-services.json
+
 # 형섭 작업용
 private/
 /private/
 
 # Claude Code 내부 데이터 (worktree, 세션 등)
 .claude/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo

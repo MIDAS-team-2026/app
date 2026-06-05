@@ -13,11 +13,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -251,61 +248,22 @@ fun AnalysisResultScreen(
         }
 
         // ── 본문 ─────────────────────────────────────────────────────────
-        val scrollState = rememberScrollState()
 
-        // 그래프 카드 높이를 측정하기 위한 상태
+        // 그래프 카드 실제 높이 (항목 카드 영역 상단 오프셋 동기화용)
         var graphCardHeightPx by remember { mutableStateOf(0) }
+        val density = LocalDensity.current
+        val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
 
         Box(modifier = Modifier.fillMaxSize()) {
+            // ① 항목 카드 영역 — 그래프 카드 아래부터 화면 끝까지, 스크롤 없음
+            val items = viewModel.todayItems
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(scrollState)
+                    .padding(top = 12.dp + graphCardHeightDp)
                     .padding(horizontal = 16.dp)
-                    .padding(top = 12.dp, bottom = 24.dp)
             ) {
-                // 주간 그래프 카드
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onGloballyPositioned { coords -> graphCardHeightPx = coords.size.height },
-                    shape = RoundedCornerShape(20.dp),
-                    color = BrandWhite,
-                    border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
-                ) {
-                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text(
-                            text = "이번 주 추이",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = AppColor.textPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = "최근 7일 · 길게 눌러 날짜 탐색",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppColor.textTertiary
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        WeeklyLineChart(
-                            points = viewModel.graphPoints,
-                            highlightIndex = viewModel.graphHighlightIndex,
-                            onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
-                            onDragStart = { viewModel.onGraphDragStart() },
-                            onDragMove = { date -> viewModel.onGraphDragMove(date) },
-                            onDragEnd = { date -> viewModel.onGraphDragEnd(date) },
-                            onDragCancel = { viewModel.onGraphDragCancel() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(160.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // 4 항목 카드 (2×2) — 드래그 중 스크림에 가려짐
-                val items = viewModel.todayItems
+                Spacer(modifier = Modifier.weight(2f))  // 그래프 ↔ 상단 Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -313,7 +271,7 @@ fun AnalysisResultScreen(
                     ItemCard(item = items[0], modifier = Modifier.weight(1f))
                     ItemCard(item = items[1], modifier = Modifier.weight(1f))
                 }
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.weight(1f))  // 상단 Row ↔ 하단 Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -321,22 +279,56 @@ fun AnalysisResultScreen(
                     ItemCard(item = items[2], modifier = Modifier.weight(1f))
                     ItemCard(item = items[3], modifier = Modifier.weight(1f))
                 }
+                Spacer(modifier = Modifier.weight(2f))  // 하단 Row ↔ 네비게이션
             }
 
-            // 본문 스크림 — 그래프 카드 아래 영역만 덮음
-            val density = LocalDensity.current
-            val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
+            // ② 전체 스크림 — 화면 전체를 덮음
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 12.dp + graphCardHeightDp)
                     .background(Color.Black.copy(alpha = scrimAlpha))
             )
 
-            VerticalScrollbar(
-                state = scrollState,
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
+            // ③ 그래프 카드 — 스크림 위에 항상 밝게 떠 있음 (Box에서 마지막 = 최상위)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 12.dp)
+                    .onGloballyPositioned { coords -> graphCardHeightPx = coords.size.height },
+                shape = RoundedCornerShape(20.dp),
+                color = BrandWhite,
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    Text(
+                        text = "이번 주 추이",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = AppColor.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "최근 7일 · 길게 눌러 날짜 탐색",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColor.textTertiary
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    WeeklyLineChart(
+                        points = viewModel.graphPoints,
+                        highlightIndex = viewModel.graphHighlightIndex,
+                        onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
+                        onDragStart = { viewModel.onGraphDragStart() },
+                        onDragMove = { date -> viewModel.onGraphDragMove(date) },
+                        onDragEnd = { date -> viewModel.onGraphDragEnd(date) },
+                        onDragCancel = { viewModel.onGraphDragCancel() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(160.dp)
+                    )
+                }
+            }
+
         } // 본문 Box
     } // Column
     } // Crossfade
@@ -344,42 +336,6 @@ fun AnalysisResultScreen(
 
 // ── 주간 그래프 카드 ────────────────────────────────────────────────────────
 
-@Composable
-private fun WeeklyChartCard(points: List<DailyScore>) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-            Text(
-                text = "이번 주 추이",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            WeeklyLineChart(
-                points = points,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DayDetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = AppColor.textTertiary)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppColor.textPrimary)
-    }
-}
 
 @Composable
 private fun WeeklyLineChart(
@@ -591,18 +547,13 @@ private fun WeeklyLineChart(
 @Composable
 private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
     val fontScale = LocalFontSizeScale.current.scale
-    val accent = when (item.trend) {
-        AnalysisItem.Trend.Up     -> AppColor.accentDark
-        AnalysisItem.Trend.Down   -> AppColor.accent
-        AnalysisItem.Trend.Steady -> AppColor.textTertiary
-    }
     Surface(
-        modifier = modifier.height((126 * fontScale).dp),
+        modifier = modifier,
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
     ) {
-        Column(modifier = Modifier.padding(14.dp).fillMaxSize()) {
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = item.icon,
@@ -618,18 +569,12 @@ private fun ItemCard(item: AnalysisItem, modifier: Modifier = Modifier) {
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = item.valueText,
-                fontSize = (28 * fontScale).sp,
+                fontSize = (26 * fontScale).sp,
                 color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = item.trendText,
-                style = MaterialTheme.typography.bodySmall,
-                color = accent,
-                fontWeight = FontWeight.SemiBold
             )
         }
     }

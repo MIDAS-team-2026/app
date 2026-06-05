@@ -10,8 +10,16 @@ import java.util.Optional;
 
 @Repository
 public interface RiskAnalysisRepository extends JpaRepository<RiskAnalysisResult, Long> {
+
     Optional<RiskAnalysisResult> findByChatSession_Id(Long sessionId);
+
     Optional<RiskAnalysisResult> findTopByChatSession_User_IdOrderByAnalyzedAtDesc(Integer userId);
+
     List<RiskAnalysisResult> findByChatSession_User_IdAndAnalyzedAtBetween(
             Integer userId, LocalDateTime start, LocalDateTime end);
+
+    List<RiskAnalysisResult> findByChatSession_User_IdAndAnalyzedAtAfterOrderByAnalyzedAtDesc(
+            Integer userId,
+            LocalDateTime startDate
+    );
 }
