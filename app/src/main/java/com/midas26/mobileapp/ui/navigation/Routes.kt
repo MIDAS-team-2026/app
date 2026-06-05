@@ -15,6 +15,7 @@ object Routes {
     const val Onboarding           = "onboarding"
     const val OnboardingPermission = "onboarding_permission"
     const val Login                = "login"
+    const val LoginForm            = "login_form"
     const val SignupRole  = "signup_role"
 
     // Signup info: role 을 path arg 로 전달

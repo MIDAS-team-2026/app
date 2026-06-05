@@ -27,6 +27,7 @@ import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
+import com.midas26.mobileapp.ui.auth.LoginFormScreen
 import com.midas26.mobileapp.ui.auth.LoginScreen
 import com.midas26.mobileapp.ui.auth.PhoneVerificationScreen
 import com.midas26.mobileapp.ui.auth.ResetPasswordScreen
@@ -215,6 +216,20 @@ fun AppNavHost(
 
                 composable(Routes.Login) {
                     LoginScreen(
+                        onNavigateToLoginForm = {
+                            navController.navigate(Routes.LoginForm)
+                        },
+                        onNavigateToSignup = {
+                            navController.navigate(Routes.SignupRole)
+                        },
+                        onAccessibility = {
+                            navController.navigate(Routes.LoginAccessibilitySettings)
+                        }
+                    )
+                }
+
+                composable(Routes.LoginForm) {
+                    LoginFormScreen(
                         onNavigateToHome = {
                             analysisViewModel.refresh()
                             val home =
@@ -223,19 +238,15 @@ fun AppNavHost(
                                 } else {
                                     Routes.UserHome
                                 }
-
                             navController.navigate(home) {
                                 popUpTo(Routes.Login) { inclusive = true }
                             }
                         },
-                        onNavigateToSignup = {
-                            navController.navigate(Routes.SignupRole)
+                        onBack = {
+                            navController.popBackStack()
                         },
                         onForgotPassword = {
                             navController.navigate(Routes.ForgotPassword)
-                        },
-                        onAccessibility = {
-                            navController.navigate(Routes.LoginAccessibilitySettings)
                         }
                     )
                 }
