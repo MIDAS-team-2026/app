@@ -336,42 +336,6 @@ fun AnalysisResultScreen(
 
 // ── 주간 그래프 카드 ────────────────────────────────────────────────────────
 
-@Composable
-private fun WeeklyChartCard(points: List<DailyScore>) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-            Text(
-                text = "이번 주 추이",
-                style = MaterialTheme.typography.titleSmall,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            WeeklyLineChart(
-                points = points,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun DayDetailRow(label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = AppColor.textTertiary)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppColor.textPrimary)
-    }
-}
 
 @Composable
 private fun WeeklyLineChart(

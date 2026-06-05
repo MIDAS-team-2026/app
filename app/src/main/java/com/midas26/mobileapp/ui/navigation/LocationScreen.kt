@@ -94,12 +94,8 @@ data class LinkedUser(
     val timeline: List<TimelineItem>,
     val latitude: Double = 37.5700,
     val longitude: Double = 126.9820,
-    val routePoints: List<GeoPoint> = emptyList(),
-    val livingRadiusMeter: Double = 500.0,
-    val status: UserStatus = UserStatus.NORMAL
+    val routePoints: List<GeoPoint> = emptyList()
 )
-
-enum class UserStatus { NORMAL, WARNING }
 
 data class TimelineItem(
     val time: String,
@@ -139,9 +135,7 @@ val sampleUsers = listOf(
             GeoPoint(37.5682, 126.9795),
             GeoPoint(37.5691, 126.9808),
             GeoPoint(37.5700, 126.9820)
-        ),
-        livingRadiusMeter = 500.0,
-        status = UserStatus.NORMAL
+        )
     ),
     LinkedUser(
         id = "2",
@@ -163,132 +157,10 @@ val sampleUsers = listOf(
             GeoPoint(37.5738, 126.9340),
             GeoPoint(37.5746, 126.9350),
             GeoPoint(37.5760, 126.9368)
-        ),
-        livingRadiusMeter = 1500.0,
-        status = UserStatus.WARNING
+        )
     )
 )
 
-@SuppressLint("MissingPermission")
-@Composable
-fun rememberGpsState(
-    userId: Int = 5,
-    saveToServer: Boolean = true
-): GpsState {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var gpsState by remember { mutableStateOf(GpsState()) }
-
-    fun saveLocationToServer(latitude: Double, longitude: Double) {
-        if (!saveToServer) return
-
-        scope.launch {
-            LocationRepository.saveLocation(
-                userId = userId,
-                latitude = latitude,
-                longitude = longitude
-            )
-        }
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { perms ->
-        val granted =
-            perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-        gpsState = gpsState.copy(
-            hasPermission = granted,
-            isLoading = !granted,
-            errorMsg = if (!granted) "위치 권한이 필요해요" else ""
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        val fineGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
-            gpsState = gpsState.copy(hasPermission = true)
-        } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-        }
-    }
-
-    DisposableEffect(gpsState.hasPermission) {
-        if (!gpsState.hasPermission) {
-            onDispose { }
-        } else {
-            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-
-            fusedClient.lastLocation.addOnSuccessListener { location ->
-                location?.let {
-                    gpsState = gpsState.copy(
-                        latitude = it.latitude,
-                        longitude = it.longitude,
-                        isLoading = false,
-                        errorMsg = ""
-                    )
-
-                    saveLocationToServer(
-                        latitude = it.latitude,
-                        longitude = it.longitude
-                    )
-                }
-            }
-
-            val request = LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                5 * 60 * 1000L
-            )
-                .setMinUpdateIntervalMillis(60 * 1000L)
-                .build()
-
-            val callback = object : LocationCallback() {
-                override fun onLocationResult(result: LocationResult) {
-                    val loc = result.lastLocation ?: return
-
-                    gpsState = gpsState.copy(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude,
-                        isLoading = false,
-                        errorMsg = ""
-                    )
-
-                    saveLocationToServer(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude
-                    )
-                }
-            }
-
-            fusedClient.requestLocationUpdates(
-                request,
-                callback,
-                Looper.getMainLooper()
-            )
-
-            onDispose {
-                fusedClient.removeLocationUpdates(callback)
-            }
-        }
-    }
-
-    return gpsState
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -381,10 +253,6 @@ private fun UserLocationCard(
     user: LinkedUser,
     onClick: () -> Unit
 ) {
-    val isWarning = user.status == UserStatus.WARNING
-    val borderColor = if (isWarning) Color(0xFFFFB3B3) else Color(0xFFB3D4F5)
-    val bgColor = if (isWarning) Color(0xFFFFF5F5) else Color.White
-
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -393,11 +261,11 @@ private fun UserLocationCard(
             .clickable { onClick() }
             .border(
                 width = 1.5.dp,
-                color = borderColor,
+                color = Color(0xFFB3D4F5),
                 shape = RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),
-        color = bgColor
+        color = Color.White
     ) {
         Row(
             modifier = Modifier
@@ -449,32 +317,12 @@ private fun UserLocationCard(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = if (isWarning) Color(0xFFFFB3B3) else Color(0xFFB3D4F5)
-                ) {
-                    Text(
-                        text = if (isWarning) "주의" else "양호",
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isWarning) Color(0xFFD9534F) else Color(0xFF1A6FAA),
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = AppColor.textTertiary,
-                    modifier = Modifier.size(26.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size(26.dp)
+            )
         }
     }
 }
@@ -496,10 +344,6 @@ fun LocationDetailScreen(
     var isLoadingLocation by remember { mutableStateOf(true) }
     var locationError by remember { mutableStateOf("") }
 
-    var isLoadingSafeZone by remember { mutableStateOf(true) }
-    var isOutsideSafeZone by remember { mutableStateOf(false) }
-    var safeZoneError by remember { mutableStateOf("") }
-
     LaunchedEffect(userId) {
         isLoadingLocation = true
         locationError = ""
@@ -518,21 +362,6 @@ fun LocationDetailScreen(
             }
 
         isLoadingLocation = false
-    }
-
-    LaunchedEffect(userId) {
-        isLoadingSafeZone = true
-        safeZoneError = ""
-
-        LocationRepository.checkSafeZone(userId)
-            .onSuccess { outside ->
-                isOutsideSafeZone = outside
-            }
-            .onFailure {
-                safeZoneError = "생활 반경 확인에 실패했어요"
-            }
-
-        isLoadingSafeZone = false
     }
 
     LaunchedEffect(Unit) {
@@ -583,17 +412,10 @@ fun LocationDetailScreen(
                     }
                 }
 
-                SafeZoneStatusCard(
-                    isLoading = isLoadingSafeZone,
-                    isOutside = isOutsideSafeZone,
-                    errorMessage = safeZoneError
-                )
-
                 HighlightLocationMap(
                     latitude = serverLatitude,
                     longitude = serverLongitude,
                     routePoints = user.routePoints,
-                    livingRadiusMeter = user.livingRadiusMeter,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
@@ -659,72 +481,10 @@ fun LocationDetailScreen(
 }
 
 @Composable
-private fun SafeZoneStatusCard(
-    isLoading: Boolean,
-    isOutside: Boolean,
-    errorMessage: String
-) {
-    val isWarning = errorMessage.isNotBlank() || isOutside
-
-    val title = when {
-        isLoading -> "생활 반경 확인 중..."
-        errorMessage.isNotBlank() -> errorMessage
-        isOutside -> "생활 반경 이탈 감지"
-        else -> "생활 반경 내 위치"
-    }
-
-    val description = when {
-        isLoading -> "서버에서 안심구역 상태를 확인하고 있어요."
-        errorMessage.isNotBlank() -> "잠시 후 다시 확인해주세요."
-        isOutside -> "설정한 생활 반경을 벗어났어요. 보호자의 확인이 필요해요."
-        else -> "설정한 생활 반경 안에 있어요."
-    }
-
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = if (isWarning) Color(0xFFFFF5F5) else Color(0xFFF0F7EC),
-        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (isWarning) "⚠️" else "✅",
-                fontSize = 22.sp
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isWarning) Color(0xFFD9534F) else Green600
-                )
-
-                Spacer(modifier = Modifier.height(3.dp))
-
-                Text(
-                    text = description,
-                    fontSize = 12.sp,
-                    color = AppColor.textTertiary
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun HighlightLocationMap(
     latitude: Double,
     longitude: Double,
     routePoints: List<GeoPoint>,
-    livingRadiusMeter: Double,
     modifier: Modifier = Modifier
 ) {
     val currentPoint = GeoPoint(latitude, longitude)
@@ -759,15 +519,6 @@ private fun HighlightLocationMap(
 
             mapView.overlays.add(
                 Polygon().apply {
-                    points = Polygon.pointsAsCircle(currentPoint, livingRadiusMeter)
-                    fillColor = 0x2255C878
-                    strokeColor = 0xFF2FA84F.toInt()
-                    strokeWidth = 3f
-                }
-            )
-
-            mapView.overlays.add(
-                Polygon().apply {
                     points = Polygon.pointsAsCircle(currentPoint, 85.0)
                     fillColor = 0x334CAF50
                     strokeColor = 0xFF2FA84F.toInt()
@@ -793,13 +544,7 @@ private fun HighlightLocationMap(
                 }
             )
 
-            val zoom = when {
-                livingRadiusMeter <= 500.0 -> 16.0
-                livingRadiusMeter <= 1500.0 -> 14.5
-                else -> 13.5
-            }
-
-            mapView.controller.setZoom(zoom)
+            mapView.controller.setZoom(17.0)
             mapView.controller.animateTo(currentPoint)
             mapView.invalidate()
         }
@@ -960,7 +705,6 @@ fun LocationRouteScreen(
                         latitude = routePoints.last().latitude,
                         longitude = routePoints.last().longitude,
                         routePoints = routePoints,
-                        livingRadiusMeter = user.livingRadiusMeter,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(260.dp)

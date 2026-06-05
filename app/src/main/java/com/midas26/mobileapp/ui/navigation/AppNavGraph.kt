@@ -47,14 +47,9 @@ import com.midas26.mobileapp.ui.home.UserMenu
 import com.midas26.mobileapp.ui.legal.PrivacyScreen
 import com.midas26.mobileapp.ui.onboarding.OnboardingScreen
 import com.midas26.mobileapp.ui.permission.PermissionScreen
-import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
-import com.midas26.mobileapp.ui.recall.RecallResultScreen
-import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
-import com.midas26.mobileapp.ui.settings.AddressRegisterScreen
 import com.midas26.mobileapp.ui.settings.GuardianAccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
-import com.midas26.mobileapp.ui.settings.LivingRadiusScreen
 import com.midas26.mobileapp.ui.settings.ManagedUserScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
@@ -68,17 +63,12 @@ import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
 
 private const val GuardianManagedUsersRoute = "guardian_managed_users"
-private const val GuardianAddressRegisterRoute = "guardian_address_register"
-private const val GuardianLivingRadiusRoute = "guardian_living_radius"
 
 private val mainRoutes = setOf(
     Routes.UserHome,
     Routes.GuardianHome,
     Routes.VoiceChat,
     Routes.VoiceChatDisconnected,
-    Routes.RecallStart,
-    Routes.RecallQuestion,
-    Routes.RecallResult,
     Routes.AnalysisResult,
     Routes.Settings,
     Routes.AccessibilitySettings,
@@ -87,9 +77,7 @@ private val mainRoutes = setOf(
     Routes.LocationDetail,
     Routes.LocationRoute,
     Routes.AnalysisUserSelect,
-    GuardianManagedUsersRoute,
-    GuardianAddressRegisterRoute,
-    GuardianLivingRadiusRoute
+    GuardianManagedUsersRoute
 )
 
 @Composable
@@ -124,9 +112,6 @@ fun AppNavHost(
         Routes.VoiceChat, Routes.VoiceChatDisconnected ->
             UserHomeTab.Chat
 
-        Routes.RecallStart,
-        Routes.RecallQuestion,
-        Routes.RecallResult,
         Routes.AnalysisResult,
         Routes.AnalysisUserSelect ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
@@ -138,9 +123,7 @@ fun AppNavHost(
 
         Routes.Settings,
         Routes.AccessibilitySettings,
-        GuardianManagedUsersRoute,
-        GuardianAddressRegisterRoute,
-        GuardianLivingRadiusRoute ->
+        GuardianManagedUsersRoute ->
             if (isGuardian) GuardianHomeTab.Settings else UserHomeTab.Settings
 
         else ->
@@ -238,6 +221,7 @@ fun AppNavHost(
                                 } else {
                                     Routes.UserHome
                                 }
+
                             navController.navigate(home) {
                                 popUpTo(Routes.Login) { inclusive = true }
                             }
@@ -433,7 +417,7 @@ fun AppNavHost(
                         onMenuClick = { menu ->
                             when (menu) {
                                 UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
-                                UserMenu.Recall -> navController.navigate(Routes.RecallStart)
+                                UserMenu.Recall -> { /* 미구현 */ }
                                 UserMenu.Analysis -> navController.navigate(Routes.AnalysisResult)
                                 UserMenu.Settings -> navController.navigate(Routes.Settings)
                             }
@@ -535,12 +519,6 @@ fun AppNavHost(
                             onManagedUsers = {
                                 navController.navigate(GuardianManagedUsersRoute)
                             },
-                            onAddressRegister = {
-                                navController.navigate(GuardianAddressRegisterRoute)
-                            },
-                            onLivingRadius = {
-                                navController.navigate(GuardianLivingRadiusRoute)
-                            },
                             onProfileEdit = {
                                 navController.navigate(Routes.ProfileEdit)
                             }
@@ -573,22 +551,6 @@ fun AppNavHost(
 
                 composable(GuardianManagedUsersRoute) {
                     ManagedUserScreen(
-                        onBack = {
-                            navController.popBackStack()
-                        }
-                    )
-                }
-
-                composable(GuardianAddressRegisterRoute) {
-                    AddressRegisterScreen(
-                        onBack = {
-                            navController.popBackStack()
-                        }
-                    )
-                }
-
-                composable(GuardianLivingRadiusRoute) {
-                    LivingRadiusScreen(
                         onBack = {
                             navController.popBackStack()
                         }
@@ -705,48 +667,6 @@ fun AppNavHost(
                         },
                         onRetry = {
                             navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
-                        }
-                    )
-                }
-
-                composable(Routes.RecallStart) {
-                    RecallStartScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallStart)
-                        },
-                        onStart = {
-                            navController.navigate(Routes.RecallQuestion) {
-                                popUpTo(Routes.RecallStart) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.RecallQuestion) {
-                    RecallQuestionScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallQuestion)
-                        },
-                        onFinishedAll = {
-                            navController.navigate(Routes.RecallResult) {
-                                popUpTo(Routes.RecallQuestion) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.RecallResult) {
-                    RecallResultScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallResult)
-                        },
-                        onGoHome = {
-                            navController.navigate(Routes.UserHome) {
-                                popUpTo(Routes.UserHome) { inclusive = true }
-                            }
-                        },
-                        onSeeDetails = {
-                            navController.navigate(Routes.AnalysisResult)
                         }
                     )
                 }

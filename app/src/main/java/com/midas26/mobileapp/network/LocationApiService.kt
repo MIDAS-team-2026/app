@@ -13,11 +13,6 @@ interface LocationApiService {
         @Body body: SaveLocationRequest
     ): ApiResponse<Unit>
 
-    @POST("api/location/safezone")
-    suspend fun saveSafeZone(
-        @Body body: SafeZoneRequest
-    ): ApiResponse<Unit>
-
     @GET("api/location/current/{userId}")
     suspend fun getCurrentLocation(
         @Path("userId") userId: Int
@@ -28,9 +23,4 @@ interface LocationApiService {
         @Path("userId") userId: Int,
         @Query("date") date: String
     ): ApiResponse<List<RoutePointResponse>>
-
-    @GET("api/location/check-safezone/{userId}")
-    suspend fun checkSafeZone(
-        @Path("userId") userId: Int
-    ): ApiResponse<Boolean>
 }
