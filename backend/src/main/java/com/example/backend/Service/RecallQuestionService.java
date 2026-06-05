@@ -8,15 +8,20 @@ import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionR
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.backend.Model.DTO.analysis.RecallQuestionCreateDTO;
+import com.example.backend.Model.Entity.user.User;
+import com.example.backend.Model.Repository.UserRepository;
 
 import java.util.List;
 import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
 public class RecallQuestionService {
 
     private final RecallQuestionRepository recallQuestionRepository;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public List<RecallQuestionResponseDTO> getQuestionsByUserId(Integer userId) {
@@ -60,4 +65,34 @@ public class RecallQuestionService {
 
         recallQuestionRepository.save(question);
     }
+
+    @Transactional
+    public RecallQuestionResponseDTO createQuestion(RecallQuestionCreateDTO dto) {
+
+        User user = userRepository.findById(dto.getUserId())
+                .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
+        RecallQuestion question = new RecallQuestion();
+        question.setUser(user);
+        question.setQuestionText(dto.getQuestionText());
+        question.setQuestionType(
+                dto.getQuestionType() != null ?
+                        dto.getQuestionType() : "RECALL"
+        );
+        question.setCategory(
+                dto.getCategory() != null ?
+                        dto.getCategory() : "CONVERSATION"
+        );
+        question.setExpectedAnswer(dto.getExpectedAnswer());
+
+        RecallQuestion saved = recallQuestionRepository.save(question);
+
+        RecallQuestionResponseDTO response = new RecallQuestionResponseDTO();
+        response.setQuestionId(saved.getId());
+        response.setQuestionText(saved.getQuestionText());
+        response.setQuestionType(saved.getQuestionType());
+        response.setCategory(saved.getCategory());
+
+        return response;
+    }   
 }
