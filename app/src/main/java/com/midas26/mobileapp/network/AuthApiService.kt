@@ -28,6 +28,8 @@ data class UserResponse(
 data class ForgotPasswordRequest(val phone: String)
 data class ResetPasswordRequest(val phone: String, val newPassword: String)
 data class WithdrawRequest(val phone: String)
+data class SendCodeRequest(val phone: String)
+data class VerifyCodeRequest(val phone: String, val code: String)
 
 interface AuthApiService {
     @POST("api/auth/login")
@@ -35,6 +37,12 @@ interface AuthApiService {
 
     @POST("api/auth/signup")
     suspend fun signup(@Body request: SignupRequest): Response<ApiResponse<UserResponse>>
+
+    @POST("api/auth/send-code")
+    suspend fun sendCode(@Body request: SendCodeRequest): Response<ApiResponse<Any>>
+
+    @POST("api/auth/verify-code")
+    suspend fun verifyCode(@Body request: VerifyCodeRequest): Response<ApiResponse<Any>>
 
     @POST("api/auth/forgot-password")
     suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse<Any>>

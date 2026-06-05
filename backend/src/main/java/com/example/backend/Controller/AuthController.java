@@ -4,9 +4,12 @@ import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.DTO.auth.*;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Service.UserService;
+import com.example.backend.Model.DTO.auth.SendCodeDTO;
 import com.example.backend.Util.JwtTokenProvider;
+import com.example.backend.Util.VerificationStore;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -21,6 +25,29 @@ public class AuthController {
 
     private final UserService userService;
     private final JwtTokenProvider jwtTokenProvider;
+
+    /**
+     * 인증번호 발송 (SMS 미연동 — 서버 로그에 6자리 코드 출력)
+     */
+    @PostMapping("/send-code")
+    public ResponseEntity<ApiResponse<?>> sendCode(@RequestBody SendCodeDTO dto) {
+        String code = String.format("%06d", (int)(Math.random() * 1000000));
+        VerificationStore.saveCode(dto.getPhone(), code);
+        log.info("[인증코드] 전화번호: {} → 코드: {}", dto.getPhone(), code);
+        return ResponseEntity.ok(ApiResponse.success(null));
+    }
+
+    /**
+     * 인증번호 검증
+     */
+    @PostMapping("/verify-code")
+    public ResponseEntity<ApiResponse<?>> verifyCode(@RequestBody VerifyCodeDTO dto) {
+        if (VerificationStore.verifyCode(dto.getPhone(), dto.getCode())) {
+            return ResponseEntity.ok(ApiResponse.success(null));
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.fail(400, "인증번호가 올바르지 않습니다."));
+    }
 
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<User>> signup(@RequestBody SignupDTO signupDTO) {
