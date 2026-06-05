@@ -1,5 +1,9 @@
 from pathlib import Path
 import pickle
+import tempfile
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
 from typing import Optional, Dict, Any
 
 from text_features import extract_text_features, calculate_basic_speech_features
@@ -65,6 +69,59 @@ def load_speech_abnormality_reference():
         }
 
     return reference_mean, reference_std, thresholds
+
+# =========================
+# URL 경로 처리 함수
+# =========================
+
+def resolve_audio_input(
+    audio_path: Optional[str] = None,
+    audio_url: Optional[str] = None,
+) -> Optional[str]:
+    """
+    audio_path 또는 audio_url을 받아서 음향 분석에 사용할 로컬 파일 경로를 반환한다.
+
+    - audio_path가 있으면 해당 로컬 파일 경로를 그대로 사용한다.
+    - audio_url이 있으면 임시 폴더에 다운로드한 뒤 그 파일 경로를 반환한다.
+    - 둘 다 없으면 None을 반환한다.
+
+    주의:
+    audio_url이 private S3 URL이면 presigned URL처럼 Python에서 접근 가능한 URL이어야 한다.
+    """
+
+    # 1. 로컬 파일 경로가 들어온 경우
+    if audio_path is not None and str(audio_path).strip() != "":
+        path = Path(audio_path)
+
+        if path.exists():
+            return str(path)
+
+        raise FileNotFoundError(f"음성 파일을 찾을 수 없습니다: {audio_path}")
+
+    # 2. URL이 들어온 경우
+    if audio_url is not None and str(audio_url).strip() != "":
+        parsed_url = urlparse(audio_url)
+        file_name = Path(parsed_url.path).name
+
+        if file_name == "":
+            file_name = "midas_audio.wav"
+
+        temp_dir = Path(tempfile.gettempdir()) / "midas_audio"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        temp_audio_path = temp_dir / file_name
+
+        request = Request(audio_url, headers={"User-Agent": "Python-urllib"})
+        with urlopen(request, timeout=30) as response:
+            content = response.read()
+
+        with open(temp_audio_path, "wb") as f:
+            f.write(content)
+
+        return str(temp_audio_path)
+
+    # 3. 둘 다 없는 경우
+    return None
 
 
 # =========================
@@ -264,9 +321,10 @@ def analyze_user_turn_audio(
 def analyze_user_turn(
     record_id: int,
     session_id: Optional[int],
-    audio_path: Optional[str],
-    transcript_text: str,
-    duration_sec: float,
+    audio_path: Optional[str] = None,
+    audio_url: Optional[str] = None,
+    transcript_text: str = "",
+    duration_sec: float = 0,
 ) -> Dict[str, Any]:
     """
     사용자 답변 1개를 통합 분석한다.
@@ -274,8 +332,9 @@ def analyze_user_turn(
     입력:
     - record_id: AudioRecord ID
     - session_id: 세션 ID
-    - audio_path: 사용자 음성 파일 경로
-    - transcript_text: STT 텍스트
+    - audio_path: 사용자 음성 파일 로컬 경로
+    - audio_url: 사용자 음성 파일 URL 또는 S3 presigned URL
+    - transcript_text: 백엔드 STT 결과 텍스트
     - duration_sec: 녹음 길이
 
     출력:
@@ -298,16 +357,33 @@ def analyze_user_turn(
         duration_sec=duration_sec,
     )
 
-    # 2. 음성 파일 기반 발화 이상 분석
-    audio_result = analyze_user_turn_audio(audio_path)
+    # 2. audio_path 또는 audio_url을 로컬 파일 경로로 변환
+    try:
+        resolved_audio_path = resolve_audio_input(
+            audio_path=audio_path,
+            audio_url=audio_url,
+        )
+    except Exception as e:
+        resolved_audio_path = None
+        audio_result = {
+            "audio_analysis_available": False,
+            "audio_analysis_error": str(e),
+            "dysarthria_similarity_score": None,
+            "distance_from_reference": None,
+            "speech_abnormality_level": "Unknown",
+            "speech_abnormality_score": 0,
+        }
+    else:
+        # 3. 음성 파일 기반 발화 이상 분석
+        audio_result = analyze_user_turn_audio(resolved_audio_path)
 
-    baseline_score = baseline_result.get("baseline_speech_score", 0)
-    abnormality_score = audio_result.get("speech_abnormality_score", 0)
+    # 4. raw score는 baseline + 음향 이상 점수의 합으로 정의
+    raw_speech_score = (
+        baseline_result.get("baseline_speech_score", 0)
+        + audio_result.get("speech_abnormality_score", 0)
+    )
 
-    # 3. record 단위 raw speech score 계산
-    raw_speech_score = baseline_score + abnormality_score
-
-    # 4. recall_score와 합치기 위해 0~100 범위로 정규화
+    # 5. recall_score와 합치기 위해 0~100 범위로 정규화
     speech_risk_score = normalize_speech_score(
         raw_score=raw_speech_score,
         max_score=40.0,
@@ -315,12 +391,21 @@ def analyze_user_turn(
 
     speech_risk_level = convert_score_to_level(speech_risk_score)
 
+    # 기존 회상 파트 calculate_final_risk_score()에 넣기 위한 점수
+    # speechRiskScore는 높을수록 위험, speechHealthScore는 높을수록 양호
+    speech_health_score = round(100.0 - speech_risk_score, 2)
+
     return {
         **baseline_result,
         **audio_result,
 
+        "audioPath": audio_path,
+        "audioUrl": audio_url,
+        "resolvedAudioPath": resolved_audio_path,
+
         "raw_speech_score": raw_speech_score,
         "speechRiskScore": speech_risk_score,
+        "speechHealthScore": speech_health_score,
         "speechRiskLevel": speech_risk_level,
     }
 
@@ -330,17 +415,11 @@ def analyze_user_turn(
 # =========================
 
 def main():
-    """
-    테스트용 실행 예시.
-
-    실제 백엔드 연동 시에는 recordId, sessionId, audioPath, transcriptText, durationSec를
-    Java에서 넘겨받아 analyze_user_turn()을 호출하면 된다.
-    """
-
     result = analyze_user_turn(
         record_id=1,
         session_id=1,
-        audio_path="",  # 실제 wav 경로가 있으면 여기에 넣기
+        audio_path="",
+        audio_url="",
         transcript_text="밥 먹었어요",
         duration_sec=7.0,
     )

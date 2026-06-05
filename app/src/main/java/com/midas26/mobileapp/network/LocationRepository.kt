@@ -20,26 +20,6 @@ object LocationRepository {
         }
     }
 
-    suspend fun saveSafeZone(
-        userId: Int,
-        zoneName: String,
-        latitude: Double,
-        longitude: Double,
-        radius: Double
-    ): Result<ApiResponse<Unit>> {
-        return runCatching {
-            api.saveSafeZone(
-                SafeZoneRequest(
-                    userId = userId,
-                    zoneName = zoneName,
-                    latitude = latitude,
-                    longitude = longitude,
-                    radius = radius
-                )
-            )
-        }
-    }
-
     suspend fun getCurrentLocation(
         userId: Int
     ): Result<CurrentLocationResponse?> {
@@ -54,14 +34,6 @@ object LocationRepository {
     ): Result<List<RoutePointResponse>> {
         return runCatching {
             api.getRoute(userId, date).data ?: emptyList()
-        }
-    }
-
-    suspend fun checkSafeZone(
-        userId: Int
-    ): Result<Boolean> {
-        return runCatching {
-            api.checkSafeZone(userId).data ?: false
         }
     }
 }

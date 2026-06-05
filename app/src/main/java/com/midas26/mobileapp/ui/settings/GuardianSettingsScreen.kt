@@ -6,7 +6,6 @@ import android.widget.NumberPicker
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -85,13 +84,10 @@ fun GuardianSettingsScreen(
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
     onManagedUsers: () -> Unit = {},
-    onAddressRegister: () -> Unit = {},
-    onLivingRadius: () -> Unit = {},
     onProfileEdit: () -> Unit = {},
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val prefs = PrefsManager.from(context)
     val protectors by profileViewModel.protectors.collectAsState()
 
     val guardianLabel = when {
@@ -100,16 +96,10 @@ fun GuardianSettingsScreen(
         else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
     }
 
-    var locationAlertEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var analysisAlertEnabled by remember { mutableStateOf(false) }
-
-    var locationHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
-    var locationMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
-
     var analysisHour by remember { mutableIntStateOf(9) }
     var analysisMinute by remember { mutableIntStateOf(0) }
 
-    var showLocationTimePicker by remember { mutableStateOf(false) }
     var showAnalysisTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -118,29 +108,10 @@ fun GuardianSettingsScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            prefs.setNotificationEnabled(true)
-        } else {
-            locationAlertEnabled = false
+        if (!granted) {
             analysisAlertEnabled = false
             Toast.makeText(context, "알림 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    if (showLocationTimePicker) {
-        WheelTimePickerDialog(
-            title = "위치 알림 시간",
-            initialHour = locationHour,
-            initialMinute = locationMinute,
-            onDismiss = { showLocationTimePicker = false },
-            onConfirm = { hour, minute ->
-                locationHour = hour
-                locationMinute = minute
-                prefs.setNotificationTime(hour, minute)
-                AlarmScheduler.schedule(context, hour, minute)
-                showLocationTimePicker = false
-            }
-        )
     }
 
     if (showAnalysisTimePicker) {
@@ -203,74 +174,7 @@ fun GuardianSettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsSection(title = "위치 설정") {
-                SettingsRow(
-                    label = "주소 등록",
-                    onClick = onAddressRegister
-                )
-
-                HorizontalDivider(
-                    color = AppColor.divider,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                SettingsRow(
-                    label = "생활 반경",
-                    onClick = onLivingRadius
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
             SettingsSection(title = "앱 설정") {
-                SettingsToggleRow(
-                    label = "위치 알림",
-                    description = "사용자의 위치 관련 알림을 받아요",
-                    checked = locationAlertEnabled,
-                    onCheckedChange = { enabled ->
-                        locationAlertEnabled = enabled
-
-                        if (enabled) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            } else {
-                                prefs.setNotificationEnabled(true)
-                            }
-
-                            AlarmScheduler.schedule(context, locationHour, locationMinute)
-                        } else {
-                            if (!analysisAlertEnabled) {
-                                prefs.setNotificationEnabled(false)
-                                AlarmScheduler.cancel(context)
-                            }
-                        }
-                    }
-                )
-
-                AnimatedVisibility(visible = locationAlertEnabled) {
-                    Column {
-                        HorizontalDivider(
-                            color = AppColor.divider,
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
-
-                        NotifTimeRow(
-                            title = "위치 알림 시간",
-                            hour = locationHour,
-                            minute = locationMinute,
-                            onClick = { showLocationTimePicker = true }
-                        )
-                    }
-                }
-
-                HorizontalDivider(
-                    color = AppColor.divider,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
                 SettingsToggleRow(
                     label = "분석 알림",
                     description = "인지 분석 결과 관련 알림을 받아요",
@@ -285,28 +189,24 @@ fun GuardianSettingsScreen(
 
                             AlarmScheduler.schedule(context, analysisHour, analysisMinute)
                         } else {
-                            if (!locationAlertEnabled) {
-                                AlarmScheduler.cancel(context)
-                            }
+                            AlarmScheduler.cancel(context)
                         }
                     }
                 )
 
-                AnimatedVisibility(visible = analysisAlertEnabled) {
-                    Column {
-                        HorizontalDivider(
-                            color = AppColor.divider,
-                            thickness = 1.dp,
-                            modifier = Modifier.padding(horizontal = 16.dp)
-                        )
+                if (analysisAlertEnabled) {
+                    HorizontalDivider(
+                        color = AppColor.divider,
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
 
-                        NotifTimeRow(
-                            title = "분석 알림 시간",
-                            hour = analysisHour,
-                            minute = analysisMinute,
-                            onClick = { showAnalysisTimePicker = true }
-                        )
-                    }
+                    NotifTimeRow(
+                        title = "분석 알림 시간",
+                        hour = analysisHour,
+                        minute = analysisMinute,
+                        onClick = { showAnalysisTimePicker = true }
+                    )
                 }
 
                 HorizontalDivider(
