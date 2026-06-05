@@ -23,7 +23,15 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import kotlin.math.roundToInt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +66,9 @@ import com.midas26.mobileapp.ui.theme.Green600
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import androidx.compose.runtime.LaunchedEffect
@@ -78,13 +88,24 @@ fun AnalysisResultScreen(
     val context = LocalContext.current
     val isGuardian = PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN
 
-    var minTimeElapsed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(2000)
-        minTimeElapsed = true
+    // 로딩 화면은 showLoadingScreen이 true일 때만 (최초 진입 또는 음성 대화 후)
+    var minTimeElapsed by remember { mutableStateOf(!viewModel.showLoadingScreen) }
+    LaunchedEffect(viewModel.showLoadingScreen) {
+        if (viewModel.showLoadingScreen) {
+            minTimeElapsed = false
+            delay(2000)
+            minTimeElapsed = true
+        }
     }
 
-    val showLoading = viewModel.isLoading || !minTimeElapsed
+    val showLoading = viewModel.showLoadingScreen && (viewModel.isLoading || !minTimeElapsed)
+
+    // 로딩이 끝나면 다음 진입부터는 로딩 화면 생략
+    LaunchedEffect(showLoading) {
+        if (!showLoading && viewModel.showLoadingScreen) {
+            viewModel.dismissLoadingScreen()
+        }
+    }
 
     Crossfade(
         targetState = showLoading,
@@ -96,13 +117,21 @@ fun AnalysisResultScreen(
             return@Crossfade
         }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(BrandWhite)
-    ) {
+    val isDragging = viewModel.isDraggingGraph
+    val scrimAlpha by animateFloatAsState(
+        targetValue = if (isDragging) 0.52f else 0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "scrim"
+    )
+    val dateLabelScale by animateFloatAsState(
+        targetValue = if (isDragging) 1.12f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = 300f),
+        label = "date_scale"
+    )
+
+    Column(modifier = Modifier.fillMaxSize().background(BrandWhite)) {
         // ── 상단 헤더 (오늘=초록, 다른 날=회색, 애니메이션) ────────────
-        val isToday = viewModel.isViewingToday
+        val isToday = viewModel.isViewingToday && viewModel.hasTodayData
         val animSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 400)
         val topColor by animateColorAsState(
             if (isGuardian) GuardianAccentDark
@@ -114,12 +143,14 @@ fun AnalysisResultScreen(
             else if (isToday) Green400 else Gray400,
             animSpec
         )
+        // 헤더 전체 — 배경 그라디언트
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .background(brush = Brush.verticalGradient(colors = listOf(topColor, botColor)))
         ) {
+            // 레이어 1: 헤더 콘텐츠
             Column(modifier = Modifier.wrapContentHeight()) {
                 // 앱바
                 Row(
@@ -159,10 +190,11 @@ fun AnalysisResultScreen(
                         .fillMaxWidth()
                         .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
                 ) {
+                    // 날짜 라벨 자리 확보용 투명 텍스트 (레이아웃 높이 유지)
                     Text(
                         text = viewModel.displayDateLabel,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = BrandWhite.copy(alpha = 0.92f)
+                        color = Color.Transparent
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.Bottom) {
@@ -197,76 +229,116 @@ fun AnalysisResultScreen(
                     }
                 }
             }
+
+            // 레이어 2: 헤더 스크림
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+            )
+
+            // 레이어 3: 날짜 라벨 — 스크림 위에 강조 (Box 직접 자식으로 항상 최상위)
+            // bottom = 28(하단패딩) + 16(Spacer) + 점수Row높이(약 56sp + badge)
+            Text(
+                text = viewModel.displayDateLabel,
+                style = MaterialTheme.typography.bodyLarge,
+                color = BrandWhite.copy(alpha = 0.92f),
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 24.dp, bottom = (28 + 16 + 56 * fontScale).dp)
+                    .scale(dateLabelScale)
+            )
         }
 
         // ── 본문 ─────────────────────────────────────────────────────────
         val scrollState = rememberScrollState()
+
+        // 그래프 카드 높이를 측정하기 위한 상태
+        var graphCardHeightPx by remember { mutableStateOf(0) }
+
         Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 16.dp)
-                .padding(top = 12.dp, bottom = 24.dp)
-        ) {
-            // 주간 그래프 카드
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = BrandWhite,
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 12.dp, bottom = 24.dp)
             ) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                    Text(
-                        text = "이번 주 추이",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = AppColor.textPrimary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "최근 7일 · 포인트를 눌러 상세 확인",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.textTertiary
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    WeeklyLineChart(
-                        points = viewModel.graphPoints,
-                        selectedDate = viewModel.selectedDayScore?.date,
-                        onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(160.dp)
-                    )
+                // 주간 그래프 카드
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coords -> graphCardHeightPx = coords.size.height },
+                    shape = RoundedCornerShape(20.dp),
+                    color = BrandWhite,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text(
+                            text = "이번 주 추이",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = AppColor.textPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "최근 7일 · 길게 눌러 날짜 탐색",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AppColor.textTertiary
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        WeeklyLineChart(
+                            points = viewModel.graphPoints,
+                            highlightIndex = viewModel.graphHighlightIndex,
+                            onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
+                            onDragStart = { viewModel.onGraphDragStart() },
+                            onDragMove = { date -> viewModel.onGraphDragMove(date) },
+                            onDragEnd = { date -> viewModel.onGraphDragEnd(date) },
+                            onDragCancel = { viewModel.onGraphDragCancel() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(160.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4 항목 카드 (2×2) — 드래그 중 스크림에 가려짐
+                val items = viewModel.todayItems
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ItemCard(item = items[0], modifier = Modifier.weight(1f))
+                    ItemCard(item = items[1], modifier = Modifier.weight(1f))
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ItemCard(item = items[2], modifier = Modifier.weight(1f))
+                    ItemCard(item = items[3], modifier = Modifier.weight(1f))
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            // 본문 스크림 — 그래프 카드 아래 영역만 덮음
+            val density = LocalDensity.current
+            val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 12.dp + graphCardHeightDp)
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+            )
 
-            // 4 항목 카드 (2×2)
-            val items = viewModel.todayItems
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ItemCard(item = items[0], modifier = Modifier.weight(1f))
-                ItemCard(item = items[1], modifier = Modifier.weight(1f))
-            }
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ItemCard(item = items[2], modifier = Modifier.weight(1f))
-                ItemCard(item = items[3], modifier = Modifier.weight(1f))
-            }
-        }
-        VerticalScrollbar(
-            state = scrollState,
-            modifier = Modifier.align(Alignment.TopEnd)
-        )
-        } // Box
-    }
+            VerticalScrollbar(
+                state = scrollState,
+                modifier = Modifier.align(Alignment.TopEnd)
+            )
+        } // 본문 Box
+    } // Column
     } // Crossfade
 }
 
@@ -312,18 +384,20 @@ private fun DayDetailRow(label: String, value: String) {
 @Composable
 private fun WeeklyLineChart(
     points: List<DailyScore>,
-    selectedDate: String? = null,
+    highlightIndex: Int = points.lastIndex,
     onPointTapped: (String?) -> Unit = {},
+    onDragStart: () -> Unit = {},
+    onDragMove: (String?) -> Unit = {},
+    onDragEnd: (String?) -> Unit = {},
+    onDragCancel: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     if (points.isEmpty()) return
 
-    // 강조할 인덱스: 선택된 날짜 → 없으면 마지막(오늘)
-    val highlightIdx = if (selectedDate != null)
-        points.indexOfFirst { it.date?.startsWith(selectedDate.take(10)) == true }
-            .takeIf { it >= 0 } ?: points.lastIndex
-    else
-        points.lastIndex
+    val haptic = LocalHapticFeedback.current
+    val hapticEnabled = LocalHapticEnabled.current
+
+    val highlightIdx = highlightIndex
 
     // score == 0인 날 = 데이터 없음
     val hasData = points.map { it.score > 0 }
@@ -340,15 +414,23 @@ private fun WeeklyLineChart(
         result
     }
 
-    // 강조 인덱스를 float으로 애니메이션 → 포인트 크기 서서히 변화
+    // 강조 인덱스를 float으로 애니메이션 → 포인트 크기 서서히 변화 (-1이면 강조 없음)
     val animatedHighlight by animateFloatAsState(
-        targetValue = highlightIdx.toFloat(),
+        targetValue = if (highlightIdx >= 0) highlightIdx.toFloat() else -999f,
         animationSpec = tween(durationMillis = 300),
         label = "highlight"
     )
 
-    // 탭 감지용 xs 공유
+    // 탭/롱프레스+드래그 감지용 xs 공유
     var computedXs = remember { listOf<Float>() }
+    // 드래그 중 마지막으로 강조했던 인덱스 (진동 중복 방지)
+    var lastDragIdx = remember { -1 }
+
+    fun nearestIdx(offsetX: Float): Int {
+        if (computedXs.isEmpty()) return -1
+        return computedXs.indices.minByOrNull { abs(computedXs[it] - offsetX) }
+            ?.takeIf { hasData[it] } ?: -1
+    }
 
     Column(modifier = modifier) {
         Canvas(
@@ -357,12 +439,64 @@ private fun WeeklyLineChart(
                 .weight(1f)
                 .padding(horizontal = 4.dp, vertical = 8.dp)
                 .pointerInput(points) {
-                    detectTapGestures { offset ->
-                        if (computedXs.isEmpty()) return@detectTapGestures
-                        val tapRadius = 40f
-                        val idx = computedXs.indexOfFirst { kotlin.math.abs(it - offset.x) < tapRadius }
-                        // 데이터 있는 날만 탭 이벤트 전달
-                        if (idx >= 0 && hasData[idx]) onPointTapped(points[idx].date)
+                    val longPressMs = viewConfiguration.longPressTimeoutMillis
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        lastDragIdx = -1
+                        var isDragging = false
+
+                        val downTime = System.currentTimeMillis()
+                        var longPressTriggered = false
+                        var endDate: String? = null
+
+                        loop@ while (true) {
+                            val ev = awaitPointerEvent()
+                            val pos = ev.changes.firstOrNull()?.position ?: break
+                            val elapsed = System.currentTimeMillis() - downTime
+
+                            if (!longPressTriggered) {
+                                if (elapsed >= longPressMs) {
+                                    // 롱프레스 발동
+                                    longPressTriggered = true
+                                    isDragging = true
+                                    onDragStart()
+                                    val idx = nearestIdx(pos.x)
+                                    if (idx >= 0) {
+                                        lastDragIdx = idx
+                                        endDate = points[idx].date
+                                        onDragMove(endDate)
+                                        if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                }
+                            } else {
+                                // 드래그 중 — 포인터 이동마다 날짜 업데이트
+                                val idx = nearestIdx(pos.x)
+                                if (idx >= 0 && idx != lastDragIdx) {
+                                    lastDragIdx = idx
+                                    endDate = points[idx].date
+                                    onDragMove(endDate)
+                                    if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                }
+                            }
+
+                            ev.changes.forEach { it.consume() }
+
+                            if (ev.changes.none { it.pressed }) {
+                                // 손가락을 뗌
+                                if (isDragging) {
+                                    onDragEnd(endDate)
+                                } else {
+                                    // 롱프레스 전에 뗌 → 일반 탭
+                                    val idx = nearestIdx(down.position.x)
+                                    if (idx >= 0) {
+                                        onPointTapped(points[idx].date)
+                                        if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                }
+                                break@loop
+                            }
+
+                        }
                     }
                 }
         ) {

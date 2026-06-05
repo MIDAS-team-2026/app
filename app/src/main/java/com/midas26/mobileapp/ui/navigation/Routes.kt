@@ -61,8 +61,9 @@ object Routes {
     const val AnalysisUserSelect = "analysis_user_select"
 
     // 설정
-    const val Settings              = "settings"
-    const val AccessibilitySettings = "accessibility_settings"
+    const val Settings                      = "settings"
+    const val AccessibilitySettings         = "accessibility_settings"
+    const val LoginAccessibilitySettings    = "login_accessibility_settings"
     const val ProfileEdit           = "profile_edit"
 
     // 비밀번호 찾기
