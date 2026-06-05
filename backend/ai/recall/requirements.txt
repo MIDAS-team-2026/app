@@ -9,4 +9,6 @@ accelerate
 torch
 gradio
 python-dotenv
-openai
+fastapi
+uvicorn
+requests

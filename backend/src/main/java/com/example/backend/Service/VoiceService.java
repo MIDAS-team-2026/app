@@ -29,6 +29,7 @@ public class VoiceService {
     private final AudioRecordRepository audioRecordRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final STTService sttService;
 
     @Transactional
     public VoiceResponseDTO uploadAndSave(
@@ -66,10 +67,12 @@ public class VoiceService {
         }
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
+        STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
 
         return VoiceResponseDTO.builder()
                 .audioRecordId(savedRecord.getId())
                 .audioFilePath(savedRecord.getAudioFilePath())
+                .transcriptText(sttResult.getTranscriptText())
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
@@ -81,6 +84,11 @@ public class VoiceService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
         record.setTranscriptText(transcriptText);
         audioRecordRepository.save(record);
+    }
+
+    @Transactional
+    public String transcribeRecord(Long recordId) {
+        return sttService.transcribeAndSave(recordId).getTranscriptText();
     }
 
     @Transactional(readOnly = true)

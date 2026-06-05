@@ -2,6 +2,7 @@ package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
+import com.example.backend.Model.DTO.analysis.SttResponseDTO;
 import com.example.backend.Model.DTO.analysis.SttUpdateRequestDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
 import com.example.backend.Service.VoiceService;
@@ -75,6 +76,20 @@ public class VoiceController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404)
                     .body(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
+    @PostMapping("/stt/{recordId}")
+    public ResponseEntity<ApiResponse<SttResponseDTO>> performStt(@PathVariable Long recordId) {
+        try {
+            String transcriptText = voiceService.transcribeRecord(recordId);
+            return ResponseEntity.ok(ApiResponse.success(new SttResponseDTO(recordId, transcriptText)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(502)
+                    .body(ApiResponse.fail(502, e.getMessage()));
         }
     }
 
