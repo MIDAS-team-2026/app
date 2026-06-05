@@ -85,6 +85,8 @@ fun GuardianSettingsScreen(
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
     onManagedUsers: () -> Unit = {},
+    onAddressRegister: () -> Unit = {},
+    onLivingRadius: () -> Unit = {},
     onProfileEdit: () -> Unit = {},
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
@@ -202,7 +204,10 @@ fun GuardianSettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "위치 설정") {
-                SettingsRow(label = "주소 등록", onClick = {})
+                SettingsRow(
+                    label = "주소 등록",
+                    onClick = onAddressRegister
+                )
 
                 HorizontalDivider(
                     color = AppColor.divider,
@@ -210,7 +215,10 @@ fun GuardianSettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                SettingsRow(label = "생활 반경 설정", onClick = {})
+                SettingsRow(
+                    label = "생활 반경",
+                    onClick = onLivingRadius
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))

@@ -50,8 +50,10 @@ import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
 import com.midas26.mobileapp.ui.recall.RecallResultScreen
 import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
+import com.midas26.mobileapp.ui.settings.AddressRegisterScreen
 import com.midas26.mobileapp.ui.settings.GuardianAccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
+import com.midas26.mobileapp.ui.settings.LivingRadiusScreen
 import com.midas26.mobileapp.ui.settings.ManagedUserScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
@@ -65,6 +67,8 @@ import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
 
 private const val GuardianManagedUsersRoute = "guardian_managed_users"
+private const val GuardianAddressRegisterRoute = "guardian_address_register"
+private const val GuardianLivingRadiusRoute = "guardian_living_radius"
 
 private val mainRoutes = setOf(
     Routes.UserHome,
@@ -82,7 +86,9 @@ private val mainRoutes = setOf(
     Routes.LocationDetail,
     Routes.LocationRoute,
     Routes.AnalysisUserSelect,
-    GuardianManagedUsersRoute
+    GuardianManagedUsersRoute,
+    GuardianAddressRegisterRoute,
+    GuardianLivingRadiusRoute
 )
 
 @Composable
@@ -131,7 +137,9 @@ fun AppNavHost(
 
         Routes.Settings,
         Routes.AccessibilitySettings,
-        GuardianManagedUsersRoute ->
+        GuardianManagedUsersRoute,
+        GuardianAddressRegisterRoute,
+        GuardianLivingRadiusRoute ->
             if (isGuardian) GuardianHomeTab.Settings else UserHomeTab.Settings
 
         else ->
@@ -427,11 +435,13 @@ fun AppNavHost(
                         onMenuClick = { menu ->
                             when (menu) {
                                 GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
+
                                 GuardianMenu.Location -> {
                                     navController.navigate(Routes.LocationList) {
                                         launchSingleTop = true
                                     }
                                 }
+
                                 GuardianMenu.Settings -> navController.navigate(Routes.Settings)
                             }
                         }
@@ -514,6 +524,12 @@ fun AppNavHost(
                             onManagedUsers = {
                                 navController.navigate(GuardianManagedUsersRoute)
                             },
+                            onAddressRegister = {
+                                navController.navigate(GuardianAddressRegisterRoute)
+                            },
+                            onLivingRadius = {
+                                navController.navigate(GuardianLivingRadiusRoute)
+                            },
                             onProfileEdit = {
                                 navController.navigate(Routes.ProfileEdit)
                             }
@@ -546,6 +562,22 @@ fun AppNavHost(
 
                 composable(GuardianManagedUsersRoute) {
                     ManagedUserScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(GuardianAddressRegisterRoute) {
+                    AddressRegisterScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(GuardianLivingRadiusRoute) {
+                    LivingRadiusScreen(
                         onBack = {
                             navController.popBackStack()
                         }
