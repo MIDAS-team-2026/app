@@ -8,7 +8,7 @@ from openai import OpenAI
 YNU_API_KEY = os.getenv("YNU_API_KEY")
 
 if not YNU_API_KEY:
-    YNU_API_KEY = input("YNU API KEY를 입력하세요: ").strip()
+    raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
 
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
