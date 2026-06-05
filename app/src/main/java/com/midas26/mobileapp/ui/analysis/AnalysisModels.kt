@@ -94,10 +94,6 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { doLoad() }
     }
 
-    fun loadSummary() {
-        viewModelScope.launch { doLoadSummary() }
-    }
-
     fun dismissLoadingScreen() { showLoadingScreen = false }
 
     private suspend fun doLoad() {
