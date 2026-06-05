@@ -28,9 +28,22 @@ public class AuthController {
 
     /**
      * 인증번호 발송 (SMS 미연동 — 서버 로그에 6자리 코드 출력)
+     * purpose: SIGNUP(중복 불가) / FORGOT_PASSWORD(존재해야 함)
      */
     @PostMapping("/send-code")
     public ResponseEntity<ApiResponse<?>> sendCode(@RequestBody SendCodeDTO dto) {
+        if ("SIGNUP".equalsIgnoreCase(dto.getPurpose())) {
+            if (userService.existsByPhone(dto.getPhone())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(ApiResponse.fail(409, "이미 가입된 전화번호입니다."));
+            }
+        } else if ("FORGOT_PASSWORD".equalsIgnoreCase(dto.getPurpose())
+                || "WITHDRAW".equalsIgnoreCase(dto.getPurpose())) {
+            if (!userService.existsByPhone(dto.getPhone())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.fail(404, "등록되지 않은 전화번호입니다."));
+            }
+        }
         String code = String.format("%06d", (int)(Math.random() * 1000000));
         VerificationStore.saveCode(dto.getPhone(), code);
         log.info("[인증코드] 전화번호: {} → 코드: {}", dto.getPhone(), code);
