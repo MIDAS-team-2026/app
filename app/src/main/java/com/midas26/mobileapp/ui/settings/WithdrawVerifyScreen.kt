@@ -62,14 +62,21 @@ fun WithdrawVerifyScreen(
     var code by remember { mutableStateOf("") }
     var showConfirmDialog by remember { mutableStateOf(false) }
     val state by viewModel.state.collectAsState()
-    val isLoading = state is WithdrawState.Loading
+    val isLoading = state is WithdrawState.Loading || state is WithdrawState.Sending
+
+    // 화면 진입 시 인증번호 발송
+    LaunchedEffect(Unit) {
+        viewModel.sendCode(phone)
+    }
 
     LaunchedEffect(state) {
-        if (state is WithdrawState.Withdrawn) {
-            // 모든 로컬 데이터 초기화
-            PrefsManager.from(context).clearToken()
-            viewModel.resetState()
-            onWithdrawn()
+        when (state) {
+            is WithdrawState.Withdrawn -> {
+                PrefsManager.from(context).clearToken()
+                viewModel.resetState()
+                onWithdrawn()
+            }
+            else -> {}
         }
     }
 
