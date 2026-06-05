@@ -49,11 +49,6 @@ object Routes {
     const val VoiceChat            = "voice_chat"
     const val VoiceChatDisconnected = "voice_chat_disconnected"
 
-    // 회상 과제
-    const val RecallStart    = "recall_start"
-    const val RecallQuestion = "recall_question"
-    const val RecallResult   = "recall_result"
-
     // 분석
     const val AnalysisResult  = "analysis_result"
     const val AnalysisGraph   = "analysis_graph"
