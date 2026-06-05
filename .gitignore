@@ -28,3 +28,8 @@ private/
 
 # Claude Code 내부 데이터 (worktree, 세션 등)
 .claude/
+
+# Python 캐시
+__pycache__/
+*.pyc
+*.pyo

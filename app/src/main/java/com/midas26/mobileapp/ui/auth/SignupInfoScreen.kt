@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -120,11 +121,13 @@ fun SignupInfoScreen(
         return ok
     }
 
+    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -250,5 +253,7 @@ fun SignupInfoScreen(
             )
         }
         Spacer(modifier = Modifier.height(48.dp))
+    }
+    VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
     }
 }

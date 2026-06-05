@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
@@ -79,11 +80,13 @@ fun PrivacyScreen(
         }
     }
 
+    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
     ) {
         // 상단 연녹색 헤더 + 더 연한 원 장식
         Box(
@@ -160,6 +163,8 @@ fun PrivacyScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+    VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
     }
 }
 

@@ -1,5 +1,6 @@
 package com.example.backend.Service;
 
+import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
@@ -17,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -174,10 +177,127 @@ public class AiAnalysisService {
     }
 
     @Transactional(readOnly = true)
+    public int getStreakDays(Integer userId) {
+        int streak = 0;
+        LocalDate date = LocalDate.now();
+        while (true) {
+            LocalDateTime start = date.atStartOfDay();
+            LocalDateTime end   = start.plusDays(1);
+            List<RiskAnalysisResult> dayResults = riskAnalysisRepository
+                    .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+            if (dayResults.isEmpty()) break;
+            streak++;
+            date = date.minusDays(1);
+        }
+        return streak;
+    }
+
+    @Transactional(readOnly = true)
+    public List<DailyScoreDTO> getWeeklyScores(Integer userId) {
+        LocalDate today = LocalDate.now();
+        List<DailyScoreDTO> result = new ArrayList<>();
+
+        for (int i = 6; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime start = date.atStartOfDay();
+            LocalDateTime end   = start.plusDays(1);
+
+            List<RiskAnalysisResult> dayResults = riskAnalysisRepository
+                    .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+
+            if (dayResults.isEmpty()) {
+                result.add(new DailyScoreDTO(date, null, null, null, null, null, 0));
+            } else {
+                float avgRisk   = avg(dayResults, r -> r.getFinalRiskScore());
+                float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
+                float avgText   = avg(dayResults, r -> r.getTextScore());
+                float avgRecall = avg(dayResults, r -> r.getRecallScore());
+                result.add(new DailyScoreDTO(
+                        date, avgRisk, resolveRiskLevel(avgRisk),
+                        avgSpeech, avgText, avgRecall, dayResults.size()));
+            }
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public DailyScoreDTO getDailyScore(Integer userId, LocalDate date) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end   = start.plusDays(1);
+
+        List<RiskAnalysisResult> dayResults = riskAnalysisRepository
+                .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+
+        if (dayResults.isEmpty())
+            throw new IllegalArgumentException("해당 날짜의 분석 결과가 없습니다.");
+
+        float avgRisk   = avg(dayResults, r -> r.getFinalRiskScore());
+        float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
+        float avgText   = avg(dayResults, r -> r.getTextScore());
+        float avgRecall = avg(dayResults, r -> r.getRecallScore());
+        return new DailyScoreDTO(
+                date, avgRisk, resolveRiskLevel(avgRisk),
+                avgSpeech, avgText, avgRecall, dayResults.size());
+    }
+
+    @Transactional(readOnly = true)
+    public SessionAnalysisSummaryResponseDTO getTodayAverageSummary(Integer userId) {
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay   = startOfDay.plusDays(1);
+
+        List<RiskAnalysisResult> todayResults = riskAnalysisRepository
+                .findByChatSession_User_IdAndAnalyzedAtBetween(userId, startOfDay, endOfDay);
+
+        if (todayResults.isEmpty())
+            throw new IllegalArgumentException("오늘 분석 결과가 없습니다.");
+
+        float avgRisk    = avg(todayResults, r -> r.getFinalRiskScore());
+        float avgSpeech  = avg(todayResults, r -> r.getSpeechScore());
+        float avgText    = avg(todayResults, r -> r.getTextScore());
+        float avgRecall  = avg(todayResults, r -> r.getRecallScore());
+        String riskLevel = resolveRiskLevel(avgRisk);
+
+        return SessionAnalysisSummaryResponseDTO.builder()
+                .sessionId(null)
+                .finalRiskScore(avgRisk)
+                .riskLevel(riskLevel)
+                .speechScore(avgSpeech)
+                .textScore(avgText)
+                .recallScore(avgRecall)
+                .analyzedAt(LocalDateTime.now())
+                .build();
+    }
+
+    private float avg(List<RiskAnalysisResult> list,
+                      java.util.function.Function<RiskAnalysisResult, Float> getter) {
+        return (float) list.stream()
+                .mapToDouble(r -> getter.apply(r) != null ? getter.apply(r) : 0f)
+                .average()
+                .orElse(0.0);
+    }
+
+    private String resolveRiskLevel(float score) {
+        if (score < 0.30f) return "LOW";
+        if (score < 0.60f) return "MEDIUM";
+        return "HIGH";
+    }
+
+    @Transactional(readOnly = true)
+    public SessionAnalysisSummaryResponseDTO getLatestSummaryByUser(Integer userId) {
+        RiskAnalysisResult risk = riskAnalysisRepository
+                .findTopByChatSession_User_IdOrderByAnalyzedAtDesc(userId)
+                .orElseThrow(() -> new IllegalArgumentException("분석 결과가 없습니다."));
+        return toSummaryDTO(risk);
+    }
+
+    @Transactional(readOnly = true)
     public SessionAnalysisSummaryResponseDTO getSessionSummary(Long sessionId) {
         RiskAnalysisResult risk = riskAnalysisRepository.findByChatSession_Id(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 세션의 분석 리포트가 존재하지 않습니다."));
+        return toSummaryDTO(risk);
+    }
 
+    private SessionAnalysisSummaryResponseDTO toSummaryDTO(RiskAnalysisResult risk) {
         return SessionAnalysisSummaryResponseDTO.builder()
                 .sessionId(risk.getChatSession().getId())
                 .finalRiskScore(risk.getFinalRiskScore())
