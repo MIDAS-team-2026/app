@@ -11,6 +11,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -46,16 +49,15 @@ public class AuthController {
         User user = userService.login(loginDTO.getPhone(), loginDTO.getPassword());
 
         if (user != null) {
-
             String token = jwtTokenProvider.createToken(user.getPhone(), user.getRole());
 
             String patientCode = null;
-            
+
             if ("PATIENT".equalsIgnoreCase(user.getRole())) {
-                patientCode = user.getPatientCode(); // User 엔티티에 getPatientCode()가 있다고 가정
+                patientCode = user.getPatientCode();
             }
 
-            LoginResponse loginDTO1 = new LoginResponse(
+            LoginResponse response = new LoginResponse(
                     user.getPhone(),
                     user.getName(),
                     token,
@@ -63,7 +65,8 @@ public class AuthController {
                     user.getId(),
                     patientCode
             );
-            return ResponseEntity.ok(ApiResponse.success(loginDTO1));
+
+            return ResponseEntity.ok(ApiResponse.success(response));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(ApiResponse.fail(401, "아이디 또는 비밀번호가 틀렸습니다."));
@@ -76,6 +79,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.fail(404, "등록되지 않은 전화번호입니다."));
         }
+
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
@@ -107,14 +111,54 @@ public class AuthController {
         }
     }
 
+    // 환자 기준: 해당 환자에게 연결된 보호자 목록 조회
+    @GetMapping("/protectors/{userId}")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getProtectors(@PathVariable Integer userId) {
+        List<UserResponseDTO> protectors = userService.getProtectors(userId).stream()
+                .map(u -> new UserResponseDTO(
+                        u.getId(),
+                        u.getPhone(),
+                        u.getName(),
+                        u.getRole(),
+                        null
+                ))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(protectors));
+    }
+
+    // 보호자 기준: 해당 보호자가 연결한 환자 목록 조회
+    @GetMapping("/protectors/{protectorId}/patients")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getPatientsByProtector(
+            @PathVariable Integer protectorId) {
+
+        try {
+            List<UserResponseDTO> patients = userService.getPatientsByProtector(protectorId).stream()
+                    .map(u -> new UserResponseDTO(
+                            u.getId(),
+                            u.getPhone(),
+                            u.getName(),
+                            u.getRole(),
+                            u.getPatientCode()
+                    ))
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(ApiResponse.success(patients));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail(400, e.getMessage()));
+        }
+    }
+
     @PostMapping("/link")
     public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {
         try {
             userService.linkProtector(linkDTO.getProtectorId(), linkDTO.getPatientCode());
-            // 성공 시 별도의 데이터 없이 성공 메시지만 반환
             return ResponseEntity.ok(ApiResponse.success());
         } catch (IllegalArgumentException | IllegalStateException e) {
-            // 잘못된 코드거나 권한이 없는 경우
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.fail(400, e.getMessage()));
         } catch (Exception e) {
