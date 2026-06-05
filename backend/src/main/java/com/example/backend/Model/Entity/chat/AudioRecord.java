@@ -71,6 +71,10 @@ public class AudioRecord {
     @Column(name = "stt_confidence")
     private Float sttConfidence;
 
+    /** Python AI가 생성한 답변 텍스트. null이면 아직 생성 중. */
+    @Column(name = "ai_reply_text", columnDefinition = "TEXT")
+    private String aiReplyText;
+
     @CreatedDate
     @Column(name = "recorded_at", nullable = false, updatable = false)
     private LocalDateTime recordedAt;
