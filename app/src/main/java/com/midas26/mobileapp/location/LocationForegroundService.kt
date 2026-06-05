@@ -110,7 +110,7 @@ class LocationForegroundService : Service() {
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("위치 공유 중")
             .setContentText("보호자에게 현재 위치를 공유하고 있어요")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setOngoing(true)
             .build()
 
