@@ -42,20 +42,6 @@ data class DailyScore(val dayLabel: String, val score: Int, val date: String? = 
 /** 그래프 탭. */
 enum class TrendRange { DAY, WEEK, MONTH }
 
-/** 보호자 공유 옵션. */
-data class ShareOption(
-    val key: String,
-    val label: String,
-    val description: String,
-    val defaultEnabled: Boolean
-)
-
-/** 보호자 정보 (공유 모달용). */
-data class GuardianInfo(
-    val name: String,
-    val relationLabel: String,
-    val icon: ImageVector = Icons.Default.Person
-)
 
 class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -434,19 +420,4 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     fun selectRange(range: TrendRange) { graphRange = range }
 
-    // ── 보호자 공유 (더미) ────────────────────────────────────────────────────
-
-    val guardian: GuardianInfo = GuardianInfo(name = "홍철수 보호자", relationLabel = "아들 · 연결됨")
-
-    val shareOptions: List<ShareOption> = listOf(
-        ShareOption("today_score",     "오늘 점수",     "점수 + 정상 범위 여부",          defaultEnabled = true),
-        ShareOption("detail_items",    "상세 분석 항목", "음성·회상·텍스트 점수",          defaultEnabled = true),
-        ShareOption("voice_recording", "대화 녹음 원본", "보호자가 직접 들어볼 수 있어요", defaultEnabled = false)
-    )
-
-    val shareSelected = shareOptions.map { it.defaultEnabled }.toMutableStateList()
-
-    fun toggleShareOption(index: Int) {
-        if (index in shareSelected.indices) shareSelected[index] = !shareSelected[index]
-    }
 }
