@@ -22,6 +22,10 @@ keystore.properties
 *.keystore
 *.jks
 
+# Firebase 서비스 계정 키 (민감 정보)
+firebase-adminsdk.json
+google-services.json
+
 # 형섭 작업용
 private/
 /private/
