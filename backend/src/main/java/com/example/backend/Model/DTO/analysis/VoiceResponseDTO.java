@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 public class VoiceResponseDTO {
     private Long audioRecordId;
     private String audioFilePath;
+    private String transcriptText;
     private Integer turnOrder;
     private LocalDateTime recordedAt;
 }
