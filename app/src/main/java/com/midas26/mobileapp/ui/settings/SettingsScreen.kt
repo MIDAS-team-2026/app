@@ -1,9 +1,6 @@
 package com.midas26.mobileapp.ui.settings
 
 import android.Manifest
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -17,7 +14,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,10 +60,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.location.LocationForegroundService
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
@@ -115,7 +109,6 @@ fun SettingsScreen(
         }
     }
 
-    var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
@@ -138,18 +131,6 @@ fun SettingsScreen(
                 showTimePicker = false
             }
         )
-    }
-
-    val backgroundLocationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            prefs.setLocationSharingEnabled(true)
-            startLocationService(context)
-        } else {
-            locationSharingEnabled = false
-            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
-        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -201,45 +182,6 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "앱 설정") {
-                if (!isGuardian) {
-                    SettingsToggleRow(
-                        label = "보호자에게 위치 정보 제공",
-                        description = "보호자가 내 위치를 확인할 수 있어요",
-                        checked = locationSharingEnabled,
-                        onCheckedChange = { enabled ->
-                            locationSharingEnabled = enabled
-
-                            if (enabled) {
-                                val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                                        ) == PackageManager.PERMISSION_GRANTED
-
-                                if (bgGranted) {
-                                    prefs.setLocationSharingEnabled(true)
-                                    startLocationService(context)
-                                } else {
-                                    backgroundLocationLauncher.launch(
-                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
-                                    )
-                                }
-                            } else {
-                                prefs.setLocationSharingEnabled(false)
-                                context.stopService(
-                                    Intent(context, LocationForegroundService::class.java)
-                                )
-                            }
-                        }
-                    )
-
-                    HorizontalDivider(
-                        color = AppColor.divider,
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                }
-
                 SettingsToggleRow(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
@@ -273,9 +215,7 @@ fun SettingsScreen(
                             title = "알림 시간",
                             hour = notifHour,
                             minute = notifMinute,
-                            onClick = {
-                                showTimePicker = true
-                            }
+                            onClick = { showTimePicker = true }
                         )
                     }
                 }
@@ -293,17 +233,21 @@ fun SettingsScreen(
 
             SettingsSection(title = "지원") {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "이용 약관", onClick = {})
+
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
+
                 SettingsRow(label = "문의하기", onClick = {})
             }
 
@@ -696,77 +640,6 @@ private fun StatItem(
 }
 
 @Composable
-private fun ProfileCard(
-    userName: String,
-    role: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(20.dp)
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(64.dp),
-                shape = CircleShape,
-                color = BrandWhite
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.char1),
-                    contentDescription = "프로필 이미지",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = userName,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Green50
-                ) {
-                    Text(
-                        text = role,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppColor.accentDark,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
-                }
-            }
-
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = AppColor.textTertiary,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-}
-
-@Composable
 private fun SettingsSection(
     title: String,
     content: @Composable () -> Unit
@@ -979,14 +852,4 @@ private fun formatNotifTime(hour: Int, minute: Int): String {
     }
 
     return "$period $h:${minute.toString().padStart(2, '0')}"
-}
-
-private fun startLocationService(context: Context) {
-    val intent = Intent(context, LocationForegroundService::class.java)
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        context.startForegroundService(intent)
-    } else {
-        context.startService(intent)
-    }
 }
