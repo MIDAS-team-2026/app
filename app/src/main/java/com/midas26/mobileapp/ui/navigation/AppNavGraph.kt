@@ -1,6 +1,7 @@
 package com.midas26.mobileapp.ui.navigation
 
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,11 +21,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.midas26.mobileapp.ui.analysis.AnalysisLinkedUser
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
-import com.midas26.mobileapp.ui.analysis.analysisUserSamples
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -51,6 +50,11 @@ import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
 import com.midas26.mobileapp.ui.recall.RecallResultScreen
 import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
+import com.midas26.mobileapp.ui.settings.AddressRegisterScreen
+import com.midas26.mobileapp.ui.settings.GuardianAccessibilitySettingsScreen
+import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
+import com.midas26.mobileapp.ui.settings.LivingRadiusScreen
+import com.midas26.mobileapp.ui.settings.ManagedUserScreen
 import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
@@ -61,6 +65,10 @@ import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
+
+private const val GuardianManagedUsersRoute = "guardian_managed_users"
+private const val GuardianAddressRegisterRoute = "guardian_address_register"
+private const val GuardianLivingRadiusRoute = "guardian_living_radius"
 
 private val mainRoutes = setOf(
     Routes.UserHome,
@@ -77,14 +85,19 @@ private val mainRoutes = setOf(
     Routes.LocationList,
     Routes.LocationDetail,
     Routes.LocationRoute,
-    Routes.AnalysisUserSelect
+    Routes.AnalysisUserSelect,
+    GuardianManagedUsersRoute,
+    GuardianAddressRegisterRoute,
+    GuardianLivingRadiusRoute
 )
 
 @Composable
 fun AppNavHost(
     navController: NavHostController = rememberNavController(),
     startDestination: String = Routes.Login,
-    analysisViewModel: AnalysisViewModel = viewModel(LocalContext.current as ComponentActivity),
+    analysisViewModel: AnalysisViewModel = viewModel(
+        LocalActivity.current as ComponentActivity
+    ),
     onFontSizeChange: (FontSizeLevel) -> Unit = {},
     onHighContrastChange: (Boolean) -> Unit = {},
     onHapticChange: (Boolean) -> Unit = {},
@@ -123,7 +136,10 @@ fun AppNavHost(
             GuardianHomeTab.Location
 
         Routes.Settings,
-        Routes.AccessibilitySettings ->
+        Routes.AccessibilitySettings,
+        GuardianManagedUsersRoute,
+        GuardianAddressRegisterRoute,
+        GuardianLivingRadiusRoute ->
             if (isGuardian) GuardianHomeTab.Settings else UserHomeTab.Settings
 
         else ->
@@ -219,7 +235,7 @@ fun AppNavHost(
                             navController.navigate(Routes.ForgotPassword)
                         },
                         onAccessibility = {
-                            navController.navigate(Routes.AccessibilitySettings)
+                            navController.navigate(Routes.LoginAccessibilitySettings)
                         }
                     )
                 }
@@ -247,9 +263,7 @@ fun AppNavHost(
 
                     ForgotPasswordVerifyScreen(
                         phone = phone,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = { navController.popBackStack() },
                         onVerified = { verifiedPhone ->
                             navController.navigate(Routes.resetPassword(verifiedPhone)) {
                                 popUpTo(Routes.ForgotPassword) { inclusive = true }
@@ -270,9 +284,7 @@ fun AppNavHost(
 
                     ResetPasswordScreen(
                         phone = phone,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = { navController.popBackStack() },
                         onPasswordReset = {
                             navController.navigate(Routes.Login) {
                                 popUpTo(Routes.Login) { inclusive = true }
@@ -286,8 +298,8 @@ fun AppNavHost(
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.SignupRole)
                         },
-                        onNext = { role ->
-                            navController.navigate(Routes.signupInfo(role))
+                        onNext = { signupRole ->
+                            navController.navigate(Routes.signupInfo(signupRole))
                         }
                     )
                 }
@@ -301,16 +313,16 @@ fun AppNavHost(
                         }
                     )
                 ) { back ->
-                    val role = back.arguments?.getString(Routes.SignupInfoArgRole)
+                    val signupRole = back.arguments?.getString(Routes.SignupInfoArgRole)
                         ?: PrefsManager.ROLE_USER
 
                     SignupInfoScreen(
-                        role = role,
+                        role = signupRole,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.SignupInfo)
                         },
                         onVerify = { phone ->
-                            navController.navigate(Routes.phoneVerification(phone, role))
+                            navController.navigate(Routes.phoneVerification(phone, signupRole))
                         },
                         viewModel = authViewModel
                     )
@@ -329,16 +341,14 @@ fun AppNavHost(
                     )
                 ) { back ->
                     val phone = back.arguments?.getString(Routes.PhoneVerificationArgPhone) ?: ""
-                    val role = back.arguments?.getString(Routes.PhoneVerificationArgRole)
+                    val signupRole = back.arguments?.getString(Routes.PhoneVerificationArgRole)
                         ?: PrefsManager.ROLE_USER
 
                     PhoneVerificationScreen(
                         phone = phone,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = { navController.popBackStack() },
                         onVerified = {
-                            navController.navigate(Routes.privacy(role)) {
+                            navController.navigate(Routes.privacy(signupRole)) {
                                 popUpTo(Routes.SignupRole) { inclusive = true }
                             }
                         }
@@ -354,12 +364,12 @@ fun AppNavHost(
                         }
                     )
                 ) { back ->
-                    val role = back.arguments?.getString(Routes.PermissionArgRole)
+                    val permissionRole = back.arguments?.getString(Routes.PermissionArgRole)
                         ?: PrefsManager.ROLE_USER
 
                     PermissionScreen(
                         onNext = {
-                            navController.navigate(Routes.privacy(role))
+                            navController.navigate(Routes.privacy(permissionRole))
                         }
                     )
                 }
@@ -373,12 +383,12 @@ fun AppNavHost(
                         }
                     )
                 ) { back ->
-                    val role = back.arguments?.getString(Routes.PrivacyArgRole)
+                    val privacyRole = back.arguments?.getString(Routes.PrivacyArgRole)
                         ?: PrefsManager.ROLE_USER
 
                     PrivacyScreen(
                         onAgreeAndStart = {
-                            if (role == PrefsManager.ROLE_GUARDIAN) {
+                            if (privacyRole == PrefsManager.ROLE_GUARDIAN) {
                                 navController.navigate(Routes.GuardianHome) {
                                     popUpTo(Routes.Login) { inclusive = true }
                                 }
@@ -424,9 +434,7 @@ fun AppNavHost(
                     GuardianHomeScreen(
                         onMenuClick = { menu ->
                             when (menu) {
-                                GuardianMenu.Analysis -> {
-                                    navController.navigate(Routes.AnalysisUserSelect)
-                                }
+                                GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
 
                                 GuardianMenu.Location -> {
                                     navController.navigate(Routes.LocationList) {
@@ -434,9 +442,7 @@ fun AppNavHost(
                                     }
                                 }
 
-                                GuardianMenu.Settings -> {
-                                    navController.navigate(Routes.Settings)
-                                }
+                                GuardianMenu.Settings -> navController.navigate(Routes.Settings)
                             }
                         }
                     )
@@ -496,26 +502,84 @@ fun AppNavHost(
                 }
 
                 composable(Routes.Settings) {
-                    SettingsScreen(
-                        userName = PrefsManager.from(context).getUserName(),
-                        weeklyScore = analysisViewModel.displayScore,
-                        streakDays = analysisViewModel.streakDays,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.Settings)
-                        },
-                        onLogout = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(0) { inclusive = true }
+                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                        GuardianSettingsScreen(
+                            userName = PrefsManager.from(context).getUserName(),
+                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
+                            streakDays = analysisViewModel.streakDays,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.Settings)
+                            },
+                            onLogout = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onDeleteAccount = {
+                                navController.navigate(Routes.Withdraw)
+                            },
+                            onAccessibility = {
+                                navController.navigate(Routes.AccessibilitySettings)
+                            },
+                            onManagedUsers = {
+                                navController.navigate(GuardianManagedUsersRoute)
+                            },
+                            onAddressRegister = {
+                                navController.navigate(GuardianAddressRegisterRoute)
+                            },
+                            onLivingRadius = {
+                                navController.navigate(GuardianLivingRadiusRoute)
+                            },
+                            onProfileEdit = {
+                                navController.navigate(Routes.ProfileEdit)
                             }
-                        },
-                        onDeleteAccount = {
-                            navController.navigate(Routes.Withdraw)
-                        },
-                        onAccessibility = {
-                            navController.navigate(Routes.AccessibilitySettings)
-                        },
-                        onProfileEdit = {
-                            navController.navigate(Routes.ProfileEdit)
+                        )
+                    } else {
+                        SettingsScreen(
+                            userName = PrefsManager.from(context).getUserName(),
+                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
+                            streakDays = analysisViewModel.streakDays,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.Settings)
+                            },
+                            onLogout = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onDeleteAccount = {
+                                navController.navigate(Routes.Withdraw)
+                            },
+                            onAccessibility = {
+                                navController.navigate(Routes.AccessibilitySettings)
+                            },
+                            onProfileEdit = {
+                                navController.navigate(Routes.ProfileEdit)
+                            }
+                        )
+                    }
+                }
+
+                composable(GuardianManagedUsersRoute) {
+                    ManagedUserScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(GuardianAddressRegisterRoute) {
+                    AddressRegisterScreen(
+                        onBack = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
+
+                composable(GuardianLivingRadiusRoute) {
+                    LivingRadiusScreen(
+                        onBack = {
+                            navController.popBackStack()
                         }
                     )
                 }
@@ -555,9 +619,7 @@ fun AppNavHost(
 
                     WithdrawVerifyScreen(
                         phone = phone,
-                        onBack = {
-                            navController.popBackStack()
-                        },
+                        onBack = { navController.popBackStack() },
                         onWithdrawn = {
                             navController.navigate(Routes.Login) {
                                 popUpTo(0) { inclusive = true }
@@ -567,17 +629,39 @@ fun AppNavHost(
                 }
 
                 composable(Routes.AccessibilitySettings) {
-                    AccessibilitySettingsScreen(
+                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                        GuardianAccessibilitySettingsScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
+                            },
+                            onFontSizeChange = onFontSizeChange,
+                            onHighContrastChange = onHighContrastChange,
+                            onHapticChange = onHapticChange
+                        )
+                    } else {
+                        AccessibilitySettingsScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
+                            },
+                            onFontSizeChange = onFontSizeChange,
+                            onHighContrastChange = onHighContrastChange,
+                            onHapticChange = onHapticChange,
+                            onTapToReplayChange = onTapToReplayChange,
+                            onSpeedChange = onSpeedChange,
+                            onVoiceChatEnabledChange = onVoiceChatEnabledChange,
+                            onPreviewTts = onPreviewTts
+                        )
+                    }
+                }
+
+                composable(Routes.LoginAccessibilitySettings) {
+                    GuardianAccessibilitySettingsScreen(
                         onBack = {
-                            navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
+                            navController.popBackStackIfCurrent(Routes.LoginAccessibilitySettings)
                         },
                         onFontSizeChange = onFontSizeChange,
                         onHighContrastChange = onHighContrastChange,
-                        onHapticChange = onHapticChange,
-                        onTapToReplayChange = onTapToReplayChange,
-                        onSpeedChange = onSpeedChange,
-                        onVoiceChatEnabledChange = onVoiceChatEnabledChange,
-                        onPreviewTts = onPreviewTts
+                        onHapticChange = onHapticChange
                     )
                 }
 
