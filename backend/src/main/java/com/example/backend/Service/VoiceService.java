@@ -11,6 +11,7 @@ import com.example.backend.Model.Repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -30,6 +31,7 @@ public class VoiceService {
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final STTService sttService;
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Transactional
     public VoiceResponseDTO uploadAndSave(
