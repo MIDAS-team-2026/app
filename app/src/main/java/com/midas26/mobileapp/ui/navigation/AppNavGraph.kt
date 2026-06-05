@@ -47,9 +47,6 @@ import com.midas26.mobileapp.ui.home.UserMenu
 import com.midas26.mobileapp.ui.legal.PrivacyScreen
 import com.midas26.mobileapp.ui.onboarding.OnboardingScreen
 import com.midas26.mobileapp.ui.permission.PermissionScreen
-import com.midas26.mobileapp.ui.recall.RecallQuestionScreen
-import com.midas26.mobileapp.ui.recall.RecallResultScreen
-import com.midas26.mobileapp.ui.recall.RecallStartScreen
 import com.midas26.mobileapp.ui.settings.AccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianAccessibilitySettingsScreen
 import com.midas26.mobileapp.ui.settings.GuardianSettingsScreen
@@ -72,9 +69,6 @@ private val mainRoutes = setOf(
     Routes.GuardianHome,
     Routes.VoiceChat,
     Routes.VoiceChatDisconnected,
-    Routes.RecallStart,
-    Routes.RecallQuestion,
-    Routes.RecallResult,
     Routes.AnalysisResult,
     Routes.Settings,
     Routes.AccessibilitySettings,
@@ -118,9 +112,6 @@ fun AppNavHost(
         Routes.VoiceChat, Routes.VoiceChatDisconnected ->
             UserHomeTab.Chat
 
-        Routes.RecallStart,
-        Routes.RecallQuestion,
-        Routes.RecallResult,
         Routes.AnalysisResult,
         Routes.AnalysisUserSelect ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
@@ -426,7 +417,7 @@ fun AppNavHost(
                         onMenuClick = { menu ->
                             when (menu) {
                                 UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
-                                UserMenu.Recall -> navController.navigate(Routes.RecallStart)
+                                UserMenu.Recall -> { /* 미구현 */ }
                                 UserMenu.Analysis -> navController.navigate(Routes.AnalysisResult)
                                 UserMenu.Settings -> navController.navigate(Routes.Settings)
                             }
@@ -676,48 +667,6 @@ fun AppNavHost(
                         },
                         onRetry = {
                             navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
-                        }
-                    )
-                }
-
-                composable(Routes.RecallStart) {
-                    RecallStartScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallStart)
-                        },
-                        onStart = {
-                            navController.navigate(Routes.RecallQuestion) {
-                                popUpTo(Routes.RecallStart) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.RecallQuestion) {
-                    RecallQuestionScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallQuestion)
-                        },
-                        onFinishedAll = {
-                            navController.navigate(Routes.RecallResult) {
-                                popUpTo(Routes.RecallQuestion) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.RecallResult) {
-                    RecallResultScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.RecallResult)
-                        },
-                        onGoHome = {
-                            navController.navigate(Routes.UserHome) {
-                                popUpTo(Routes.UserHome) { inclusive = true }
-                            }
-                        },
-                        onSeeDetails = {
-                            navController.navigate(Routes.AnalysisResult)
                         }
                     )
                 }
