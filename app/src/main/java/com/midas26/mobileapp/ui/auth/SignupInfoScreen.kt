@@ -75,7 +75,14 @@ fun SignupInfoScreen(
 
     LaunchedEffect(authState) {
         when (authState) {
+            is AuthState.PhoneChecked -> {
+                // 환자: 중복 없음 확인 + 인증코드 발송 완료 → 인증 화면으로
+                viewModel.resetState()
+                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
+                onVerify(phone.trim())
+            }
             is AuthState.Success -> {
+                // 보호자: 회원가입 완료 → 인증 화면(완료 화면)으로
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
                 prefs.saveToken(user.token.orEmpty())
@@ -87,7 +94,7 @@ fun SignupInfoScreen(
             }
             is AuthState.Error -> {
                 val msg = (authState as AuthState.Error).message
-                if (msg.contains("전화번호")) phoneError = msg
+                if (msg.contains("전화번호") || msg.contains("가입")) phoneError = msg
                 else serverError = msg
             }
             else -> {}
@@ -244,9 +251,8 @@ fun SignupInfoScreen(
                             // 보호자: 즉시 회원가입 API 호출
                             viewModel.signup(phone.trim(), password, name.trim(), role)
                         } else {
-                            // 환자: 데이터 보관 후 전화 인증으로 이동 (API는 SignupCompleteScreen에서 호출)
-                            viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
-                            onVerify(phone.trim())
+                            // 환자: 중복 체크 + 인증코드 발송 → PhoneChecked 상태 되면 인증 화면으로
+                            viewModel.checkPhoneAndSendCode(phone.trim())
                         }
                     }
                 }

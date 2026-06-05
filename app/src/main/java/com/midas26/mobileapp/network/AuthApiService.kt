@@ -28,7 +28,7 @@ data class UserResponse(
 data class ForgotPasswordRequest(val phone: String)
 data class ResetPasswordRequest(val phone: String, val newPassword: String)
 data class WithdrawRequest(val phone: String)
-data class SendCodeRequest(val phone: String)
+data class SendCodeRequest(val phone: String, val purpose: String)
 data class VerifyCodeRequest(val phone: String, val code: String)
 
 interface AuthApiService {

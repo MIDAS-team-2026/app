@@ -59,9 +59,9 @@ fun ForgotPasswordVerifyScreen(
     val state by viewModel.state.collectAsState()
     val isLoading = state is VerificationState.Sending || state is VerificationState.Verifying
 
-    // 화면 진입 시 인증번호 발송
+    // 화면 진입 시 인증번호 발송 (비밀번호 찾기용 — 미가입 번호 차단)
     LaunchedEffect(Unit) {
-        viewModel.sendCode(phone)
+        viewModel.sendCode(phone, "FORGOT_PASSWORD")
     }
 
     LaunchedEffect(state) {

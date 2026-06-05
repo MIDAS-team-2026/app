@@ -23,11 +23,11 @@ class PhoneVerificationViewModel : ViewModel() {
     private val _state = MutableStateFlow<VerificationState>(VerificationState.Idle)
     val state: StateFlow<VerificationState> = _state
 
-    fun sendCode(phone: String) {
+    fun sendCode(phone: String, purpose: String) {
         viewModelScope.launch {
             _state.value = VerificationState.Sending
             try {
-                val response = RetrofitClient.instance.sendCode(SendCodeRequest(phone))
+                val response = RetrofitClient.instance.sendCode(SendCodeRequest(phone, purpose))
                 if (response.isSuccessful) {
                     _state.value = VerificationState.CodeSent
                 } else {

@@ -66,10 +66,7 @@ fun PhoneVerificationScreen(
     val state by viewModel.state.collectAsState()
     val isLoading = state is VerificationState.Sending || state is VerificationState.Verifying
 
-    // 화면 진입 시 인증번호 발송
-    LaunchedEffect(Unit) {
-        viewModel.sendCode(phone)
-    }
+    // SignupInfoScreen에서 이미 발송했으므로 진입 시 재발송 안 함
 
     LaunchedEffect(state) {
         when (state) {
@@ -78,7 +75,15 @@ fun PhoneVerificationScreen(
                 onVerified()
             }
             is VerificationState.Error -> {
-                errorMsg = (state as VerificationState.Error).message
+                val msg = (state as VerificationState.Error).message
+                // 중복 번호 에러는 Toast 후 이전 화면으로 돌아가서 전화번호 수정
+                if (msg.contains("이미 가입")) {
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    viewModel.resetState()
+                    onBack()
+                } else {
+                    errorMsg = msg
+                }
             }
             else -> {}
         }
@@ -155,7 +160,7 @@ fun PhoneVerificationScreen(
             TextButton(onClick = {
                 code = ""
                 errorMsg = null
-                viewModel.sendCode(phone)
+                viewModel.sendCode(phone, "SIGNUP")
                 Toast.makeText(context, context.getString(R.string.phone_verify_resent), Toast.LENGTH_SHORT).show()
             }) {
                 Text(

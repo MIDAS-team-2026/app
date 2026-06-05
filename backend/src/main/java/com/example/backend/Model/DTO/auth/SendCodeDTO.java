@@ -7,4 +7,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class SendCodeDTO {
     private String phone;
+    /** SIGNUP: 신규 가입용 / FORGOT_PASSWORD: 비밀번호 찾기용 */
+    private String purpose;
 }
