@@ -194,6 +194,25 @@ public class AuthController {
     }
 
 
+    // 코드로 환자 정보 조회 (교차검증용 — 이름·전화번호만 응답)
+    @GetMapping("/patients/by-code/{code}")
+    public ResponseEntity<ApiResponse<UserResponseDTO>> getPatientByCode(@PathVariable String code) {
+        try {
+            User patient = userService.findByPatientCode(code.toUpperCase());
+            UserResponseDTO dto = new UserResponseDTO(
+                    patient.getId(),
+                    patient.getPhone(),
+                    patient.getName(),
+                    patient.getRole(),
+                    null   // patientCode 노출 안 함
+            );
+            return ResponseEntity.ok(ApiResponse.success(dto));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
     // 보호자-환자 연동 해제
     @DeleteMapping("/protectors/{protectorId}/patients/{patientId}")
     public ResponseEntity<ApiResponse<Void>> unlinkPatient(

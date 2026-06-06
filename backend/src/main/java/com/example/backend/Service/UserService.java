@@ -114,6 +114,12 @@ public class UserService {
         protector.getPatients().add(patient);
     }
 
+    // 환자 코드로 환자 조회 (교차검증용 — 이름·전화번호만 반환)
+    public User findByPatientCode(String patientCode) {
+        return userRepository.findByPatientCode(patientCode)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
+    }
+
     public boolean existsByPhone(String phone) {
         return userRepository.existsByPhone(phone);
     }

@@ -80,6 +80,12 @@ interface AuthApiService {
         @Path("patientId") patientId: Int
     ): Response<ApiResponse<List<LinkedUserInfo>>>
 
+    /** 코드로 환자 정보 조회 (교차검증용) */
+    @GET("api/auth/patients/by-code/{code}")
+    suspend fun getPatientByCode(
+        @Path("code") code: String
+    ): Response<ApiResponse<LinkedUserInfo>>
+
     /** 코드 입력으로 환자 연동 */
     @POST("api/auth/link")
     suspend fun linkPatient(@Body request: LinkRequest): Response<ApiResponse<Unit>>
