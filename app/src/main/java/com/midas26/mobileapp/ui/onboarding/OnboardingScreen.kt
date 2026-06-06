@@ -39,11 +39,6 @@ import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.components.AppTextButton
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.launch
@@ -163,7 +158,7 @@ private fun OnboardingPageContent(page: OnboardingPage) {
         Surface(
             modifier = Modifier.size(220.dp),
             shape = RoundedCornerShape(48.dp),
-            color = Green50,
+            color = AppColor.greenSurface,
             shadowElevation = 0.dp
         ) {
             Box(contentAlignment = Alignment.Center) {

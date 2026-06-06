@@ -62,11 +62,6 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.foundation.layout.offset
 
@@ -74,13 +69,18 @@ import androidx.compose.foundation.layout.offset
 fun ProfileEditScreen(
     initialName: String = "",
     initialPhone: String = "",
+    /** 보호자일 때 연결된 환자 목록, 환자일 때 null */
+    linkedPatients: List<com.midas26.mobileapp.network.LinkedUserInfo>? = null,
     onBack: () -> Unit = {},
     viewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val prefs = PrefsManager.from(context)
-    val isPatient = prefs.getUserRole() == PrefsManager.ROLE_USER
+    val isPatient  = prefs.getUserRole() == PrefsManager.ROLE_USER
+    val isGuardian = !isPatient
+    val accentColor      = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+    val accentColorDark  = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
     val userCode = prefs.getUserCode()
 
     var currentPassword by remember { mutableStateOf("") }
@@ -188,7 +188,7 @@ fun ProfileEditScreen(
                                         Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = RoundedCornerShape(10.dp),
-                                color = Gray200
+                                color = AppColor.divider
                             ) {
                                 Text(
                                     text = "복사",
@@ -246,14 +246,14 @@ fun ProfileEditScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Surface(
                                             shape = CircleShape,
-                                            color = Green400.copy(alpha = 0.15f),
+                                            color = AppColor.greenPrimary.copy(alpha = 0.15f),
                                             modifier = Modifier.size(40.dp)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
                                                     imageVector = Icons.Default.Shield,
                                                     contentDescription = null,
-                                                    tint = Green600,
+                                                    tint = AppColor.accentDark,
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
@@ -275,13 +275,13 @@ fun ProfileEditScreen(
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = Green400.copy(alpha = 0.15f)
+                                        color = AppColor.greenPrimary.copy(alpha = 0.15f)
                                     ) {
                                         Text(
                                             text = "보호자",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = Green600,
+                                            color = AppColor.accentDark,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                         )
                                     }
@@ -291,6 +291,101 @@ fun ProfileEditScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 연결된 환자 섹션 — 보호자만 표시
+            if (isGuardian) {
+                val patients = linkedPatients ?: emptyList()
+                ProfileSection(title = "연결된 사용자") {
+                    if (patients.isEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = AppColor.textTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                            Text(
+                                text = "연결된 사용자가 없어요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                    } else {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            patients.forEachIndexed { index, patient ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        color = AppColor.divider,
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                                val relation = patient.userId
+                                    ?.let { prefs.getPatientRelation(it) }
+                                    ?.ifEmpty { "사용자" }
+                                    ?: "사용자"
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = AppColor.guardianPrimary.copy(alpha = 0.15f),
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = AppColor.guardianDark,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.size(12.dp))
+                                        Column {
+                                            Text(
+                                                text = patient.name ?: "이름 없음",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = AppColor.textPrimary
+                                            )
+                                            Text(
+                                                text = patient.phone ?: "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = AppColor.textTertiary
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = AppColor.guardianSurface
+                                    ) {
+                                        Text(
+                                            text = relation,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AppColor.guardianDark,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
             }
 
@@ -386,7 +481,7 @@ fun ProfileEditScreen(
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Green400)
+                    CircularProgressIndicator(color = accentColor)
                 }
             } else {
                 Button(
@@ -403,8 +498,8 @@ fun ProfileEditScreen(
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Green400,
-                        disabledContainerColor = Green400.copy(alpha = 0.4f),
+                        containerColor = accentColor,
+                        disabledContainerColor = accentColor.copy(alpha = 0.4f),
                         disabledContentColor = BrandWhite.copy(alpha = 0.6f)
                     )
                 ) {
@@ -456,8 +551,8 @@ private fun CollapsingProfileHeader(
             .fillMaxWidth()
             .height(headerHeight)
             .background(brush = Brush.verticalGradient(
-                colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
-                         else listOf(Green600, Green400)
+                colors = if (isGuardian) listOf(AppColor.guardianDark, AppColor.guardianPrimary)
+                         else listOf(AppColor.accentDark, AppColor.greenPrimary)
             ))
     ) {
         // ── 확장 아바타 (헤더 하단 중앙에 반 걸침, 접힐수록 사라짐) ──

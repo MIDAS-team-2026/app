@@ -1,5 +1,7 @@
 package com.midas26.mobileapp.ui.home
 
+import com.midas26.mobileapp.ui.theme.AppColor
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,11 +9,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.theme.*
 
 enum class GuardianMenu {
@@ -33,14 +38,16 @@ enum class GuardianMenu {
 
 @Composable
 fun GuardianHomeScreen(
-    guardianName: String = "홍철수",
-    linkedUserName: String = "홍길동",
-    todayScore: Int = 75,
-    weeklyScore: Int = 75,
-    voiceCheckDone: Boolean = true,
-    recallCheckDone: Boolean = false,
+    guardianName: String,
+    patients: List<LinkedUserInfo>,
+    isLoading: Boolean = false,
+    patientScores: Map<Int, Int?> = emptyMap(),
     onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
+    var selectedPatient by remember(patients) {
+        mutableStateOf(patients.firstOrNull())
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -48,8 +55,11 @@ fun GuardianHomeScreen(
     ) {
         GuardianHomeHeader(
             guardianName = guardianName,
-            linkedUserName = linkedUserName,
-            todayScore = todayScore
+            patients = patients,
+            selectedPatient = selectedPatient,
+            isLoading = isLoading,
+            todayScore = selectedPatient?.userId?.let { patientScores[it] },
+            onPatientSelected = { selectedPatient = it }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -66,8 +76,11 @@ fun GuardianHomeScreen(
 @Composable
 private fun GuardianHomeHeader(
     guardianName: String,
-    linkedUserName: String,
-    todayScore: Int
+    patients: List<LinkedUserInfo>,
+    selectedPatient: LinkedUserInfo?,
+    isLoading: Boolean,
+    todayScore: Int?,           // null = 로딩 중 또는 데이터 없음
+    onPatientSelected: (LinkedUserInfo) -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -76,12 +89,13 @@ private fun GuardianHomeHeader(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        GuardianAccentDark,
-                        GuardianAccent
+                        AppColor.guardianDark,
+                        AppColor.guardianPrimary
                     )
                 )
             )
     ) {
+        // 배경 원 장식
         Box(
             modifier = Modifier
                 .size(190.dp)
@@ -100,25 +114,19 @@ private fun GuardianHomeHeader(
                     color = BrandWhite.copy(alpha = 0.9f),
                     fontWeight = FontWeight.SemiBold
                 )
-
                 Spacer(modifier = Modifier.height(2.dp))
-
-                Row(
-                    verticalAlignment = Alignment.Bottom
-                ) {
+                if (isLoading || (patients.isNotEmpty() && todayScore == null && selectedPatient != null)) {
+                    CircularProgressIndicator(
+                        color = BrandWhite,
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 3.dp
+                    )
+                } else {
                     Text(
-                        text = todayScore.toString(),
+                        text = todayScore?.toString() ?: "-",
                         fontSize = 52.sp,
                         color = BrandWhite,
                         fontWeight = FontWeight.Bold
-                    )
-
-                    Text(
-                        text = stringResource(R.string.home_score_unit),
-                        fontSize = 19.sp,
-                        color = BrandWhite.copy(alpha = 0.9f),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
             }
@@ -147,30 +155,93 @@ private fun GuardianHomeHeader(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = BrandWhite.copy(alpha = 0.22f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = GuardianAccentDark,
-                        modifier = Modifier.size(24.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Text(
-                        text = stringResource(R.string.guardian_linked, linkedUserName),
-                        fontSize = 18.sp,
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(
                         color = BrandWhite,
-                        fontWeight = FontWeight.SemiBold
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
                     )
                 }
+                patients.isEmpty() -> {
+                    Text(
+                        text = "연결된 사용자가 없습니다",
+                        fontSize = 16.sp,
+                        color = BrandWhite.copy(alpha = 0.8f)
+                    )
+                }
+                else -> {
+                    LinkedPatientDropdown(
+                        patients = patients,
+                        selectedPatient = selectedPatient,
+                        onPatientSelected = onPatientSelected
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LinkedPatientDropdown(
+    patients: List<LinkedUserInfo>,
+    selectedPatient: LinkedUserInfo?,
+    onPatientSelected: (LinkedUserInfo) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box {
+        Surface(
+            modifier = Modifier.clickable { expanded = !expanded },
+            shape = RoundedCornerShape(24.dp),
+            color = BrandWhite.copy(alpha = 0.22f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = AppColor.guardianDark,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "${selectedPatient?.name ?: "사용자 선택"} 님 연결됨",
+                    fontSize = 18.sp,
+                    color = BrandWhite,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp
+                                  else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = BrandWhite,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            patients.forEach { patient ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "${patient.name ?: "이름 없음"} 님",
+                            fontWeight = if (patient.userId == selectedPatient?.userId)
+                                FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    onClick = {
+                        onPatientSelected(patient)
+                        expanded = false
+                    }
+                )
             }
         }
     }
@@ -220,17 +291,15 @@ private fun GuardianMenuList(
             title = stringResource(R.string.menu_settings),
             desc = "앱 환경과 알림을 설정해요",
             onClick = { onMenuClick(GuardianMenu.Settings) },
-            accent = Gray100,
-            iconTint = Gray400,
+            accent = AppColor.surfaceElevated,
+            iconTint = AppColor.textTertiary,
             modifier = Modifier.fillMaxWidth()
         )
     }
 }
 
 @Composable
-private fun SectionHeader(
-    title: String
-) {
+private fun SectionHeader(title: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -238,17 +307,15 @@ private fun SectionHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold
         )
-
         Spacer(modifier = Modifier.width(10.dp))
-
         Box(
             modifier = Modifier
                 .weight(1f)
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
     }
 }
@@ -260,9 +327,12 @@ private fun GuardianMenuCard(
     desc: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = GuardianAccentLight,
-    iconTint: Color = GuardianAccentDark
+    accent: Color = Color.Unspecified,
+    iconTint: Color = Color.Unspecified
 ) {
+    val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
+    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
+
     Surface(
         modifier = modifier
             .height(104.dp)
@@ -279,18 +349,14 @@ private fun GuardianMenuCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     text = desc,
                     style = MaterialTheme.typography.bodySmall,
@@ -301,13 +367,13 @@ private fun GuardianMenuCard(
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = accent
+                color = resolvedAccent
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = iconTint,
+                        tint = resolvedIconTint,
                         modifier = Modifier.size(40.dp)
                     )
                 }

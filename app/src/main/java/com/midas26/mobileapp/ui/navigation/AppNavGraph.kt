@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.navigation
 
+import com.midas26.mobileapp.ui.theme.AppColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -40,6 +42,7 @@ import com.midas26.mobileapp.ui.components.TabId
 import com.midas26.mobileapp.ui.components.UserHomeTab
 import com.midas26.mobileapp.ui.components.guardianTabs
 import com.midas26.mobileapp.ui.components.userTabs
+import com.midas26.mobileapp.ui.guardian.GuardianViewModel
 import com.midas26.mobileapp.ui.home.GuardianHomeScreen
 import com.midas26.mobileapp.ui.home.GuardianMenu
 import com.midas26.mobileapp.ui.home.UserHomeScreen
@@ -56,8 +59,6 @@ import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
@@ -100,6 +101,9 @@ fun AppNavHost(
     val currentRoute = currentBackStack?.destination?.route
 
     val authViewModel: AuthViewModel = viewModel()
+    val guardianViewModel: GuardianViewModel = viewModel(
+        LocalActivity.current as ComponentActivity
+    )
 
     val role = PrefsManager.from(context).getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
@@ -159,7 +163,7 @@ fun AppNavHost(
                             }
                         }
                     },
-                    accent = if (isGuardian) GuardianAccentDark else Green500
+                    accent = if (isGuardian) AppColor.guardianDark else AppColor.greenSecondary
                 )
             }
         }
@@ -410,6 +414,7 @@ fun AppNavHost(
                 composable(Routes.UserHome) {
                     UserHomeScreen(
                         userName = PrefsManager.from(context).getUserName(),
+                        weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                         streakDays = analysisViewModel.streakDays,
                         weeklyChecks = analysisViewModel.weeklyChecks,
                         weeklyDayLabels = analysisViewModel.weeklyDayLabels,
@@ -426,7 +431,25 @@ fun AppNavHost(
                 }
 
                 composable(Routes.GuardianHome) {
+                    val prefs = PrefsManager.from(context)
+                    val guardianId = prefs.getUserId()
+                    val guardianName = prefs.getUserName()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+                    val patientScores by guardianViewModel.patientScores.collectAsState()
+
+                    androidx.compose.runtime.LaunchedEffect(guardianId) {
+                        guardianViewModel.loadPatients(guardianId)
+                    }
+                    androidx.compose.runtime.LaunchedEffect(patients) {
+                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                    }
+
                     GuardianHomeScreen(
+                        guardianName = guardianName,
+                        patients = patients,
+                        isLoading = isLoadingPatients,
+                        patientScores = patientScores,
                         onMenuClick = { menu ->
                             when (menu) {
                                 GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
@@ -444,8 +467,11 @@ fun AppNavHost(
                 }
 
                 composable(Routes.LocationList) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+
                     LocationListScreen(
-                        users = sampleUsers,
+                        users = linkedUsers,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.LocationList)
                         },
@@ -464,7 +490,9 @@ fun AppNavHost(
                     )
                 ) { back ->
                     val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
-                    val user = sampleUsers.find { it.id == userId } ?: sampleUsers.first()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
 
                     LocationDetailScreen(
                         user = user,
@@ -486,7 +514,9 @@ fun AppNavHost(
                     )
                 ) { back ->
                     val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
-                    val user = sampleUsers.find { it.id == userId } ?: sampleUsers.first()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
 
                     LocationRouteScreen(
                         user = user,
@@ -498,10 +528,25 @@ fun AppNavHost(
 
                 composable(Routes.Settings) {
                     if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
+
+                        LaunchedEffect(patients) {
+                            if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                        }
+
+                        val noResultCount = patientStatuses.values.count {
+                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NO_RESULT
+                        }
+                        val unviewedCount = patientStatuses.values.count {
+                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NEW_RESULT
+                        }
+
                         GuardianSettingsScreen(
                             userName = PrefsManager.from(context).getUserName(),
-                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
-                            streakDays = analysisViewModel.streakDays,
+                            patients = patients,
+                            noResultCount = noResultCount,
+                            unviewedCount = unviewedCount,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.Settings)
                             },
@@ -550,17 +595,25 @@ fun AppNavHost(
                 }
 
                 composable(GuardianManagedUsersRoute) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+
                     ManagedUserScreen(
-                        onBack = {
-                            navController.popBackStack()
-                        }
+                        patients = patients,
+                        isLoading = isLoadingPatients,
+                        viewModel = guardianViewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
                 composable(Routes.ProfileEdit) {
+                    val prefs = PrefsManager.from(context)
+                    val patients by guardianViewModel.patients.collectAsState()
+
                     ProfileEditScreen(
-                        initialName = PrefsManager.from(context).getUserName(),
-                        initialPhone = PrefsManager.from(context).getUserPhone(),
+                        initialName = prefs.getUserName(),
+                        initialPhone = prefs.getUserPhone(),
+                        linkedPatients = if (prefs.getUserRole() == PrefsManager.ROLE_GUARDIAN) patients else null,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.ProfileEdit)
                         }
@@ -672,12 +725,28 @@ fun AppNavHost(
                 }
 
                 composable(Routes.AnalysisUserSelect) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+                    val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
+
+                    // 환자 목록이 준비되면 상태 조회 시작
+                    androidx.compose.runtime.LaunchedEffect(patients) {
+                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                    }
+
                     AnalysisUserSelectScreen(
+                        patients = patients,
+                        isLoading = isLoadingPatients,
+                        patientStatuses = patientStatuses,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                         },
-                        onUserClick = { _ ->
-                            navController.navigate(Routes.AnalysisResult)
+                        onUserClick = { patient ->
+                            patient.userId?.let { patientId ->
+                                guardianViewModel.markPatientViewed(patientId)
+                                analysisViewModel.loadForPatient(patientId)
+                                navController.navigate(Routes.AnalysisResult)
+                            }
                         }
                     )
                 }
@@ -685,6 +754,7 @@ fun AppNavHost(
                 composable(Routes.AnalysisResult) {
                     AnalysisResultScreen(
                         onBack = {
+                            analysisViewModel.resetToSelf()
                             navController.popBackStackIfCurrent(Routes.AnalysisResult)
                         },
                         viewModel = analysisViewModel

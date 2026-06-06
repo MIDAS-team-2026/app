@@ -48,6 +48,25 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val prefs = PrefsManager.from(application)
     private val api   = RetrofitClient.analysis
 
+    /**
+     * 보호자가 특정 환자 데이터를 볼 때 설정. null이면 로그인한 본인 userId 사용.
+     * [loadForPatient]로 세팅, [resetToSelf]로 초기화.
+     */
+    private var targetUserId: Int? = null
+
+    private fun resolveUserId(): Int = targetUserId ?: prefs.getUserId()
+
+    /** 보호자 → 환자 분석 조회: userId 세팅 후 전체 리로드 */
+    fun loadForPatient(patientId: Int) {
+        targetUserId = patientId
+        refresh()
+    }
+
+    /** 본인 데이터로 복귀 (보호자 화면 벗어날 때 호출) */
+    fun resetToSelf() {
+        targetUserId = null
+    }
+
     // ── 로딩 상태 ─────────────────────────────────────────────────────────────
 
     var isLoading by mutableStateOf(false)
@@ -97,7 +116,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     fun dismissLoadingScreen() { showLoadingScreen = false }
 
     private suspend fun doLoad() {
-        val userId = prefs.getUserId()
+        val userId = resolveUserId()
         if (userId <= 0) { isInitialLoadDone = true; return }
         isLoading = true
         coroutineScope {
@@ -110,7 +129,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun doLoadSummary() {
-        val userId = prefs.getUserId()
+        val userId = resolveUserId()
         if (userId <= 0) return
         var loaded = false
 
@@ -135,7 +154,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     }
 
     private suspend fun doLoadStreak() {
-        val userId = prefs.getUserId()
+        val userId = resolveUserId()
         if (userId <= 0) return
         runCatching { api.getStreakDays(userId) }
             .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
@@ -325,7 +344,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
     private suspend fun doLoadWeeklyScores() {
-        val userId = prefs.getUserId()
+        val userId = resolveUserId()
         if (userId <= 0) return
         runCatching { api.getWeeklyScores(userId) }
             .onSuccess { resp ->
@@ -355,7 +374,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onGraphPointTapped(dateStr: String?) {
-        val userId = prefs.getUserId()
+        val userId = resolveUserId()
         if (userId <= 0 || dateStr == null) return
         viewModelScope.launch {
             isDayLoading = true

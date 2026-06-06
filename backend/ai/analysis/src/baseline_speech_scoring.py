@@ -6,11 +6,21 @@ BASELINE_PROFILE_PATH = Path(r"D:\MIDAS_EXTRACTED\elderly_baseline_profile.json"
 
 
 def load_baseline_profile(profile_path=BASELINE_PROFILE_PATH):
-    """
-    노인 자유대화 baseline profile JSON을 불러온다.
-    """
+
     if not profile_path.exists():
-        raise FileNotFoundError(f"baseline profile 파일을 찾을 수 없습니다: {profile_path}")
+
+        print(
+            f"[WARN] baseline profile 없음. 기본 threshold 사용: {profile_path}"
+        )
+
+        return {
+            "thresholds": {
+                "short_answer_word_count": 5,
+                "slow_speech_rate_word": 1.5,
+                "long_record_time": 8.0,
+                "low_content_word_count": 6
+            }
+        }
 
     with open(profile_path, "r", encoding="utf-8") as f:
         profile = json.load(f)

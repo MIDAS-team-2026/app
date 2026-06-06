@@ -68,15 +68,6 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Green100
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.Red400
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -99,7 +90,7 @@ fun VoiceChatTopBar(
             .fillMaxWidth()
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Green600, Green400)
+                    colors = listOf(AppColor.accentDark, AppColor.greenPrimary)
                 )
             )
     ) {
@@ -144,7 +135,7 @@ fun AiAvatar(size: Dp = 44.dp) {
     Surface(
         modifier = Modifier.size(size),
         shape = CircleShape,
-        color = Green400
+        color = AppColor.greenPrimary
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -159,8 +150,8 @@ fun AiAvatar(size: Dp = 44.dp) {
 
 /**
  * 채팅 말풍선 한 줄.
- * - AI 메시지: 좌측 정렬, AI 아바타 + Green50 말풍선
- * - 사용자 메시지: 우측 정렬, Green400 말풍선 흰 텍스트
+ * - AI 메시지: 좌측 정렬, AI 아바타 + AppColor.greenSurface 말풍선
+ * - 사용자 메시지: 우측 정렬, AppColor.greenPrimary 말풍선 흰 텍스트
  * - faded: 흐린 회색 텍스트 (녹음/STT 중 이전 대화 비활성화 표시)
  */
 @Composable
@@ -183,7 +174,7 @@ fun ChatBubble(
                     topStart = 6.dp, topEnd = 20.dp,
                     bottomStart = 20.dp, bottomEnd = 20.dp
                 ),
-                color = if (message.isSpeaking) Green100 else Green50,
+                color = if (message.isSpeaking) AppColor.greenSurfaceVariant else AppColor.greenSurface,
                 modifier = Modifier
                     .weight(1f, fill = false)
                     .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
@@ -218,7 +209,7 @@ fun ChatBubble(
                     topStart = 20.dp, topEnd = 6.dp,
                     bottomStart = 20.dp, bottomEnd = 20.dp
                 ),
-                color = Green400,
+                color = AppColor.greenPrimary,
                 modifier = Modifier.weight(1f, fill = false)
             ) {
                 Text(
@@ -256,7 +247,7 @@ private fun LoadingDots() {
                 modifier = Modifier
                     .size(12.dp)
                     .clip(CircleShape)
-                    .background(Green400.copy(alpha = alpha))
+                    .background(AppColor.greenPrimary.copy(alpha = alpha))
             )
         }
     }
@@ -267,7 +258,7 @@ private fun LoadingDots() {
 private fun SpeakingIndicator() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Waveform(
-            barColor = Green400,
+            barColor = AppColor.greenPrimary,
             barCount = 5,
             maxBarHeight = 16.dp,
             barWidth = 4.dp,
@@ -371,7 +362,7 @@ fun BigActionButton(
     enabled: Boolean = true
 ) {
     val recording = mode == BigActionMode.Stop
-    val bgColor   = if (recording) Color(0xFFEF4444) else if (enabled) Color(0xFF2D7D31) else Gray400
+    val bgColor   = if (recording) AppColor.errorPrimary else if (enabled) AppColor.accentDark else AppColor.textTertiary
 
     val animatedBgColor by animateColorAsState(
         targetValue = bgColor,
@@ -493,13 +484,13 @@ fun SttQuoteCard(text: String) {
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
         shape = RoundedCornerShape(20.dp),
-        color = Green50
+        color = AppColor.greenSurface
     ) {
         Row(
             modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "❝", fontSize = 26.sp, color = Green400, fontWeight = FontWeight.Bold)
+            Text(text = "❝", fontSize = 26.sp, color = AppColor.greenPrimary, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.width(10.dp))
             Text(
                 text = text,
@@ -562,7 +553,7 @@ fun WideSecondaryButton(
             .height(56.dp)
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(16.dp),
-        color = Gray100
+        color = AppColor.surfaceElevated
     ) {
         Box(contentAlignment = Alignment.Center) {
             Text(
@@ -608,8 +599,9 @@ fun AiSpeechBubble(
     )
 
     val borderWidth = if (highlighted) 3.dp else 2.dp
-    val borderColor = if (highlighted) Green400 else Green400.copy(alpha = 0.55f)
-    val bgFill     = if (highlighted) Green400.copy(alpha = pulseAlpha) else Color.Transparent
+    val greenPrimary = AppColor.greenPrimary
+    val borderColor = if (highlighted) greenPrimary else greenPrimary.copy(alpha = 0.55f)
+    val bgFill     = if (highlighted) greenPrimary.copy(alpha = pulseAlpha) else Color.Transparent
 
     val shape = RoundedCornerShape(10.dp)
 
@@ -657,7 +649,7 @@ fun AiSpeechBubble(
                         modifier = Modifier
                             .size(16.dp)
                             .clip(CircleShape)
-                            .background(Green400.copy(alpha = alpha))
+                            .background(AppColor.greenPrimary.copy(alpha = alpha))
                     )
                 }
             }
@@ -681,8 +673,8 @@ fun AiSpeechBubble(
             .size(width = 26.dp, height = 14.dp)
             .offset(y = -borderWidth)
     ) {
-        val tailBorderColor = if (highlighted) Green400 else Green400.copy(alpha = 0.55f)
-        val tailFillColor   = if (highlighted) Green400.copy(alpha = pulseAlpha) else BrandWhite
+        val tailBorderColor = if (highlighted) greenPrimary else greenPrimary.copy(alpha = 0.55f)
+        val tailFillColor   = if (highlighted) greenPrimary.copy(alpha = pulseAlpha) else BrandWhite
 
         // 테두리 삼각형
         val borderPath = Path().apply {
@@ -874,8 +866,8 @@ fun MicCircleButton(
     onClick: () -> Unit,
     enabled: Boolean = true
 ) {
-    val bgColor = if (enabled) Green50 else Gray200
-    val iconTint = if (enabled) Green600 else Gray400
+    val bgColor = if (enabled) AppColor.greenSurface else AppColor.divider
+    val iconTint = if (enabled) AppColor.accentDark else AppColor.textTertiary
 
     Box(
         modifier = Modifier

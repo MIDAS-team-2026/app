@@ -152,9 +152,9 @@ public class AuthController {
     }
 
     // 환자 기준: 해당 환자에게 연결된 보호자 목록 조회
-    @GetMapping("/protectors/{userId}")
-    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getProtectors(@PathVariable Integer userId) {
-        List<UserResponseDTO> protectors = userService.getProtectors(userId).stream()
+    @GetMapping("/patients/{patientId}/guardians")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getGuardiansByPatient(@PathVariable Integer patientId) {
+        List<UserResponseDTO> guardians = userService.getGuardiansByPatient(patientId).stream()
                 .map(u -> new UserResponseDTO(
                         u.getId(),
                         u.getPhone(),
@@ -164,7 +164,7 @@ public class AuthController {
                 ))
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(ApiResponse.success(protectors));
+        return ResponseEntity.ok(ApiResponse.success(guardians));
     }
 
     // 보호자 기준: 해당 보호자가 연결한 환자 목록 조회
@@ -193,6 +193,39 @@ public class AuthController {
         }
     }
 
+
+    // 코드로 환자 정보 조회 (교차검증용 — 이름·전화번호만 응답)
+    @GetMapping("/patients/by-code/{code}")
+    public ResponseEntity<ApiResponse<UserResponseDTO>> getPatientByCode(@PathVariable String code) {
+        try {
+            User patient = userService.findByPatientCode(code.toUpperCase());
+            UserResponseDTO dto = new UserResponseDTO(
+                    patient.getId(),
+                    patient.getPhone(),
+                    patient.getName(),
+                    patient.getRole(),
+                    null   // patientCode 노출 안 함
+            );
+            return ResponseEntity.ok(ApiResponse.success(dto));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
+    // 보호자-환자 연동 해제
+    @DeleteMapping("/protectors/{protectorId}/patients/{patientId}")
+    public ResponseEntity<ApiResponse<Void>> unlinkPatient(
+            @PathVariable Integer protectorId,
+            @PathVariable Integer patientId) {
+        try {
+            userService.unlinkPatient(protectorId, patientId);
+            return ResponseEntity.ok(ApiResponse.success());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail(400, e.getMessage()));
+        }
+    }
 
     @PostMapping("/link")
     public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {

@@ -4,22 +4,21 @@ from typing import Dict, List
 import requests
 from openai import OpenAI
 
-
-YNU_API_KEY = os.getenv("YNU_API_KEY")
-
-if not YNU_API_KEY:
-    raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
-
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
-
 BASE_URL = "http://localhost:8080"
 
+_client: OpenAI | None = None
 
-client = OpenAI(
-    api_key=YNU_API_KEY,
-    base_url=YNU_BASE_URL,
-)
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        api_key = os.getenv("YNU_API_KEY")
+        if not api_key:
+            raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
+        _client = OpenAI(api_key=api_key, base_url=YNU_BASE_URL)
+    return _client
 
 
 def build_conversation_text(conversation_history: List[str]) -> str:
@@ -40,18 +39,30 @@ def generate_recall_question_from_conversation(
     conversation_text = build_conversation_text(conversation_history)
 
     if not conversation_text:
-        return {
-            "memoryPoint": "",
-            "question": "아까 이야기하신 내용 중 기억나는 것이 있으신가요?",
-        }
+        # 대화 내용이 없으면 Claude에게 자연스러운 대화 시작 인사 생성을 맡김
+        prompt = """
+당신은 노인과 따뜻하게 대화를 나누는 친근한 AI 말동무입니다.
 
-    prompt = f"""
-당신은 노인 인지 기능 점검 앱의 자연대화 회상 질문 생성 AI입니다.
+지금 막 대화를 시작하려고 합니다. 대화 내용은 아직 없습니다.
+자연스럽고 따뜻한 대화 시작 인사를 한 문장으로 만들어주세요.
+
+조건:
+- 어르신을 편안하게 해주는 말투
+- 오늘 하루나 최근 일상에 관심을 보이는 내용
+- 너무 딱딱하거나 질문지처럼 보이지 않게
+
+출력 형식:
+memoryPoint:
+question: 자연스러운 대화 시작 인사
+""".strip()
+    else:
+        prompt = f"""
+당신은 노인과 따뜻하게 대화를 나누는 친근한 AI 말동무입니다.
 
 목표:
 - 아래 대화 내용에서 나중에 다시 물어볼 만한 기억 포인트를 1개 고릅니다.
-- 그 기억 포인트를 바탕으로 자연스러운 회상 질문을 1개 만듭니다.
-- 질문은 실제 대화처럼 부드럽고 짧게 작성합니다.
+- 대화 내용에 공감하는 짧은 미사여구로 시작한 뒤, 자연스러운 회상 질문을 이어서 작성합니다.
+- 전체 답변은 1~2문장으로 짧고 부드럽게 작성합니다.
 - 시험처럼 직접 확인하는 말투는 피합니다.
 - 정답을 질문에 직접 포함하지 않습니다.
 - 치매 진단처럼 보이는 표현은 사용하지 않습니다.
@@ -59,22 +70,22 @@ def generate_recall_question_from_conversation(
 대화 내용:
 {conversation_text}
 
-좋은 질문 예시:
-- 아까 말씀하셨던 식사와 관련해서 기억나는 것이 있으신가요?
-- 조금 전에 통화하셨다고 하셨는데, 누구와 이야기하셨는지 기억나시나요?
-- 오늘 다녀오신 곳에 대해 조금 더 기억나는 게 있으신가요?
+좋은 답변 예시:
+- 아이고, 맛있는 걸 드셨군요~ 그때 드셨던 음식 중에 기억나는 게 있으세요?
+- 그렇군요, 바쁜 하루를 보내셨네요! 오늘 다녀오신 곳이 기억나시나요?
+- 오, 반가운 분이랑 통화하셨군요~ 누구와 이야기 나누셨는지 기억나세요?
 
-나쁜 질문 예시:
+나쁜 답변 예시:
 - 아까 김치찌개 먹었다고 했죠?
 - 아들이랑 통화한 거 맞나요?
 - 마트에 다녀왔다고 말했는데 기억하세요?
 
 출력 형식:
 memoryPoint: 대화에서 뽑은 기억 포인트
-question: 자연스러운 회상 질문
+question: 공감 미사여구 + 자연스러운 회상 질문
 """.strip()
 
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model=GPT_MODEL,
         messages=[
             {

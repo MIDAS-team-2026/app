@@ -40,17 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green100
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.ui.theme.AppColor
 
 @Composable
@@ -98,7 +88,7 @@ private fun UserHomeHeader(
             .fillMaxWidth()
             .wrapContentHeight()
             .background(brush = Brush.verticalGradient(
-                colors = listOf(Green600, Green400)
+                colors = listOf(AppColor.accentDark, AppColor.greenPrimary)
             ))
     ) {
         Column(
@@ -206,7 +196,7 @@ private fun ScoreCard(score: Int) {
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = CircleShape,
-                color = Green50
+                color = AppColor.greenSurface
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Row(verticalAlignment = Alignment.Bottom) {
@@ -219,7 +209,7 @@ private fun ScoreCard(score: Int) {
                         Text(
                             text = stringResource(R.string.home_score_unit),
                             fontSize = 14.sp,
-                            color = Green500
+                            color = AppColor.greenSecondary
                         )
                     }
                 }
@@ -236,7 +226,7 @@ private fun ScoreCard(score: Int) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
                         shape = RoundedCornerShape(11.dp),
-                        color = Green50
+                        color = AppColor.greenSurface
                     ) {
                         Text(
                             text = stringResource(R.string.home_score_normal),
@@ -267,7 +257,7 @@ private fun SectionHeader(title: String) {
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(modifier = Modifier.width(10.dp))
@@ -275,7 +265,7 @@ private fun SectionHeader(title: String) {
             modifier = Modifier
                 .weight(1f)
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
     }
 }
@@ -316,8 +306,8 @@ private fun MenuGrid(
             titleRes = R.string.menu_settings,
             descRes = R.string.menu_settings_desc,
             onClick = { onMenuClick(UserMenu.Settings) },
-            accent = Gray100,
-            iconTint = Gray400,
+            accent = AppColor.surfaceElevated,
+            iconTint = AppColor.textTertiary,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -330,8 +320,8 @@ private fun MenuCard(
     descRes: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = Green50,
-    iconTint: Color = Green600
+    accent: Color = AppColor.greenSurface,
+    iconTint: Color = AppColor.accentDark
 ) {
     Surface(
         modifier = modifier

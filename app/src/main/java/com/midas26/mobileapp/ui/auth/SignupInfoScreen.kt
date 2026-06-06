@@ -43,11 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -162,13 +158,13 @@ fun SignupInfoScreen(
                     .weight(1f)
                     .height(6.dp)
                     .padding(end = 6.dp)
-                    .background(Green400, RoundedCornerShape(3.dp))
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
-                    .background(Green400, RoundedCornerShape(3.dp))
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -240,7 +236,7 @@ fun SignupInfoScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Green500)
+                CircularProgressIndicator(color = AppColor.greenSecondary)
             }
         } else {
             AppPrimaryButton(

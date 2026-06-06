@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
@@ -92,7 +91,7 @@ fun SignupCompleteScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Green400)
+            .background(AppColor.greenPrimary)
     ) {
         // 흰 원 장식
         Box(

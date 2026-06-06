@@ -93,6 +93,29 @@ class PrefsManager(context: Context) {
     fun getLargeTouchArea(): Boolean = prefs.getBoolean(KEY_LARGE_TOUCH, false)
     fun setLargeTouchArea(enabled: Boolean) { prefs.edit().putBoolean(KEY_LARGE_TOUCH, enabled).apply() }
 
+    // 보호자↔환자 관계 (로컬 전용, patientId 키로 저장)
+    fun getPatientRelation(patientId: Int): String =
+        prefs.getString("$KEY_PATIENT_RELATION_PREFIX$patientId", "") ?: ""
+
+    fun savePatientRelation(patientId: Int, relation: String) {
+        prefs.edit().putString("$KEY_PATIENT_RELATION_PREFIX$patientId", relation).apply()
+    }
+
+    fun removePatientRelation(patientId: Int) {
+        prefs.edit().remove("$KEY_PATIENT_RELATION_PREFIX$patientId").apply()
+    }
+
+    // 보호자가 오늘 환자 분석 결과를 확인했는지 여부
+    fun markPatientResultViewedToday(patientId: Int) {
+        val today = java.time.LocalDate.now().toString()
+        prefs.edit().putString("$KEY_PATIENT_VIEWED_PREFIX$patientId", today).apply()
+    }
+
+    fun hasViewedPatientResultToday(patientId: Int): Boolean {
+        val saved = prefs.getString("$KEY_PATIENT_VIEWED_PREFIX$patientId", null) ?: return false
+        return saved == java.time.LocalDate.now().toString()
+    }
+
     companion object {
         private const val PREF_NAME = "midas_prefs"
         private const val KEY_ONBOARDING = "seen_onboarding"
@@ -120,6 +143,9 @@ class PrefsManager(context: Context) {
         private const val KEY_LARGE_TOUCH = "a11y_large_touch"
         private const val KEY_VOICE_CHAT_ENABLED = "a11y_voice_chat_enabled"
         private const val KEY_TAP_TO_REPLAY = "a11y_tap_to_replay"
+
+        private const val KEY_PATIENT_RELATION_PREFIX = "patient_relation_"
+        private const val KEY_PATIENT_VIEWED_PREFIX   = "patient_viewed_date_"
 
         const val ROLE_USER = "PATIENT"
         const val ROLE_GUARDIAN = "PROTECTOR"

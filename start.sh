@@ -5,7 +5,7 @@ ROOT="/c/Users/Admin/Desktop/CODE MASHED/MIDAS_2026/app"
 # Python AI 서버 실행 (백그라운드)
 echo "Starting Python AI Server (port 8000)..."
 cd "$ROOT/backend/ai"
-"/c/Users/Admin/AppData/Local/Programs/Python/Python311/Scripts/uvicorn.exe" voice_reply_handler:app --host 0.0.0.0 --port 8000 &
+"/c/Users/Admin/AppData/Local/Programs/Python/Python311/Scripts/uvicorn.exe" fastapi_ai:app --host 0.0.0.0 --port 8000 &
 PYTHON_PID=$!
 echo "Python server PID: $PYTHON_PID"
 

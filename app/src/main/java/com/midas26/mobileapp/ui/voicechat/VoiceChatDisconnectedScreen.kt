@@ -29,12 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
 
@@ -62,7 +56,7 @@ fun VoiceChatDisconnectedScreen(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
-                    .background(Green50),
+                    .background(AppColor.greenSurface),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -91,7 +85,7 @@ fun VoiceChatDisconnectedScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                color = Green50
+                color = AppColor.greenSurface
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(

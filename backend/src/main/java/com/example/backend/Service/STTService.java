@@ -20,8 +20,8 @@ public class STTService {
     private final AudioRecordRepository audioRecordRepository;
     private final RestTemplate restTemplate = new RestTemplate();
 
-    @Value("${ai.fastapi.base-url:http://localhost:8000}")
-    private String fastApiBaseUrl;
+    @Value("${ai.python.url:http://localhost:8000}")
+    private String pythonBaseUrl;
 
     @Transactional
     public SttResult transcribeAndSave(Long recordId) {
@@ -40,7 +40,7 @@ public class STTService {
             throw new IllegalArgumentException("audioUrl is required.");
         }
 
-        String endpoint = fastApiBaseUrl + "/api/stt";
+        String endpoint = pythonBaseUrl + "/api/stt";
         SttRequest request = new SttRequest(audioUrl, "ko");
 
         try {
@@ -50,7 +50,8 @@ public class STTService {
             }
             return new SttResult(response.getTranscriptText(), response.getConfidence(), response.getModelName());
         } catch (RestClientException e) {
-            throw new IllegalStateException("Failed to call FastAPI STT server: " + e.getMessage(), e);
+            throw new IllegalStateException(
+                    "Failed to call FastAPI STT server (" + pythonBaseUrl + "/api/stt): " + e.getMessage(), e);
         }
     }
 
