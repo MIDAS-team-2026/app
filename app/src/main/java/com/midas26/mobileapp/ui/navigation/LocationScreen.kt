@@ -110,60 +110,25 @@ data class GpsState(
     val errorMsg: String = ""
 )
 
-val sampleUsers = listOf(
-    LinkedUser(
-        id = "1",
-        name = "홍길동",
-        relation = "부",
-        address = "서울특별시 종로구 종로 1가",
-        phone = "010-1234-5678",
-        lastUpdatedMin = 5,
-        totalDistanceKm = 2.4,
-        visitedPlaces = 3,
-        travelHours = 4,
-        timeline = listOf(
-            TimelineItem("14:32", "현 위치", "서울시 종로구 삼봉동 123", true),
-            TimelineItem("12:10", "병원", "서울시 종로구 율곡로 456"),
-            TimelineItem("10:05", "공원", "서울시 종로구 창경궁로 789")
-        ),
-        latitude = 37.5700,
-        longitude = 126.9820,
-        routePoints = listOf(
-            GeoPoint(37.5668, 126.9780),
-            GeoPoint(37.5682, 126.9795),
-            GeoPoint(37.5691, 126.9808),
-            GeoPoint(37.5700, 126.9820)
-        )
-    ),
-    LinkedUser(
-        id = "2",
-        name = "박순임",
-        relation = "모",
-        address = "서울특별시 종로구 사직동 18",
-        phone = "010-9876-5432",
-        lastUpdatedMin = 12,
-        totalDistanceKm = 1.1,
-        visitedPlaces = 2,
-        travelHours = 2,
-        timeline = listOf(
-            TimelineItem("13:45", "현 위치", "서울시 서대문구 연희동 456", true),
-            TimelineItem("11:20", "약국", "서울시 서대문구 홍제동 789")
-        ),
-        latitude = 37.5760,
-        longitude = 126.9368,
-        routePoints = listOf(
-            GeoPoint(37.5738, 126.9340),
-            GeoPoint(37.5746, 126.9350),
-            GeoPoint(37.5760, 126.9368)
-        )
-    )
+/** LinkedUserInfo(API) → LocationScreen에서 사용하는 LinkedUser 변환. 위치 데이터는 이후 API에서 채워짐. */
+fun com.midas26.mobileapp.network.LinkedUserInfo.toLinkedUser() = LinkedUser(
+    id       = userId?.toString() ?: "",
+    name     = name ?: "이름 없음",
+    relation = "",
+    address  = "",
+    phone    = phone ?: "",
+    lastUpdatedMin  = 0,
+    totalDistanceKm = 0.0,
+    visitedPlaces   = 0,
+    travelHours     = 0,
+    timeline        = emptyList()
 )
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationListScreen(
-    users: List<LinkedUser> = sampleUsers,
+    users: List<LinkedUser>,
     onBack: () -> Unit,
     onUserClick: (LinkedUser) -> Unit
 ) {

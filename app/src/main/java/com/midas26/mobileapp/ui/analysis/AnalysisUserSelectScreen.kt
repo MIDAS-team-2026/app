@@ -15,29 +15,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
-
-data class AnalysisLinkedUser(
-    val id: String,
-    val name: String,
-    val relation: String
-)
-
-val analysisUserSamples = listOf(
-    AnalysisLinkedUser(id = "1", name = "홍길동", relation = "부"),
-    AnalysisLinkedUser(id = "2", name = "박순임", relation = "모")
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisUserSelectScreen(
-    users: List<AnalysisLinkedUser> = analysisUserSamples,
+    patients: List<LinkedUserInfo>,
+    isLoading: Boolean = false,
     onBack: () -> Unit,
-    onUserClick: (AnalysisLinkedUser) -> Unit
+    onUserClick: (LinkedUserInfo) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -70,53 +60,66 @@ fun AnalysisUserSelectScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFF0F4FF)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("📋", fontSize = 26.sp)
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "분석 결과를 확인할 사용자를 선택하세요",
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF1A4FAA)
-                        )
-                    }
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                 }
+                patients.isEmpty() -> {
+                    Text(
+                        text = "연결된 사용자가 없습니다",
+                        color = AppColor.textSecondary,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
+                else -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFFF0F4FF)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("📋", fontSize = 26.sp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "분석 결과를 확인할 사용자를 선택하세요",
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF1A4FAA)
+                                )
+                            }
+                        }
 
-                users.forEach { user ->
-                    AnalysisUserCard(
-                        user = user,
-                        onClick = { onUserClick(user) }
+                        patients.forEach { patient ->
+                            AnalysisUserCard(
+                                patient = patient,
+                                onClick = { onUserClick(patient) }
+                            )
+                        }
+                    }
+
+                    VerticalScrollbar(
+                        state = scrollState,
+                        modifier = Modifier.align(Alignment.TopEnd)
                     )
                 }
             }
-
-            VerticalScrollbar(
-                state = scrollState,
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
         }
     }
 }
 
 @Composable
 private fun AnalysisUserCard(
-    user: AnalysisLinkedUser,
+    patient: LinkedUserInfo,
     onClick: () -> Unit
 ) {
     Surface(
@@ -144,10 +147,16 @@ private fun AnalysisUserCard(
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "${user.name}  (${user.relation})",
+                    text = patient.name ?: "이름 없음",
                     fontSize = 25.sp,
                     fontWeight = FontWeight.Bold,
                     color = AppColor.textPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = patient.phone ?: "",
+                    fontSize = 14.sp,
+                    color = AppColor.textTertiary
                 )
             }
 

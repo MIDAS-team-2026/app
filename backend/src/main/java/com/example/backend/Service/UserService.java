@@ -79,6 +79,18 @@ public class UserService {
         recallQuestionRepository.saveAll(initialQuestions);
     }
 
+    // 보호자-환자 연동 해제
+    @Transactional
+    public void unlinkPatient(Integer protectorId, Integer patientId) {
+        User protector = userRepository.findById(protectorId)
+                .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
+
+        boolean removed = protector.getPatients().removeIf(p -> p.getId().equals(patientId));
+        if (!removed) {
+            throw new IllegalArgumentException("연동된 환자가 아닙니다.");
+        }
+    }
+
     // 보호자-환자 연동
     @Transactional
     public void linkProtector(Integer protectorId, String patientCode) {

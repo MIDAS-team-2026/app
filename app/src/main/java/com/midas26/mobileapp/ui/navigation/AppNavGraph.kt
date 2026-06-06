@@ -41,6 +41,7 @@ import com.midas26.mobileapp.ui.components.TabId
 import com.midas26.mobileapp.ui.components.UserHomeTab
 import com.midas26.mobileapp.ui.components.guardianTabs
 import com.midas26.mobileapp.ui.components.userTabs
+import com.midas26.mobileapp.ui.guardian.GuardianViewModel
 import com.midas26.mobileapp.ui.home.GuardianHomeScreen
 import com.midas26.mobileapp.ui.home.GuardianMenu
 import com.midas26.mobileapp.ui.home.UserHomeScreen
@@ -99,6 +100,9 @@ fun AppNavHost(
     val currentRoute = currentBackStack?.destination?.route
 
     val authViewModel: AuthViewModel = viewModel()
+    val guardianViewModel: GuardianViewModel = viewModel(
+        LocalActivity.current as ComponentActivity
+    )
 
     val role = PrefsManager.from(context).getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
@@ -425,7 +429,20 @@ fun AppNavHost(
                 }
 
                 composable(Routes.GuardianHome) {
+                    val prefs = PrefsManager.from(context)
+                    val guardianId = prefs.getUserId()
+                    val guardianName = prefs.getUserName()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+
+                    androidx.compose.runtime.LaunchedEffect(guardianId) {
+                        guardianViewModel.loadPatients(guardianId)
+                    }
+
                     GuardianHomeScreen(
+                        guardianName = guardianName,
+                        patients = patients,
+                        isLoading = isLoadingPatients,
                         onMenuClick = { menu ->
                             when (menu) {
                                 GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
@@ -443,8 +460,11 @@ fun AppNavHost(
                 }
 
                 composable(Routes.LocationList) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+
                     LocationListScreen(
-                        users = sampleUsers,
+                        users = linkedUsers,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.LocationList)
                         },
@@ -463,7 +483,9 @@ fun AppNavHost(
                     )
                 ) { back ->
                     val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
-                    val user = sampleUsers.find { it.id == userId } ?: sampleUsers.first()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
 
                     LocationDetailScreen(
                         user = user,
@@ -485,7 +507,9 @@ fun AppNavHost(
                     )
                 ) { back ->
                     val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
-                    val user = sampleUsers.find { it.id == userId } ?: sampleUsers.first()
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val linkedUsers = patients.map { it.toLinkedUser() }
+                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
 
                     LocationRouteScreen(
                         user = user,
@@ -549,17 +573,25 @@ fun AppNavHost(
                 }
 
                 composable(GuardianManagedUsersRoute) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+
                     ManagedUserScreen(
-                        onBack = {
-                            navController.popBackStack()
-                        }
+                        patients = patients,
+                        isLoading = isLoadingPatients,
+                        viewModel = guardianViewModel,
+                        onBack = { navController.popBackStack() }
                     )
                 }
 
                 composable(Routes.ProfileEdit) {
+                    val prefs = PrefsManager.from(context)
+                    val patients by guardianViewModel.patients.collectAsState()
+
                     ProfileEditScreen(
-                        initialName = PrefsManager.from(context).getUserName(),
-                        initialPhone = PrefsManager.from(context).getUserPhone(),
+                        initialName = prefs.getUserName(),
+                        initialPhone = prefs.getUserPhone(),
+                        linkedPatients = if (prefs.getUserRole() == PrefsManager.ROLE_GUARDIAN) patients else null,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.ProfileEdit)
                         }
@@ -671,12 +703,17 @@ fun AppNavHost(
                 }
 
                 composable(Routes.AnalysisUserSelect) {
+                    val patients by guardianViewModel.patients.collectAsState()
+                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+
                     AnalysisUserSelectScreen(
+                        patients = patients,
+                        isLoading = isLoadingPatients,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                         },
                         onUserClick = { _ ->
-                            // 사용자 카드를 눌러도 분석 결과 화면으로 이동하지 않음
+                            // TODO: 선택한 환자의 분석 결과 화면으로 이동
                         }
                     )
                 }

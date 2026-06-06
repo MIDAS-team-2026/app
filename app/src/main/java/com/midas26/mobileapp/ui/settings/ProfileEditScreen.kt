@@ -69,6 +69,8 @@ import androidx.compose.foundation.layout.offset
 fun ProfileEditScreen(
     initialName: String = "",
     initialPhone: String = "",
+    /** 보호자일 때 연결된 환자 목록, 환자일 때 null */
+    linkedPatients: List<com.midas26.mobileapp.network.LinkedUserInfo>? = null,
     onBack: () -> Unit = {},
     viewModel: ProfileEditViewModel = viewModel()
 ) {
@@ -289,6 +291,97 @@ fun ProfileEditScreen(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // 연결된 환자 섹션 — 보호자만 표시
+            if (isGuardian) {
+                val patients = linkedPatients ?: emptyList()
+                ProfileSection(title = "연결된 사용자") {
+                    if (patients.isEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = AppColor.textTertiary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.size(10.dp))
+                            Text(
+                                text = "연결된 사용자가 없어요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                    } else {
+                        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            patients.forEachIndexed { index, patient ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        color = AppColor.divider,
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = AppColor.guardianPrimary.copy(alpha = 0.15f),
+                                            modifier = Modifier.size(40.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = AppColor.guardianDark,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.size(12.dp))
+                                        Column {
+                                            Text(
+                                                text = patient.name ?: "이름 없음",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = AppColor.textPrimary
+                                            )
+                                            Text(
+                                                text = patient.phone ?: "",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = AppColor.textTertiary
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = AppColor.guardianPrimary.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = "환자",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = AppColor.guardianDark,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Spacer(modifier = Modifier.height(12.dp))
             }
 

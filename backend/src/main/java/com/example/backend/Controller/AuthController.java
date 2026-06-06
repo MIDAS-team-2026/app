@@ -194,6 +194,20 @@ public class AuthController {
     }
 
 
+    // 보호자-환자 연동 해제
+    @DeleteMapping("/protectors/{protectorId}/patients/{patientId}")
+    public ResponseEntity<ApiResponse<Void>> unlinkPatient(
+            @PathVariable Integer protectorId,
+            @PathVariable Integer patientId) {
+        try {
+            userService.unlinkPatient(protectorId, patientId);
+            return ResponseEntity.ok(ApiResponse.success());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.fail(400, e.getMessage()));
+        }
+    }
+
     @PostMapping("/link")
     public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {
         try {

@@ -1,4 +1,5 @@
 package com.midas26.mobileapp.ui.home
+
 import com.midas26.mobileapp.ui.theme.AppColor
 
 import androidx.compose.foundation.background
@@ -26,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.theme.*
 
 enum class GuardianMenu {
@@ -34,46 +36,15 @@ enum class GuardianMenu {
     Settings
 }
 
-data class LinkedUserDummyData(
-    val userId: Int,
-    val userName: String,
-    val todayScore: Int?
-)
-
-data class GuardianLinkedDummyData(
-    val guardianName: String,
-    val linkedUsers: List<LinkedUserDummyData>
-)
-
-private val guardianLinkedDummyData = GuardianLinkedDummyData(
-    guardianName = "홍철수",
-    linkedUsers = listOf(
-        LinkedUserDummyData(
-            userId = 1,
-            userName = "홍길동",
-            todayScore = 75
-        ),
-        LinkedUserDummyData(
-            userId = 2,
-            userName = "김영희",
-            todayScore = null
-        ),
-        LinkedUserDummyData(
-            userId = 3,
-            userName = "박민수",
-            todayScore = 68
-        )
-    )
-)
-
 @Composable
 fun GuardianHomeScreen(
+    guardianName: String,
+    patients: List<LinkedUserInfo>,
+    isLoading: Boolean = false,
     onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
-    val guardianData = guardianLinkedDummyData
-
-    var selectedUser by remember {
-        mutableStateOf(guardianData.linkedUsers.first())
+    var selectedPatient by remember(patients) {
+        mutableStateOf(patients.firstOrNull())
     }
 
     Column(
@@ -82,10 +53,11 @@ fun GuardianHomeScreen(
             .background(MaterialTheme.colorScheme.background)
     ) {
         GuardianHomeHeader(
-            guardianName = guardianData.guardianName,
-            linkedUsers = guardianData.linkedUsers,
-            selectedUser = selectedUser,
-            onUserSelected = { selectedUser = it }
+            guardianName = guardianName,
+            patients = patients,
+            selectedPatient = selectedPatient,
+            isLoading = isLoading,
+            onPatientSelected = { selectedPatient = it }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -102,9 +74,10 @@ fun GuardianHomeScreen(
 @Composable
 private fun GuardianHomeHeader(
     guardianName: String,
-    linkedUsers: List<LinkedUserDummyData>,
-    selectedUser: LinkedUserDummyData,
-    onUserSelected: (LinkedUserDummyData) -> Unit
+    patients: List<LinkedUserInfo>,
+    selectedPatient: LinkedUserInfo?,
+    isLoading: Boolean,
+    onPatientSelected: (LinkedUserInfo) -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -119,6 +92,7 @@ private fun GuardianHomeHeader(
                 )
             )
     ) {
+        // 배경 원 장식
         Box(
             modifier = Modifier
                 .size(190.dp)
@@ -137,29 +111,13 @@ private fun GuardianHomeHeader(
                     color = BrandWhite.copy(alpha = 0.9f),
                     fontWeight = FontWeight.SemiBold
                 )
-
                 Spacer(modifier = Modifier.height(2.dp))
-
-                Row(
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Text(
-                        text = selectedUser.todayScore?.toString() ?: "-",
-                        fontSize = 52.sp,
-                        color = BrandWhite,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    if (selectedUser.todayScore != null) {
-                        Text(
-                            text = stringResource(R.string.home_score_unit),
-                            fontSize = 19.sp,
-                            color = BrandWhite.copy(alpha = 0.9f),
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
-                }
+                Text(
+                    text = "-",
+                    fontSize = 52.sp,
+                    color = BrandWhite,
+                    fontWeight = FontWeight.Bold
+                )
             }
         }
 
@@ -186,30 +144,44 @@ private fun GuardianHomeHeader(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            LinkedUserDropdown(
-                linkedUsers = linkedUsers,
-                selectedUser = selectedUser,
-                onUserSelected = onUserSelected
-            )
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(
+                        color = BrandWhite,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                }
+                patients.isEmpty() -> {
+                    Text(
+                        text = "연결된 사용자가 없습니다",
+                        fontSize = 16.sp,
+                        color = BrandWhite.copy(alpha = 0.8f)
+                    )
+                }
+                else -> {
+                    LinkedPatientDropdown(
+                        patients = patients,
+                        selectedPatient = selectedPatient,
+                        onPatientSelected = onPatientSelected
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun LinkedUserDropdown(
-    linkedUsers: List<LinkedUserDummyData>,
-    selectedUser: LinkedUserDummyData,
-    onUserSelected: (LinkedUserDummyData) -> Unit
+private fun LinkedPatientDropdown(
+    patients: List<LinkedUserInfo>,
+    selectedPatient: LinkedUserInfo?,
+    onPatientSelected: (LinkedUserInfo) -> Unit
 ) {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
+    var expanded by remember { mutableStateOf(false) }
 
     Box {
         Surface(
-            modifier = Modifier.clickable {
-                expanded = !expanded
-            },
+            modifier = Modifier.clickable { expanded = !expanded },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite.copy(alpha = 0.22f)
         ) {
@@ -223,24 +195,17 @@ private fun LinkedUserDropdown(
                     tint = AppColor.guardianDark,
                     modifier = Modifier.size(24.dp)
                 )
-
                 Spacer(modifier = Modifier.width(8.dp))
-
                 Text(
-                    text = "${selectedUser.userName} 님 연결됨",
+                    text = "${selectedPatient?.name ?: "사용자 선택"} 님 연결됨",
                     fontSize = 18.sp,
                     color = BrandWhite,
                     fontWeight = FontWeight.SemiBold
                 )
-
                 Spacer(modifier = Modifier.width(4.dp))
-
                 Icon(
-                    imageVector = if (expanded) {
-                        Icons.Default.KeyboardArrowUp
-                    } else {
-                        Icons.Default.KeyboardArrowDown
-                    },
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp
+                                  else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
                     tint = BrandWhite,
                     modifier = Modifier.size(24.dp)
@@ -252,20 +217,17 @@ private fun LinkedUserDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            linkedUsers.forEach { user ->
+            patients.forEach { patient ->
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = "${user.userName} 님",
-                            fontWeight = if (user.userId == selectedUser.userId) {
-                                FontWeight.Bold
-                            } else {
-                                FontWeight.Normal
-                            }
+                            text = "${patient.name ?: "이름 없음"} 님",
+                            fontWeight = if (patient.userId == selectedPatient?.userId)
+                                FontWeight.Bold else FontWeight.Normal
                         )
                     },
                     onClick = {
-                        onUserSelected(user)
+                        onPatientSelected(patient)
                         expanded = false
                     }
                 )
@@ -326,9 +288,7 @@ private fun GuardianMenuList(
 }
 
 @Composable
-private fun SectionHeader(
-    title: String
-) {
+private fun SectionHeader(title: String) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
@@ -339,9 +299,7 @@ private fun SectionHeader(
             color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold
         )
-
         Spacer(modifier = Modifier.width(10.dp))
-
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -363,6 +321,7 @@ private fun GuardianMenuCard(
 ) {
     val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
     val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
+
     Surface(
         modifier = modifier
             .height(104.dp)
@@ -379,18 +338,14 @@ private fun GuardianMenuCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleLarge,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
-
                 Spacer(modifier = Modifier.height(4.dp))
-
                 Text(
                     text = desc,
                     style = MaterialTheme.typography.bodySmall,
