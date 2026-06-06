@@ -328,6 +328,10 @@ fun ProfileEditScreen(
                                         modifier = Modifier.padding(vertical = 8.dp)
                                     )
                                 }
+                                val relation = patient.userId
+                                    ?.let { prefs.getPatientRelation(it) }
+                                    ?.ifEmpty { "사용자" }
+                                    ?: "사용자"
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -367,10 +371,10 @@ fun ProfileEditScreen(
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = AppColor.guardianPrimary.copy(alpha = 0.15f)
+                                        color = AppColor.guardianSurface
                                     ) {
                                         Text(
-                                            text = "환자",
+                                            text = relation,
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.SemiBold,
                                             color = AppColor.guardianDark,

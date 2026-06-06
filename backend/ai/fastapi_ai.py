@@ -19,6 +19,9 @@ from transformers import pipeline
 
 from voice_reply_handler import process_voice_reply
 from main import run_record_mode, run_full_dummy_mode
+from user_turn_analysis import analyze_user_turn
+from session_speech_summary import summarize_session_speech
+from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
 from recall.recall_api_client import analyze_session_recall, get_session_records
 
@@ -26,6 +29,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 DEFAULT_STT_MODEL = "openai/whisper-small"
+SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
 
 app = FastAPI(title="MIDAS AI Server")
 
@@ -77,7 +81,6 @@ class RecordAnalysisRequest(BaseModel):
     transcriptText: str = ""
     durationSec: float = 0.0
 
-# 🔥 추가: Spring의 일괄 배치 요청을 받기 위한 DTO 모델
 class BatchAnalysisRequest(BaseModel):
     sessionId: int
     userId: int
@@ -109,6 +112,52 @@ def download_audio(audio_url: str) -> Path:
     with temp:
         temp.write(response.content)
     return Path(temp.name)
+
+def run_session_batch_analysis(session_id: int, user_id: int) -> None:
+    """
+    세션 종료 후 전체 record를 기준으로 회상 분석과 최종 위험도 저장을 실행한다.
+    """
+    logger.info("batch-analysis 시작 sessionId=%s userId=%s", session_id, user_id)
+
+    records = get_session_records(session_id, SPRING_BASE_URL)
+    turn_results = []
+
+    for record in records:
+        transcript_text = record.get("transcriptText") or ""
+        audio_path = record.get("audioFilePath") or ""
+
+        if not transcript_text and not audio_path:
+            logger.info("batch record skip recordId=%s transcript/audio 없음", record.get("recordId"))
+            continue
+
+        turn_result = analyze_user_turn(
+            record_id=int(record["recordId"]),
+            session_id=session_id,
+            audio_path=audio_path,
+            audio_url=audio_path,
+            transcript_text=transcript_text,
+            duration_sec=0.0,
+        )
+        turn_results.append(turn_result)
+
+    speech_summary = summarize_session_speech(
+        session_id=session_id,
+        turn_results=turn_results,
+    )
+    speech_risk_score = speech_summary.get("speechRiskScore", 0.0)
+
+    analyze_session_recall(
+        user_id=user_id,
+        session_id=session_id,
+        speech_risk_score=speech_risk_score,
+        base_url=SPRING_BASE_URL,
+    )
+
+    logger.info(
+        "batch-analysis 완료 sessionId=%s speechRiskScore=%s",
+        session_id,
+        speech_risk_score,
+    )
 
 # ==========================
 # API Endpoints

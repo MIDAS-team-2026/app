@@ -11,10 +11,12 @@ from audio_features import extract_audio_features
 # 실제 데이터 경로 설정
 # =========================
 
-TL_ROOT = Path(r"D:\013.구음장애 음성인식 데이터\01.데이터\1.Training\라벨링데이터\TL01_뇌신경장애")
-TS_ROOT = Path(r"D:\013.구음장애 음성인식 데이터\01.데이터\1.Training\원천데이터\TS01_뇌신경장애")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
 
-OUTPUT_DIR = Path(r"D:\MIDAS_EXTRACTED")
+TL_ROOT = Path(os.getenv("MIDAS_DYSARTHRIA_TL_ROOT", ""))
+TS_ROOT = Path(os.getenv("MIDAS_DYSARTHRIA_TS_ROOT", ""))
+
+OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 전체 음성 기반 reference feature 파일입니다.

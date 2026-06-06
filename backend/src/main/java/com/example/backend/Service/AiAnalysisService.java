@@ -16,6 +16,7 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -43,6 +44,9 @@ public class AiAnalysisService {
 
     private final NotificationService notificationService;
     private final RestTemplate restTemplate = new RestTemplate();
+
+    @Value("${ai.python.url:http://localhost:8000}")
+    private String pythonBaseUrl;
 
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
@@ -162,10 +166,10 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(dto.getSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        RiskAnalysisResult result = riskAnalysisRepository
-                .findByChatSession_Id(dto.getSessionId())
+RiskAnalysisResult result = riskAnalysisRepository.findByChatSession_Id(dto.getSessionId())
                 .orElseGet(RiskAnalysisResult::new);
 
+        // 로그 및 세션 지정을 위해 신규 생성(Id가 null) 여부를 판별합니다.
         boolean isNew = (result.getId() == null);
         if (isNew) {
             result.setChatSession(session);
@@ -179,6 +183,7 @@ public class AiAnalysisService {
 
         riskAnalysisRepository.save(result);
 
+        // 살려둔 isNew 플래그를 사용하여 정상적으로 로그 출력
         log.info("RiskAnalysis 저장 sessionId={} isNew={}",
                 dto.getSessionId(), isNew);
 
@@ -191,7 +196,6 @@ public class AiAnalysisService {
             notificationService.notifyAllProtectors(patient, title, content);
         }
     }
-
     @Transactional(readOnly = true)
     public int getStreakDays(Integer userId) {
         int streak = 0;
@@ -293,8 +297,8 @@ public class AiAnalysisService {
     }
 
     private String resolveRiskLevel(float score) {
-        if (score < 0.30f) return "LOW";
-        if (score < 0.60f) return "MEDIUM";
+        if (score < 30.0f) return "LOW";
+        if (score < 60.0f) return "MEDIUM";
         return "HIGH";
     }
 
@@ -354,7 +358,7 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        String pythonServerUrl = "http://localhost:8000/api/ai/batch-analysis";
+        String pythonServerUrl = pythonBaseUrl + "/api/ai/batch-analysis";
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("sessionId", sessionId);

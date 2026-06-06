@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import joblib
 
 from audio_features import extract_audio_features
@@ -8,7 +9,8 @@ from speech_abnormality_scoring import (
 )
 
 
-MODEL_DIR = Path(r"D:\MIDAS_EXTRACTED\model")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+MODEL_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "model"))
 
 
 def predict_speech_abnormality(audio_path):
@@ -49,7 +51,9 @@ def predict_speech_abnormality(audio_path):
 
 
 if __name__ == "__main__":
-    test_audio_path = r"D:\013.구음장애 음성인식 데이터\01.데이터\1.Training\원천데이터\TS01_뇌신경장애\25.언어+뇌신경장애(1)\ID-02-25-N-KSM-02-01-M-45-JL.wav"
+    test_audio_path = os.getenv("MIDAS_TEST_AUDIO_PATH")
+    if not test_audio_path:
+        raise ValueError("MIDAS_TEST_AUDIO_PATH 환경변수에 테스트 음성 파일 경로를 넣어주세요.")
 
     result = predict_speech_abnormality(test_audio_path)
 

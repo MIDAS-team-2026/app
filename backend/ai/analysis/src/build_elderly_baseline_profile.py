@@ -1,10 +1,16 @@
 from pathlib import Path
 import json
+import os
 import pandas as pd
 
 
-INPUT_CSV = Path(r"D:\MIDAS_EXTRACTED\elderly_chatbot_features.csv")
-OUTPUT_JSON = Path(r"D:\MIDAS_EXTRACTED\elderly_baseline_profile.json")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+
+INPUT_CSV = Path(os.getenv("MIDAS_ELDERLY_FEATURE_CSV", OUTPUT_DIR / "elderly_chatbot_features.csv"))
+OUTPUT_JSON = Path(
+    os.getenv("MIDAS_ELDERLY_BASELINE_PROFILE", OUTPUT_DIR / "elderly_baseline_profile.json")
+)
 
 def build_baseline_profile(df):
     """
