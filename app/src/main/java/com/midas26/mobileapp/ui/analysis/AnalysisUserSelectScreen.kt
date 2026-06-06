@@ -140,7 +140,10 @@ private fun AnalysisUserCard(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
-    val relation = patient.userId?.let { PrefsManager.from(context).getPatientRelation(it) } ?: ""
+    val relation = patient.userId
+        ?.let { PrefsManager.from(context).getPatientRelation(it) }
+        ?.ifEmpty { "사용자" }
+        ?: "사용자"
 
     Surface(
         modifier = Modifier
@@ -171,20 +174,18 @@ private fun AnalysisUserCard(
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
-                    if (relation.isNotEmpty()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = AppColor.guardianSurface
-                        ) {
-                            Text(
-                                text = relation,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = AppColor.guardianDark,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = AppColor.guardianSurface
+                    ) {
+                        Text(
+                            text = relation,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppColor.guardianDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
                     }
                 }
 
