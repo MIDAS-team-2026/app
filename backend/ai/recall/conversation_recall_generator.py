@@ -4,22 +4,21 @@ from typing import Dict, List
 import requests
 from openai import OpenAI
 
-
-YNU_API_KEY = os.getenv("YNU_API_KEY")
-
-if not YNU_API_KEY:
-    raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
-
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
-
 BASE_URL = "http://localhost:8080"
 
+_client: OpenAI | None = None
 
-client = OpenAI(
-    api_key=YNU_API_KEY,
-    base_url=YNU_BASE_URL,
-)
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        api_key = os.getenv("YNU_API_KEY")
+        if not api_key:
+            raise EnvironmentError("환경변수 YNU_API_KEY가 설정되지 않았습니다.")
+        _client = OpenAI(api_key=api_key, base_url=YNU_BASE_URL)
+    return _client
 
 
 def build_conversation_text(conversation_history: List[str]) -> str:
@@ -86,7 +85,7 @@ memoryPoint: 대화에서 뽑은 기억 포인트
 question: 공감 미사여구 + 자연스러운 회상 질문
 """.strip()
 
-    response = client.chat.completions.create(
+    response = _get_client().chat.completions.create(
         model=GPT_MODEL,
         messages=[
             {

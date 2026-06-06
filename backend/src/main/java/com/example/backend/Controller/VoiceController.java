@@ -1,6 +1,7 @@
 package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.ApiResponse;
+import com.example.backend.Model.DTO.analysis.RecallRecordLinkDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyRequestDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
@@ -95,6 +96,28 @@ public class VoiceController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(502)
                     .body(ApiResponse.fail(502, e.getMessage()));
+        }
+    }
+
+    /**
+     * Python AI가 생성한 회상 질문을 INITIAL 녹음에 연결.
+     * 요청 본문: { "recordId": Long, "recallQuestionId": Long, "answerRole": "INITIAL" }
+     */
+    @PostMapping("/recall-link")
+    public ResponseEntity<ApiResponse<Void>> linkRecallQuestion(@RequestBody RecallRecordLinkDTO request) {
+        if (request.getRecordId() == null || request.getRecallQuestionId() == null) {
+            return ResponseEntity.status(400)
+                    .body(ApiResponse.fail(400, "recordId와 recallQuestionId는 필수입니다."));
+        }
+        try {
+            voiceService.linkRecallQuestion(
+                    request.getRecordId(),
+                    request.getRecallQuestionId(),
+                    request.getAnswerRole());
+            return ResponseEntity.ok(ApiResponse.success());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404)
+                    .body(ApiResponse.fail(404, e.getMessage()));
         }
     }
 

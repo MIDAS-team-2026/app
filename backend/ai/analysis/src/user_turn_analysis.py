@@ -3,6 +3,10 @@ import pickle
 import tempfile
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
+import logging
+import requests
+
+logger = logging.getLogger(__name__)
 
 from typing import Optional, Dict, Any
 
@@ -37,11 +41,15 @@ def load_pickle_file(path: Path):
     """
     pickle 파일을 로드한다.
     """
+    logger.info("load_pickle_file path=%s exists=%s", path, path.exists())
     if not path.exists():
         raise FileNotFoundError(f"필요한 reference 파일을 찾을 수 없습니다: {path}")
 
     with open(path, "rb") as f:
-        return pickle.load(f)
+        data = pickle.load(f)
+    logger.info("load_pickle_file loaded type=%s shape=%s",
+                type(data).__name__, getattr(data, 'shape', len(data) if hasattr(data, '__len__') else 'N/A'))
+    return data
 
 
 def load_speech_abnormality_reference():
@@ -55,6 +63,13 @@ def load_speech_abnormality_reference():
 
     thresholds는 없을 경우 기본값을 사용한다.
     """
+    logger.info("load_speech_abnormality_reference REFERENCE_MEAN_PATH=%s exists=%s",
+                REFERENCE_MEAN_PATH, REFERENCE_MEAN_PATH.exists())
+    logger.info("load_speech_abnormality_reference REFERENCE_STD_PATH=%s exists=%s",
+                REFERENCE_STD_PATH, REFERENCE_STD_PATH.exists())
+    logger.info("load_speech_abnormality_reference THRESHOLDS_PATH=%s exists=%s",
+                THRESHOLDS_PATH, THRESHOLDS_PATH.exists())
+
     reference_mean = load_pickle_file(REFERENCE_MEAN_PATH)
     reference_std = load_pickle_file(REFERENCE_STD_PATH)
 
@@ -68,6 +83,9 @@ def load_speech_abnormality_reference():
             "high_threshold": 0.52,
         }
 
+    logger.info("load_speech_abnormality_reference done mean_shape=%s std_shape=%s",
+                getattr(reference_mean, 'shape', len(reference_mean) if reference_mean is not None else 0),
+                getattr(reference_std, 'shape', len(reference_std) if reference_std is not None else 0))
     return reference_mean, reference_std, thresholds
 
 # =========================
@@ -81,46 +99,61 @@ def resolve_audio_input(
     """
     audio_path 또는 audio_url을 받아서 음향 분석에 사용할 로컬 파일 경로를 반환한다.
 
-    - audio_path가 있으면 해당 로컬 파일 경로를 그대로 사용한다.
+    - audio_path가 로컬 경로이면 해당 파일을 사용한다.
+    - audio_path가 URL(http/https)이면 다운로드 후 임시 파일 경로를 반환한다.
     - audio_url이 있으면 임시 폴더에 다운로드한 뒤 그 파일 경로를 반환한다.
     - 둘 다 없으면 None을 반환한다.
 
     주의:
     audio_url이 private S3 URL이면 presigned URL처럼 Python에서 접근 가능한 URL이어야 한다.
     """
+    import os
+    logger.info("resolve_audio_input audio_path=%s audio_url=%s", audio_path, audio_url)
 
-    # 1. 로컬 파일 경로가 들어온 경우
-    if audio_path is not None and str(audio_path).strip() != "":
-        path = Path(audio_path)
+    def _is_url(s: str) -> bool:
+        return isinstance(s, str) and (s.startswith("http://") or s.startswith("https://"))
 
-        if path.exists():
-            return str(path)
-
-        raise FileNotFoundError(f"음성 파일을 찾을 수 없습니다: {audio_path}")
-
-    # 2. URL이 들어온 경우
-    if audio_url is not None and str(audio_url).strip() != "":
-        parsed_url = urlparse(audio_url)
-        file_name = Path(parsed_url.path).name
-
-        if file_name == "":
-            file_name = "midas_audio.wav"
-
+    def _download_to_temp(url: str) -> str:
+        logger.info("downloading from url=%s", url)
+        suffix = Path(url.split("?")[0]).suffix or ".wav"
+        response = requests.get(url, timeout=60)
+        response.raise_for_status()
         temp_dir = Path(tempfile.gettempdir()) / "midas_audio"
         temp_dir.mkdir(parents=True, exist_ok=True)
+        temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
+        with temp:
+            temp.write(response.content)
+        logger.info("download done temp_path=%s size=%s exists=%s",
+                    temp.name, len(response.content), Path(temp.name).exists())
+        return temp.name
 
-        temp_audio_path = temp_dir / file_name
+    # 1. audio_path 처리 (로컬 경로 또는 URL)
+    if audio_path is not None and str(audio_path).strip() != "":
+        path_str = str(audio_path).strip()
+        if _is_url(path_str):
+            logger.info("audio_path is URL, downloading")
+            return _download_to_temp(path_str)
 
-        request = Request(audio_url, headers={"User-Agent": "Python-urllib"})
-        with urlopen(request, timeout=30) as response:
-            content = response.read()
+        # 로컬 경로인 경우
+        path = Path(path_str)
+        logger.info("checking local audio_path exists=%s path=%s", path.exists(), path)
 
-        with open(temp_audio_path, "wb") as f:
-            f.write(content)
+        if path.exists():
+            logger.info("using local audio_path=%s", path)
+            return str(path)
 
-        return str(temp_audio_path)
+        logger.warning("local audio_path not found: %s", path_str)
+        # 로컬 파일이 없으면 audio_url 시도
+
+    # 2. audio_url 처리
+    if audio_url is not None and str(audio_url).strip() != "":
+        url_str = str(audio_url).strip()
+        if _is_url(url_str):
+            return _download_to_temp(url_str)
+        logger.warning("audio_url is not a valid URL: %s", url_str)
 
     # 3. 둘 다 없는 경우
+    logger.warning("no audio_path or audio_url provided")
     return None
 
 
@@ -236,7 +269,12 @@ def analyze_user_turn_audio(
     - speech_abnormality_score
     """
 
+    import os
+    logger.info("analyze_user_turn_audio start audio_path=%s exists=%s",
+                audio_path, os.path.exists(audio_path) if audio_path else False)
+
     if audio_path is None or str(audio_path).strip() == "":
+        logger.warning("audio_path is empty")
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": "audio_path가 비어 있습니다.",
@@ -249,6 +287,7 @@ def analyze_user_turn_audio(
     audio_path_obj = Path(audio_path)
 
     if not audio_path_obj.exists():
+        logger.warning("audio file not found path=%s", audio_path)
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": f"음성 파일을 찾을 수 없습니다: {audio_path}",
@@ -259,7 +298,9 @@ def analyze_user_turn_audio(
         }
 
     # 1. 음향 특징 추출
+    logger.info("calling extract_audio_features path=%s", audio_path)
     audio_features = extract_audio_features(str(audio_path_obj))
+    logger.info("extract_audio_features done result=%s", audio_features is not None)
 
     if audio_features is None:
         return {
@@ -273,16 +314,24 @@ def analyze_user_turn_audio(
 
     try:
         # 2. 구음장애 참고군 profile 로드
+        logger.info("loading speech abnormality reference")
         reference_mean, reference_std, thresholds = load_speech_abnormality_reference()
+        logger.info("reference loaded mean_keys=%s std_keys=%s thresholds=%s",
+                    len(reference_mean) if reference_mean is not None else 0,
+                    len(reference_std) if reference_std is not None else 0,
+                    thresholds)
 
         # 3. 참고군 유사도 계산
+        logger.info("calculating dysarthria similarity")
         similarity_result = calculate_dysarthria_similarity(
             audio_features,
             reference_mean,
             reference_std,
         )
+        logger.info("similarity_result=%s", similarity_result)
 
         # 4. 유사도를 점수/레벨로 변환
+        logger.info("converting similarity to score thresholds=%s", thresholds)
         reference_score_result = convert_similarity_to_reference_score(
             similarity_result["dysarthria_similarity_score"],
             thresholds["low_threshold"],
@@ -295,14 +344,17 @@ def analyze_user_turn_audio(
             "reference_similarity_score": reference_score_result["reference_similarity_score"],
 }
 
-        return {
+        result = {
             "audio_analysis_available": True,
             **audio_features,
             **similarity_result,
             **score_result,
         }
+        logger.info("analyze_user_turn_audio success keys=%s", list(result.keys()))
+        return result
 
     except Exception as e:
+        logger.exception("analyze_user_turn_audio exception audio_path=%s", audio_path)
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": str(e),
@@ -358,12 +410,16 @@ def analyze_user_turn(
     )
 
     # 2. audio_path 또는 audio_url을 로컬 파일 경로로 변환
+    logger.info("analyze_user_turn resolve_audio_input start audio_path=%s audio_url=%s",
+                audio_path, audio_url)
     try:
         resolved_audio_path = resolve_audio_input(
             audio_path=audio_path,
             audio_url=audio_url,
         )
+        logger.info("analyze_user_turn resolved_audio_path=%s", resolved_audio_path)
     except Exception as e:
+        logger.exception("resolve_audio_input failed recordId=%s", record_id)
         resolved_audio_path = None
         audio_result = {
             "audio_analysis_available": False,
@@ -375,7 +431,12 @@ def analyze_user_turn(
         }
     else:
         # 3. 음성 파일 기반 발화 이상 분석
+        logger.info("analyze_user_turn calling analyze_user_turn_audio resolved_path=%s",
+                    resolved_audio_path)
         audio_result = analyze_user_turn_audio(resolved_audio_path)
+        logger.info("analyze_user_turn_audio done available=%s error=%s",
+                    audio_result.get("audio_analysis_available"),
+                    audio_result.get("audio_analysis_error"))
 
     # 4. raw score는 baseline + 음향 이상 점수의 합으로 정의
     raw_speech_score = (
