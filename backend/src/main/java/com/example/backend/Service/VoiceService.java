@@ -40,6 +40,7 @@ public class VoiceService {
     private final AudioRecordRepository audioRecordRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final STTService sttService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Transactional
@@ -78,6 +79,7 @@ public class VoiceService {
         }
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
+        STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
 
         // Python AI에 답변 생성 요청 (비동기 — 업로드 응답에 영향 없음)
         triggerAiReply(savedRecord.getId(), sessionId, userId);
@@ -85,6 +87,7 @@ public class VoiceService {
         return VoiceResponseDTO.builder()
                 .audioRecordId(savedRecord.getId())
                 .audioFilePath(savedRecord.getAudioFilePath())
+                .transcriptText(sttResult.getTranscriptText())
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
@@ -110,6 +113,12 @@ public class VoiceService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
         record.setTranscriptText(transcriptText);
         audioRecordRepository.save(record);
+    }
+
+    /** 특정 recordId에 대해 수동으로 STT 변환 수행 */
+    @Transactional
+    public String transcribeRecord(Long recordId) {
+        return sttService.transcribeAndSave(recordId).getTranscriptText();
     }
 
     /** Python AI가 답변 생성 완료 후 호출 — recordId에 해당하는 레코드에 replyText 저장. */
