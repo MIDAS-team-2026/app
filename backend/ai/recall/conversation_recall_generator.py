@@ -1,8 +1,8 @@
 import os
 from typing import Dict, List
-
 import requests
 from openai import OpenAI
+import random
 
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
@@ -23,110 +23,182 @@ def _get_client() -> OpenAI:
 
 def build_conversation_text(conversation_history: List[str]) -> str:
     lines = []
-
     for index, text in enumerate(conversation_history, start=1):
         text = str(text).strip()
-
         if text:
             lines.append(f"{index}. {text}")
-
     return "\n".join(lines)
 
 
+def build_conversation_text_with_ids(records: List[dict]) -> tuple[str, List[int]]:
+    lines = []
+    record_ids = []
+    for index, r in enumerate(records, start=1):
+        text = str(r.get("transcriptText", "")).strip()
+        r_id = r.get("recordId")
+        if r_id:
+            record_ids.append(int(r_id))
+        if text:
+            lines.append(f"{index}. {text}")
+    return "\n".join(lines), record_ids
+
+
 def generate_recall_question_from_conversation(
-    conversation_history: List[str],
-) -> Dict[str, str]:
-    conversation_text = build_conversation_text(conversation_history)
+        user_id: int,
+        session_id: int,
+        records: List[dict],
+) -> Dict[str, any]:
+    from .conversation_recall_generator import build_conversation_text_with_ids
+    conversation_text, all_record_ids = build_conversation_text_with_ids(records)
 
-    if not conversation_text:
-        # 대화 내용이 없으면 Claude에게 자연스러운 대화 시작 인사 생성을 맡김
-        prompt = """
-당신은 노인과 따뜻하게 대화를 나누는 친근한 AI 말동무입니다.
+    try:
+        from .recall_api_client import get_recall_questions
+        past_questions_dict = get_recall_questions(user_id, BASE_URL)
+        past_questions = sorted(list(past_questions_dict.values()), key=lambda x: int(x.get('questionId', 0)))
+    except Exception as e:
+        print("과거 질문 조회 실패:", e)
+        past_questions = []
 
-지금 막 대화를 시작하려고 합니다. 대화 내용은 아직 없습니다.
-자연스럽고 따뜻한 대화 시작 인사를 한 문장으로 만들어주세요.
+    # 실제 정답으로 처리된 ID만 수집
+    asked_ids = {int(r.get("recallQuestionId")) for r in records if str(r.get("answerRole")) == "RECALL" and r.get("recallQuestionId") is not None}
+    all_ai_replies = "".join([str(r.get("replyText", "")) for r in records]).replace(" ", "")
 
-조건:
-- 어르신을 편안하게 해주는 말투
-- 오늘 하루나 최근 일상에 관심을 보이는 내용
-- 너무 딱딱하거나 질문지처럼 보이지 않게
+    available_questions = []
+    for q in past_questions:
+        q_id = int(q.get("questionId"))
+        q_text = str(q.get("questionText", "")).strip()
+        keyword_check = q_text[:10].replace(" ", "")
+        if q_id in asked_ids or keyword_check in all_ai_replies:
+            continue
+        available_questions.append(q)
 
-출력 형식:
-memoryPoint:
-question: 자연스러운 대화 시작 인사
-""".strip()
+    if not available_questions and past_questions:
+        available_questions = past_questions
+
+    # 🔥 [핵심 로직] 타이밍 분리
+    turn_count = len(records)
+    is_asking_turn = (turn_count % 2 == 0) # AI가 과거 질문을 던져야 하는 턴 (짝수)
+    is_answering_turn = (turn_count % 2 == 1 and turn_count > 1) # 노인이 방금 AI 질문에 대답한 턴 (홀수)
+
+    target_id = None
+    link_id_for_this_record = None
+    past_memory_text = "사용 가능한 기억이 없습니다."
+
+    if is_asking_turn:
+        if available_questions:
+            random.seed(session_id + turn_count)
+            selected_target = random.choice(available_questions)
+            target_id = int(selected_target.get('questionId'))
+            past_memory_text = f"- ID: {target_id}, 내용: {selected_target.get('questionText')}, 정답: {selected_target.get('expectedAnswer')}"
+
+        strategy_guide = f"""
+        [명령] 이번 턴은 노인에게 과거 기억을 확인하는 **[RECALL]** 전략입니다.
+        반드시 아래 지정된 단 하나의 과거 정보만 사용하여, 확인 질문을 던지세요.
+        지정된 과거 정보: {past_memory_text}
+        (예시: "어르신, 지난번에 ~라고 하셨는데 맞나요?")
+        """
+        allowed_format = "RECALL"
+
+    elif is_answering_turn:
+        if available_questions:
+            random.seed(session_id + turn_count - 1)
+            selected_target = random.choice(available_questions)
+            link_id_for_this_record = int(selected_target.get('questionId'))
+
+        strategy_guide = """
+        [명령] 이번 턴은 노인이 직전 질문에 대답한 턴입니다. 자연스럽게 공감하며 가벼운 꼬리 질문(FOLLOW_UP)을 하세요.
+        절대 또 다른 과거 기억(RECALL)을 연속해서 묻지 마세요.
+        대신 노인의 이번 대답에서 나중에 물어볼 만한 '새로운 사실(음식, 일상 등)'이 있다면 'newMemoryPoint'와 'newQuestionText'를 추출하세요. 없다면 None.
+        """
+        allowed_format = "FOLLOW_UP"
+
     else:
-        prompt = f"""
-당신은 노인과 따뜻하게 대화를 나누는 친근한 AI 말동무입니다.
+        strategy_guide = """
+        [명령] 첫 대화입니다. 반갑게 인사하고 일상적인 가벼운 질문(FOLLOW_UP)을 하세요.
+        노인의 첫 대답에서 나중에 물어볼 만한 새로운 사실이 있다면 'newMemoryPoint'와 'newQuestionText'를 추출하세요. 없다면 None.
+        """
+        allowed_format = "FOLLOW_UP"
 
-목표:
-- 아래 대화 내용에서 나중에 다시 물어볼 만한 기억 포인트를 1개 고릅니다.
-- 대화 내용에 공감하는 짧은 미사여구로 시작한 뒤, 자연스러운 회상 질문을 이어서 작성합니다.
-- 전체 답변은 1~2문장으로 짧고 부드럽게 작성합니다.
-- 시험처럼 직접 확인하는 말투는 피합니다.
-- 정답을 질문에 직접 포함하지 않습니다.
-- 치매 진단처럼 보이는 표현은 사용하지 않습니다.
+    prompt = f"""
+당신은 노인과 대화하는 친절한 AI입니다.
 
-대화 내용:
+[대화 내역]
 {conversation_text}
 
-좋은 답변 예시:
-- 아이고, 맛있는 걸 드셨군요~ 그때 드셨던 음식 중에 기억나는 게 있으세요?
-- 그렇군요, 바쁜 하루를 보내셨네요! 오늘 다녀오신 곳이 기억나시나요?
-- 오, 반가운 분이랑 통화하셨군요~ 누구와 이야기 나누셨는지 기억나세요?
+{strategy_guide.strip()}
 
-나쁜 답변 예시:
-- 아까 김치찌개 먹었다고 했죠?
-- 아들이랑 통화한 거 맞나요?
-- 마트에 다녀왔다고 말했는데 기억하세요?
-
-출력 형식:
-memoryPoint: 대화에서 뽑은 기억 포인트
-question: 공감 미사여구 + 자연스러운 회상 질문
+[출력 형식 - 반드시 엄수]
+strategy: {allowed_format}
+newMemoryPoint: (추출할 기억 사실 정보, 없을 시 None)
+newQuestionText: (그 기억을 검증할 질문 문장, 없을 시 None)
+question: AI가 보낼 최종 대화 및 질문
 """.strip()
 
     response = _get_client().chat.completions.create(
         model=GPT_MODEL,
         messages=[
+            # 🔥 [가장 중요한 시스템 룰] 길이 제한 및 무조건 질문 생성 강제
             {
                 "role": "system",
-                "content": "당신은 한국어 자연 회상 질문을 생성하는 AI입니다.",
+                "content": """당신은 노인 친화형 대화 AI입니다. 아래 3가지 절대 규칙을 무조건 지키세요.
+1. [길이 제한] 답변은 무조건 1~2문장으로 아주 짧고 간결하게 작성하세요. 수다를 떨지 마세요.
+2. [질문 필수] 혼자 말하고 끝내지 마세요. 모든 답변의 마지막은 반드시 노인에게 묻는 '질문(물음표 ?)'으로 끝나야 합니다.
+3. [태도] 노인이 편안하게 대답할 수 있도록 다정하게 물어보세요."""
             },
-            {
-                "role": "user",
-                "content": prompt,
-            },
+            {"role": "user", "content": prompt},
         ],
-        temperature=0.7,
+        temperature=0.1, # 창의성을 낮추고 규칙 준수율을 극대화
     )
 
     content = response.choices[0].message.content.strip()
 
-    memory_point = ""
-    question = ""
+    strategy = ""
+    new_memory_point = None
+    new_question_text = None
+    question_lines = []
+    is_question_section = False
 
     for line in content.splitlines():
-        line = line.strip()
+        stripped_line = line.strip()
+        if stripped_line.startswith("strategy:"):
+            strategy = stripped_line.replace("strategy:", "").strip()
+            is_question_section = False
+        elif stripped_line.startswith("newMemoryPoint:"):
+            val = stripped_line.replace("newMemoryPoint:", "").replace("None", "").strip()
+            if val: new_memory_point = val
+            is_question_section = False
+        elif stripped_line.startswith("newQuestionText:"):
+            val = stripped_line.replace("newQuestionText:", "").replace("None", "").strip()
+            if val: new_question_text = val
+            is_question_section = False
+        elif stripped_line.startswith("question:"):
+            question_lines.append(stripped_line.replace("question:", "").strip())
+            is_question_section = True
+        elif is_question_section:
+            question_lines.append(stripped_line)
 
-        if line.startswith("memoryPoint:"):
-            memory_point = line.replace("memoryPoint:", "").strip()
-        elif line.startswith("question:"):
-            question = line.replace("question:", "").strip()
+    question = "\n".join(question_lines).strip()
+    if not question: question = content
 
-    if not question:
-        question = content
+    if is_asking_turn:
+        strategy = "RECALL"
+    else:
+        strategy = "FOLLOW_UP"
 
     return {
-        "memoryPoint": memory_point,
+        "strategy": strategy,
+        "recallQuestionId": link_id_for_this_record,
+        "newMemoryPoint": new_memory_point,
+        "newQuestionText": new_question_text,
         "question": question,
     }
 
 
 def save_recall_question_to_spring(
-    user_id: int,
-    memory_point: str,
-    question_text: str,
-    base_url: str = BASE_URL,
+        user_id: int,
+        memory_point: str,
+        question_text: str,
+        base_url: str = BASE_URL,
 ) -> Dict:
     body = {
         "userId": user_id,
@@ -135,33 +207,10 @@ def save_recall_question_to_spring(
         "category": "CONVERSATION",
         "expectedAnswer": memory_point,
     }
-
     response = requests.post(
         f"{base_url}/api/recall/questions",
         json=body,
         timeout=10,
     )
-
     response.raise_for_status()
     return response.json()
-
-
-if __name__ == "__main__":
-    sample_conversation = [
-        "오늘 아들이랑 통화했어요.",
-        "점심에는 김치찌개를 먹었어요.",
-        "오후에는 집 근처 마트에 다녀왔어요.",
-    ]
-
-    result = generate_recall_question_from_conversation(sample_conversation)
-
-    print("memoryPoint:", result["memoryPoint"])
-    print("question:", result["question"])
-
-    saved_question = save_recall_question_to_spring(
-        user_id=1,
-        memory_point=result["memoryPoint"],
-        question_text=result["question"],
-    )
-
-    print("savedQuestion:", saved_question)

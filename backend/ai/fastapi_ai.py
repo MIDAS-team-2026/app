@@ -23,6 +23,7 @@ from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
 from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
+from recall.recall_api_client import analyze_session_recall, get_session_records
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -178,7 +179,8 @@ def process(req: ProcessRequest, background_tasks: BackgroundTasks):
         process_voice_reply,
         req.recordId,
         req.sessionId,
-        req.userId
+        req.userId,
+        req.transcriptText or ""
     )
 
     # 2. 음성/텍스트 분석
@@ -298,11 +300,27 @@ def analyze_recall(request: RecallAnalysisRequest):
         aiLabel=label, aiConfidence=round(max(scores.get("similarityScore", 0), scores.get("keywordScore", 0)) / 100, 2)
     )
 
+# Spring의 세션 종료 및 배치 분석 트리거 수신 엔드포인트
 @app.post("/api/ai/batch-analysis")
 def trigger_batch_analysis(req: BatchAnalysisRequest, background_tasks: BackgroundTasks):
-    """
-    Spring의 세션 종료 후 일괄 분석 트리거 수신 엔드포인트.
-    """
-    logger.info("배치 분석 트리거 수신: sessionId=%s, userId=%s", req.sessionId, req.userId)
-    background_tasks.add_task(run_session_batch_analysis, req.sessionId, req.userId)
-    return {"status": "processing", "message": "Batch analysis started"}
+    speech_score = getattr(req, "speech_risk_score", getattr(req, "speechRiskScore", 0.0))
+    logger.info("배치 분석 트리거 수신: sessionId=%s, userId=%s, speechRiskScore=%s",
+                req.sessionId, req.userId, speech_score)
+
+    def background_analysis_job():
+        try:
+            # 1. sessionId를 이용해 현재 세션의 모든 대화 기록(records)을 먼저 가져옵니다.
+            records = get_session_records(req.sessionId)
+
+            # 2. 바뀐 함수 스펙에 맞춰 이름 지정(Keyword argument) 방식으로 정확하게 주입합니다.
+            analyze_session_recall(
+                user_id=req.userId,
+                records=records,
+                speech_risk_score=speech_score
+            )
+        except Exception as e:
+            logger.error("백그라운드 배치 분석 중 치명적 에러 발생: %s", e)
+
+    # 3. 래핑한 안전한 함수를 백그라운드 태스크로 넘깁니다.
+    background_tasks.add_task(background_analysis_job)
+    return {"status": "ok", "message": "Batch analysis task registered"}

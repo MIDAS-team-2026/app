@@ -18,4 +18,22 @@ public interface AudioRecordRepository extends JpaRepository<AudioRecord, Long> 
             Integer userId,
             Long recallQuestionId,
             String answerRole);
+
+    // 사용자의 세션에서 아직 답변되지 않은 회상 질문(INITIAL)이 있는지 확인
+    @Query("""
+        SELECT a FROM AudioRecord a
+        WHERE a.chatSession.id = :sessionId
+          AND a.user.id = :userId
+          AND a.recallQuestionId IS NOT NULL
+          AND a.answerRole = 'INITIAL'
+          AND NOT EXISTS (
+              SELECT 1 FROM AudioRecord r
+              WHERE r.recallQuestionId = a.recallQuestionId
+                AND r.answerRole = 'RECALL'
+          )
+        ORDER BY a.recordedAt DESC
+        """)
+    Optional<AudioRecord> findPendingRecallInitialRecord(
+            @Param("sessionId") Long sessionId,
+            @Param("userId") Integer userId);
 }

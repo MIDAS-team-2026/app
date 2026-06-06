@@ -164,14 +164,7 @@ def run_record_mode(args):
         "recordId": args.record_id,
         "sessionId": args.session_id,
         "recordAnalysis": record_analysis_dto,
-        "finalRiskResult": {
-            "sessionId": args.session_id,
-            "speechScore": result.get("speechHealthScore", 0),
-            "textScore": result.get("speechHealthScore", 0),
-            "recallScore": 0.0,
-            "finalRiskScore": 100 - result.get("speechRiskScore", 0),
-            "riskLevel": result.get("speechRiskLevel", "LOW")
-        },
+        # "finalRiskResult": { ... } <-- 이 부분을 제거하여 단일 턴 분석 시 0점인 채로 Spring에 덮어쓰지 않도록 합니다.
     }
 
     # 🔥 추가: 분석 완료 직후 Spring으로 결과를 자동 전송

@@ -166,9 +166,15 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(dto.getSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        RiskAnalysisResult result = riskAnalysisRepository.findByChatSession_Id(dto.getSessionId())
+RiskAnalysisResult result = riskAnalysisRepository.findByChatSession_Id(dto.getSessionId())
                 .orElseGet(RiskAnalysisResult::new);
-        result.setChatSession(session);
+
+        // 로그 및 세션 지정을 위해 신규 생성(Id가 null) 여부를 판별합니다.
+        boolean isNew = (result.getId() == null);
+        if (isNew) {
+            result.setChatSession(session);
+        }
+
         result.setSpeechScore(dto.getSpeechScore());
         result.setTextScore(dto.getTextScore());
         result.setRecallScore(dto.getRecallScore());
@@ -176,6 +182,10 @@ public class AiAnalysisService {
         result.setRiskLevel(dto.getRiskLevel());
 
         riskAnalysisRepository.save(result);
+
+        // 살려둔 isNew 플래그를 사용하여 정상적으로 로그 출력
+        log.info("RiskAnalysis 저장 sessionId={} isNew={}",
+                dto.getSessionId(), isNew);
 
         if (dto.getFinalRiskScore() >= 70.0) {
             User patient = session.getUser();
@@ -186,7 +196,6 @@ public class AiAnalysisService {
             notificationService.notifyAllProtectors(patient, title, content);
         }
     }
-
     @Transactional(readOnly = true)
     public int getStreakDays(Integer userId) {
         int streak = 0;
