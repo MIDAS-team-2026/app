@@ -152,9 +152,9 @@ public class AuthController {
     }
 
     // 환자 기준: 해당 환자에게 연결된 보호자 목록 조회
-    @GetMapping("/protectors/{userId}")
-    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getProtectors(@PathVariable Integer userId) {
-        List<UserResponseDTO> protectors = userService.getProtectors(userId).stream()
+    @GetMapping("/patients/{patientId}/guardians")
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getGuardiansByPatient(@PathVariable Integer patientId) {
+        List<UserResponseDTO> guardians = userService.getGuardiansByPatient(patientId).stream()
                 .map(u -> new UserResponseDTO(
                         u.getId(),
                         u.getPhone(),
@@ -164,7 +164,7 @@ public class AuthController {
                 ))
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(ApiResponse.success(protectors));
+        return ResponseEntity.ok(ApiResponse.success(guardians));
     }
 
     // 보호자 기준: 해당 보호자가 연결한 환자 목록 조회

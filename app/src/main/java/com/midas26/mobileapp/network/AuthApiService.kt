@@ -53,12 +53,23 @@ interface AuthApiService {
     @POST("api/auth/withdraw")
     suspend fun withdraw(@Body request: WithdrawRequest): Response<ApiResponse<Any>>
 
-    @GET("api/auth/protectors/{userId}")
-    suspend fun getProtectors(@Path("userId") userId: Int): Response<ApiResponse<List<ProtectorInfo>>>
+    // 보호자 기준: 연결된 환자 목록
+    @GET("api/auth/protectors/{protectorId}/patients")
+    suspend fun getPatientsByProtector(
+        @Path("protectorId") protectorId: Int
+    ): Response<ApiResponse<List<LinkedUserInfo>>>
+
+    // 환자 기준: 연결된 보호자 목록
+    @GET("api/auth/patients/{patientId}/guardians")
+    suspend fun getGuardiansByPatient(
+        @Path("patientId") patientId: Int
+    ): Response<ApiResponse<List<LinkedUserInfo>>>
 }
 
-data class ProtectorInfo(
+data class LinkedUserInfo(
     val userId: Int?,
     val phone: String?,
-    val name: String?
+    val name: String?,
+    val role: String?,
+    val patientCode: String?
 )

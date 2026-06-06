@@ -38,17 +38,18 @@ public class User {
     @Column(name = "patient_code", length = 20)
     private String patientCode;
 
-    @Column(name = "connected_user_id")
-    private Integer connectedUserId;
+    // 보호자 -> 연결된 환자 목록 (N:M)
+    @ManyToMany
+    @JoinTable(
+        name = "guardian_patient",
+        joinColumns = @JoinColumn(name = "guardian_id"),
+        inverseJoinColumns = @JoinColumn(name = "patient_id")
+    )
+    private List<User> patients = new ArrayList<>();
 
-    // 보호자 -> 환자
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "target_patient_id")
-    private User targetPatient;
-
-    // 환자 -> 보호자
-    @OneToMany(mappedBy = "targetPatient", cascade = CascadeType.ALL)
-    private List<User> protectors = new ArrayList<>();
+    // 환자 -> 연결된 보호자 목록 (N:M 역방향)
+    @ManyToMany(mappedBy = "patients")
+    private List<User> guardians = new ArrayList<>();
 
     @Column(name = "age_group")
     private Integer ageGroup;

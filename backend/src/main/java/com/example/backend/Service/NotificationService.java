@@ -14,8 +14,8 @@ public class NotificationService {
 
     // 환자와 연결된 모든 보호자에게 알림 발송
     public void notifyAllProtectors(User patient, String title, String content) {
-        if (patient.getProtectors() != null) {
-            patient.getProtectors().forEach(protector ->
+        if (patient.getGuardians() != null) {
+            patient.getGuardians().forEach(protector ->
                     sendToProtector(protector, title, content)
             );
         }

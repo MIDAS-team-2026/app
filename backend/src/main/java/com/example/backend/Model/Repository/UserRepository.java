@@ -16,5 +16,6 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     boolean existsByPatientCode(String randomCode);
 
-    List<User> findByTargetPatient_Id(Integer patientId);
+    // 특정 환자에 연결된 보호자 목록 (guardian_patient 테이블 역방향)
+    List<User> findByPatients_Id(Integer patientId);
 }
