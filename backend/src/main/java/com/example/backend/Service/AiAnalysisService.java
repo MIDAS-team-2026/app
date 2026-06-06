@@ -15,8 +15,10 @@ import com.example.backend.Model.Entity.recall.RecallAnalysisResult;
 import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AiAnalysisService {
 
     private final AudioRecordRepository audioRecordRepository;
@@ -39,6 +42,7 @@ public class AiAnalysisService {
     private final TextAnalysisResultRepository textAnalysisResultRepository;
 
     private final NotificationService notificationService;
+    private final RestTemplate restTemplate = new RestTemplate();
 
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
@@ -149,6 +153,8 @@ public class AiAnalysisService {
         result.setAiConfidence(dto.getAiConfidence());
 
         recallAnalysisRepository.save(result);
+        log.info("회상 분석 결과 저장 완료 recallQuestionId={} currentRecordId={}",
+                dto.getRecallQuestionId(), dto.getCurrentRecordId());
     }
 
     @Transactional
@@ -347,12 +353,11 @@ public class AiAnalysisService {
         try {
             System.out.println(">> [Spring] 파이썬 AI 서버로 배치 분석 요청 시도... (세션 ID: " + sessionId + ")");
 
-            // 실제 통신을 시도하는 부분 -> 임시 주소 채운 후 주석 해제
-            // restTemplate.postForObject(pythonServerUrl, requestBody, String.class);
+            restTemplate.postForObject(pythonServerUrl, requestBody, String.class);
 
-            System.out.println(">> [Spring] 파이썬 통신 완료 (테스트)");
+            System.out.println(">> [Spring] 파이썬 통신 완료 (요청 전송 성공)");
         } catch (Exception e) {
-            System.out.println(">> [알림] 파이썬 서버가 꺼져 있거나 포트가 달라 연결을 건너뜁니다: " + e.getMessage());
+            System.out.println(">> [Spring] 통신 실패: " + e.getMessage());
         }
     }
 }

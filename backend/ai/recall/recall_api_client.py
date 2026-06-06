@@ -3,7 +3,7 @@ from typing import Dict, List
 
 import requests
 
-from recall_score_calculator import (
+from recall.recall_score_calculator import (
     calculate_final_recall_score,
     calculate_final_risk_score,
 )
@@ -41,6 +41,8 @@ def send_recall_result(
     similarity_score: float,
     keyword_score: float,
     final_recall_score: float,
+    ai_label: str | None = None,
+    ai_confidence: float | None = None,
     base_url: str = BASE_URL,
 ):
     body = {
@@ -51,6 +53,10 @@ def send_recall_result(
         "keywordScore": keyword_score,
         "finalRecallScore": final_recall_score,
     }
+    if ai_label is not None:
+        body["aiLabel"] = ai_label
+    if ai_confidence is not None:
+        body["aiConfidence"] = ai_confidence
 
     return requests.post(
         f"{base_url}/api/ai/analysis/recall",
@@ -105,6 +111,14 @@ def find_recall_pairs(records: List[dict]) -> List[tuple]:
 
     for question_id, recall_record in recall_by_question.items():
         initial_record = initial_by_question.get(question_id)
+
+        if initial_record is None:
+            parent_id = recall_record.get("parentRecordId")
+            if parent_id is not None:
+                initial_record = next(
+                    (r for r in records if r.get("recordId") == parent_id),
+                    None,
+                )
 
         if initial_record is None:
             continue

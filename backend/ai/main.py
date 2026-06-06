@@ -2,7 +2,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+import requests
+import os
+import logging
 
+logger = logging.getLogger(__name__)
 
 # ==========================
 # import 경로 설정
@@ -23,48 +27,107 @@ from recall_score_calculator import (
     calculate_final_risk_score,
 )
 
+SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
 
-def compact_speech_result(result):
+def map_to_record_analysis_dto(result):
     """
-    Java 백엔드에서 보기 좋게 음성 분석 결과를 주요 값 중심으로 정리한다.
+    Python 분석 결과를 Java RecordAnalysisDTO 구조에 맞게 매핑한다.
     """
+    speech_analysis = {
+        "pauseCount": result.get("pause_count"),
+        "totalPauseDuration": result.get("total_pause_duration"),
+        "avgPauseDuration": result.get("avg_pause_duration"),
+        "maxPauseDuration": result.get("max_pause_duration"),
+        "rmsMean": result.get("rms_mean"),
+        "rmsStd": result.get("rms_std"),
+        "zcrMean": result.get("zcr_mean"),
+        "zcrStd": result.get("zcr_std"),
+        "spectralCentroidMean": result.get("spectral_centroid_mean"),
+        "spectralCentroidStd": result.get("spectral_centroid_std"),
+        "mfcc1Mean": result.get("mfcc_1_mean"),
+        "mfcc2Mean": result.get("mfcc_2_mean"),
+        "mfcc3Mean": result.get("mfcc_3_mean"),
+        "mfcc4Mean": result.get("mfcc_4_mean"),
+        "mfcc5Mean": result.get("mfcc_5_mean"),
+        "mfcc6Mean": result.get("mfcc_6_mean"),
+        "mfcc7Mean": result.get("mfcc_7_mean"),
+        "mfcc8Mean": result.get("mfcc_8_mean"),
+        "mfcc9Mean": result.get("mfcc_9_mean"),
+        "mfcc10Mean": result.get("mfcc_10_mean"),
+        "mfcc11Mean": result.get("mfcc_11_mean"),
+        "mfcc12Mean": result.get("mfcc_12_mean"),
+        "mfcc13Mean": result.get("mfcc_13_mean"),
+        "mfcc1Std": result.get("mfcc_1_std"),
+        "mfcc2Std": result.get("mfcc_2_std"),
+        "mfcc3Std": result.get("mfcc_3_std"),
+        "mfcc4Std": result.get("mfcc_4_std"),
+        "mfcc5Std": result.get("mfcc_5_std"),
+        "mfcc6Std": result.get("mfcc_6_std"),
+        "mfcc7Std": result.get("mfcc_7_std"),
+        "mfcc8Std": result.get("mfcc_8_std"),
+        "mfcc9Std": result.get("mfcc_9_std"),
+        "mfcc10Std": result.get("mfcc_10_std"),
+        "mfcc11Std": result.get("mfcc_11_std"),
+        "mfcc12Std": result.get("mfcc_12_std"),
+        "mfcc13Std": result.get("mfcc_13_std"),
+        "speechRate": result.get("speech_rate_word"),
+        "articulationScore": None,
+        "pronunciationStability": None,
+        "responseLatency": None,
+        "repetitionCount": None,
+        "fillerCount": None,
+        "dysarthriaSimilarityScore": result.get("dysarthria_similarity_score"),
+        "distanceFromReference": result.get("distance_from_reference"),
+        "speechAbnormalityLevel": result.get("speech_abnormality_level"),
+        "speechAbnormalityScore": result.get("speech_abnormality_score"),
+    }
 
-    return {
-        "recordId": result.get("recordId"),
-        "sessionId": result.get("sessionId"),
-        "transcriptText": result.get("transcriptText"),
-
+    text_analysis = {
         "wordCount": result.get("word_count"),
-        "charCount": result.get("char_count"),
-        "speechRateWord": result.get("speech_rate_word"),
-        "speechRateChar": result.get("speech_rate_char"),
-
-        "shortAnswerFlag": result.get("short_answer_flag"),
+        "sentenceCount": result.get("sentence_count"),
+        "avgSentenceLength": result.get("avg_sentence_length"),
+        "lexicalDiversity": result.get("lexical_diversity"),
+        "repeatedWordRatio": result.get("repetition_ratio"),
+        "incompleteSentenceCount": None,
+        "topicCoherenceScore": None,
         "slowSpeechFlag": result.get("slow_speech_flag"),
         "longRecordingFlag": result.get("long_recording_flag"),
         "lowContentSlowSpeechFlag": result.get("low_content_slow_speech_flag"),
-
-        "baselineSpeechScore": result.get("baseline_speech_score"),
-        "baselineSpeechLevel": result.get("baseline_speech_level"),
-        "baselineReasons": result.get("baseline_reasons"),
-
-        "audioAnalysisAvailable": result.get("audio_analysis_available"),
-        "audioAnalysisError": result.get("audio_analysis_error"),
-
-        "dysarthriaSimilarityScore": result.get("dysarthria_similarity_score"),
-        "distanceFromReference": result.get("distance_from_reference"),
-        "speechAbnormalityScore": result.get("speech_abnormality_score"),
-        "speechAbnormalityLevel": result.get("speech_abnormality_level"),
-
-        "rawSpeechScore": result.get("raw_speech_score"),
-        "speechRiskScore": result.get("speechRiskScore"),
-        "speechHealthScore": result.get("speechHealthScore"),
-        "speechRiskLevel": result.get("speechRiskLevel"),
-
-        "audioPath": result.get("audioPath"),
-        "audioUrl": result.get("audioUrl"),
-        "resolvedAudioPath": result.get("resolvedAudioPath"),
     }
+
+    return {
+        "recordId": result.get("recordId"),
+        "transcriptText": result.get("transcriptText"),
+        "speechAnalysis": speech_analysis,
+        "textAnalysis": text_analysis,
+    }
+
+
+def compact_speech_result(result):
+    """
+    Java 백엔드에서 보기 좋게 음성 분석 결과를 주요 값 중심으로 정리한다. (기존 호환성용)
+    """
+    dto = map_to_record_analysis_dto(result)
+    flat = {
+        "recordId": dto["recordId"],
+        "sessionId": result.get("sessionId"),
+        "transcriptText": dto["transcriptText"],
+    }
+    flat.update(dto["speechAnalysis"])
+    flat.update(dto["textAnalysis"])
+    flat["baselineSpeechScore"] = result.get("baseline_speech_score")
+    flat["baselineSpeechLevel"] = result.get("baseline_speech_level")
+    flat["baselineReasons"] = result.get("baseline_reasons")
+    flat["audioAnalysisAvailable"] = result.get("audio_analysis_available")
+    flat["audioAnalysisError"] = result.get("audio_analysis_error")
+    flat["rawSpeechScore"] = result.get("raw_speech_score")
+    flat["speechRiskScore"] = result.get("speechRiskScore")
+    flat["speechHealthScore"] = result.get("speechHealthScore")
+    flat["speechRiskLevel"] = result.get("speechRiskLevel")
+    flat["audioPath"] = result.get("audioPath")
+    flat["audioUrl"] = result.get("audioUrl")
+    flat["resolvedAudioPath"] = result.get("resolvedAudioPath")
+    return flat
 
 
 def run_record_mode(args):
@@ -72,6 +135,12 @@ def run_record_mode(args):
     record 1개 음성/STT 분석 모드.
     Java 백엔드가 실제 recordId, sessionId, STT 결과, durationSec를 넘길 때 사용한다.
     """
+    import os
+    logger.info("run_record_mode start recordId=%s audio_path=%s audio_url=%s",
+                args.record_id, args.audio_path, args.audio_url)
+
+    if args.audio_path:
+        logger.info("audio_path exists=%s path=%s", os.path.exists(args.audio_path), args.audio_path)
 
     result = analyze_user_turn(
         record_id=args.record_id,
@@ -82,12 +151,75 @@ def run_record_mode(args):
         duration_sec=args.duration_sec,
     )
 
-    return {
+    logger.info("analyze_user_turn done recordId=%s audio_analysis_available=%s",
+                args.record_id, result.get("audio_analysis_available"))
+    logger.info("speech_abnormality_score=%s dysarthria_similarity_score=%s",
+                result.get("speech_abnormality_score"), result.get("dysarthria_similarity_score"))
+
+    # Java DTO 구조에 맞게 매핑
+    record_analysis_dto = map_to_record_analysis_dto(result)
+
+    response = {
         "success": True,
-        "mode": "record",
-        **compact_speech_result(result),
+        "recordId": args.record_id,
+        "sessionId": args.session_id,
+        "recordAnalysis": record_analysis_dto,
+        "finalRiskResult": {
+            "sessionId": args.session_id,
+            "speechScore": result.get("speechHealthScore", 0),
+            "textScore": result.get("speechHealthScore", 0),
+            "recallScore": 0.0,
+            "finalRiskScore": 100 - result.get("speechRiskScore", 0),
+            "riskLevel": result.get("speechRiskLevel", "LOW")
+        },
     }
 
+    # 🔥 추가: 분석 완료 직후 Spring으로 결과를 자동 전송
+    send_analysis_to_spring(response)
+
+    return response
+
+def send_analysis_to_spring(result_dict):
+    if not result_dict or result_dict.get("success") is False:
+        return
+
+    try:
+        if "recordAnalysis" in result_dict and result_dict["recordAnalysis"]:
+            record_url = f"{SPRING_BASE_URL}/api/ai/analysis/record"
+
+            print("===== RECORD PAYLOAD =====")
+            print(json.dumps(result_dict["recordAnalysis"], indent=2, ensure_ascii=False))
+
+            res_record = requests.post(
+                record_url,
+                json=result_dict["recordAnalysis"],
+                timeout=10
+            )
+
+            print("RECORD STATUS =", res_record.status_code)
+            print("RECORD RESPONSE =", res_record.text)
+
+            res_record.raise_for_status()
+
+        if "finalRiskResult" in result_dict and result_dict["finalRiskResult"]:
+            risk_url = f"{SPRING_BASE_URL}/api/ai/analysis/risk"
+
+            print("===== RISK PAYLOAD =====")
+            print(json.dumps(result_dict["finalRiskResult"], indent=2, ensure_ascii=False))
+
+            res_risk = requests.post(
+                risk_url,
+                json=result_dict["finalRiskResult"],
+                timeout=10
+            )
+
+            print("RISK STATUS =", res_risk.status_code)
+            print("RISK RESPONSE =", res_risk.text)
+
+            res_risk.raise_for_status()
+
+    except Exception as e:
+        print(f"> [Python -> Spring] 분석 결과 전송 실패: {e}")
 
 def run_full_dummy_mode():
     """
@@ -182,14 +314,7 @@ def run_full_dummy_mode():
 
 def main():
     parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "--mode",
-        choices=["record", "full_dummy"],
-        default="record",
-    )
-
-    # record mode에서만 필수처럼 사용할 값들
+    parser.add_argument("--mode", choices=["record", "full_dummy"], default="record")
     parser.add_argument("--record_id", type=int)
     parser.add_argument("--session_id", type=int)
     parser.add_argument("--audio_path", default="")
@@ -203,26 +328,16 @@ def main():
         if args.mode == "record":
             if args.record_id is None or args.session_id is None:
                 raise ValueError("record mode에서는 --record_id와 --session_id가 필요합니다.")
-
             response = run_record_mode(args)
 
         elif args.mode == "full_dummy":
-            response = run_full_dummy_mode()
+            # dummy mode도 필요하다면 내부에 send_analysis_to_spring 적용 가능
+            pass
 
-        else:
-            response = {
-                "success": False,
-                "error": f"지원하지 않는 mode입니다: {args.mode}",
-            }
+        print(json.dumps(response, ensure_ascii=False, indent=2))
 
     except Exception as e:
-        response = {
-            "success": False,
-            "mode": args.mode,
-            "error": str(e),
-        }
-
-    print(json.dumps(response, ensure_ascii=False))
+        print(json.dumps({"success": False, "error": str(e)}))
 
 
 if __name__ == "__main__":

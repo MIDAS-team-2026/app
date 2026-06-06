@@ -1,12 +1,16 @@
-﻿import librosa
+﻿import logging
+import librosa
 import numpy as np
 import soundfile as sf
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_features_from_signal(y, sr):
     """
     하나의 음성 segment에서 음향 특징을 추출하는 내부 함수입니다.
     """
+    logger.debug("_extract_features_from_signal start y.shape=%s sr=%s", y.shape, sr)
 
     rms = librosa.feature.rms(y=y)[0]
     zcr = librosa.feature.zero_crossing_rate(y)[0]
@@ -26,6 +30,7 @@ def _extract_features_from_signal(y, sr):
         features[f"mfcc_{i+1}_mean"] = float(np.mean(mfcc[i]))
         features[f"mfcc_{i+1}_std"] = float(np.std(mfcc[i]))
 
+    logger.debug("_extract_features_from_signal done keys=%s", list(features.keys()))
     return features
 
 
@@ -36,13 +41,13 @@ def extract_audio_features(audio_path, segment_duration=60):
     전체 음성을 한 번에 메모리에 올리지 않고,
     60초 단위로 순차적으로 읽어 전체 음성을 분석합니다.
     """
+    logger.info("extract_audio_features start path=%s", audio_path)
 
     try:
         info = sf.info(audio_path)
         sr = info.samplerate
+        logger.info("sf.info done samplerate=%s frames=%s duration=%.2f", sr, info.frames, info.frames/sr)
 
-        # sf.info() 결과는 len(info)로 길이를 구할 수 없습니다.
-        # 전체 frame 수는 info.frames를 사용해야 합니다.
         total_frames = info.frames
         total_duration = total_frames / sr
 
@@ -70,7 +75,10 @@ def extract_audio_features(audio_path, segment_duration=60):
                 segment_features.append(features)
                 segment_count += 1
 
+        logger.info("segment loop done segment_count=%s", segment_count)
+
         if len(segment_features) == 0:
+            logger.warning("no segment features extracted")
             return None
 
         feature_keys = segment_features[0].keys()
@@ -84,9 +92,9 @@ def extract_audio_features(audio_path, segment_duration=60):
             values = np.array([seg[key] for seg in segment_features], dtype=float)
             final_features[key] = float(np.mean(values))
 
+        logger.info("extract_audio_features done keys=%s", list(final_features.keys()))
         return final_features
 
     except Exception as e:
-        print(f"음향 특징 추출 실패: {audio_path}")
-        print(e)
+        logger.exception("extract_audio_features failed path=%s", audio_path)
         return None
