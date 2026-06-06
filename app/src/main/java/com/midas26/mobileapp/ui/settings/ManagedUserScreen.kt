@@ -1,12 +1,11 @@
 package com.midas26.mobileapp.ui.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -31,57 +31,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.midas26.mobileapp.network.LinkedUserInfo
+import com.midas26.mobileapp.ui.guardian.GuardianViewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-
-private data class ManagedUser(
-    val name: String,
-    val relation: String,
-    val phone: String,
-    val birth: String,
-    val userCode: String
-)
+import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun ManagedUserScreen(
+    patients: List<LinkedUserInfo>,
+    isLoading: Boolean = false,
+    viewModel: GuardianViewModel,
     onBack: () -> Unit = {}
 ) {
-    var users by remember {
-        mutableStateOf(
-            listOf(
-                ManagedUser(
-                    name = "홍길동",
-                    relation = "부",
-                    phone = "010-1234-5678",
-                    birth = "1950.05.07",
-                    userCode = "A1B2C3D4"
-                ),
-                ManagedUser(
-                    name = "김영희",
-                    relation = "모",
-                    phone = "010-9876-5432",
-                    birth = "1951.07.29",
-                    userCode = "E5F6A7B8"
-                )
-            )
-        )
-    }
+    val context = LocalContext.current
+    val prefs = PrefsManager.from(context)
 
-    var editingIndex by remember { mutableStateOf<Int?>(null) }
-    var showEditDialog by remember { mutableStateOf(false) }
-    var isAdding by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var showUnlinkDialog by remember { mutableStateOf<LinkedUserInfo?>(null) }
+    var addError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(AppColor.surfaceElevated)
     ) {
-        ManagedUserTopBar(
-            title = "관리 중인 사용자",
-            onBack = onBack
-        )
+        ManagedUserTopBar(title = "관리 중인 사용자", onBack = onBack)
 
         Column(
             modifier = Modifier
@@ -89,74 +67,102 @@ fun ManagedUserScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 20.dp)
         ) {
-            users.forEachIndexed { index, user ->
-                ManagedUserItem(
-                    user = user,
-                    onEdit = {
-                        editingIndex = index
-                        isAdding = false
-                        showEditDialog = true
+            when {
+                isLoading -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                        color = AppColor.guardianPrimary
+                    )
+                }
+                patients.isEmpty() -> {
+                    Text(
+                        text = "연결된 사용자가 없습니다.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = AppColor.textTertiary,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+                else -> {
+                    patients.forEach { patient ->
+                        val relation = patient.userId?.let { prefs.getPatientRelation(it) } ?: ""
+                        ManagedUserItem(
+                            patient = patient,
+                            relation = relation,
+                            onUnlink = { showUnlinkDialog = patient }
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
+                }
             }
 
-            AddUserButton(
-                onClick = {
-                    editingIndex = null
-                    isAdding = true
-                    showEditDialog = true
-                }
-            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            AddUserButton(onClick = { showAddDialog = true })
 
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
 
-    if (showEditDialog) {
-        val targetUser = editingIndex?.let { users[it] }
-            ?: ManagedUser(
-                name = "",
-                relation = "",
-                phone = "",
-                birth = "",
-                userCode = ""
-            )
-
-        ManagedUserEditDialog(
-            title = if (isAdding) "사용자 추가" else "사용자 수정",
-            user = targetUser,
-            isAdding = isAdding,
-            onDismiss = {
-                showEditDialog = false
-                editingIndex = null
-                isAdding = false
-            },
-            onSave = { edited ->
-                users = if (isAdding) {
-                    users + edited
-                } else {
-                    users.toMutableList().also { list ->
-                        editingIndex?.let { index ->
-                            list[index] = edited
-                        }
-                    }
-                }
-
-                showEditDialog = false
-                editingIndex = null
-                isAdding = false
+    // 사용자 추가 다이얼로그
+    if (showAddDialog) {
+        AddPatientDialog(
+            errorMessage = addError,
+            onDismiss = { showAddDialog = false; addError = null },
+            onConfirm = { code, name, phone, relation ->
+                addError = null
+                viewModel.verifyAndLinkPatient(
+                    context   = context,
+                    patientCode = code,
+                    inputName   = name,
+                    inputPhone  = phone,
+                    relation    = relation,
+                    onSuccess = { showAddDialog = false; addError = null },
+                    onError   = { msg -> addError = msg }
+                )
             }
+        )
+    }
+
+    // 연동 해제 확인 다이얼로그
+    showUnlinkDialog?.let { patient ->
+        AlertDialog(
+            onDismissRequest = { showUnlinkDialog = null },
+            title = {
+                Text("연동 해제", fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
+            },
+            text = {
+                Text(
+                    "${patient.name ?: "이 사용자"}와의 연동을 해제할까요?",
+                    color = AppColor.textSecondary
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    patient.userId?.let { id ->
+                        viewModel.unlinkPatientWithRelation(
+                            context   = context,
+                            patientId = id,
+                            onSuccess = { showUnlinkDialog = null },
+                            onError   = { showUnlinkDialog = null }
+                        )
+                    }
+                }) {
+                    Text("해제", color = AppColor.errorPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnlinkDialog = null }) {
+                    Text("취소", color = AppColor.textTertiary)
+                }
+            },
+            containerColor = BrandWhite,
+            shape = RoundedCornerShape(20.dp)
         )
     }
 }
 
 @Composable
-private fun ManagedUserTopBar(
-    title: String,
-    onBack: () -> Unit
-) {
+private fun ManagedUserTopBar(title: String, onBack: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = BrandWhite,
@@ -175,7 +181,6 @@ private fun ManagedUserTopBar(
                     tint = AppColor.textPrimary
                 )
             }
-
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleLarge,
@@ -188,8 +193,9 @@ private fun ManagedUserTopBar(
 
 @Composable
 private fun ManagedUserItem(
-    user: ManagedUser,
-    onEdit: () -> Unit
+    patient: LinkedUserInfo,
+    relation: String,
+    onUnlink: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -203,64 +209,64 @@ private fun ManagedUserItem(
             verticalAlignment = Alignment.Top
         ) {
             Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = patient.name ?: "이름 없음",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColor.textPrimary
+                    )
+                    if (relation.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = AppColor.guardianSurface
+                        ) {
+                            Text(
+                                text = relation,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppColor.guardianDark,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "${user.name} (${user.relation})",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = user.phone,
+                    text = patient.phone ?: "",
                     style = MaterialTheme.typography.titleMedium,
-                    color = AppColor.textPrimary
-                )
-
-                Text(
-                    text = user.birth,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = AppColor.textPrimary
-                )
-
-                Text(
-                    text = "사용자 코드: ${user.userCode}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
-                    modifier = Modifier.padding(top = 8.dp)
+                    color = AppColor.textSecondary
                 )
             }
 
             Surface(
                 shape = RoundedCornerShape(999.dp),
-                color = AppColor.greenSurface,
-                modifier = Modifier.clickable(onClick = onEdit)
+                color = AppColor.errorSurface,
+                modifier = Modifier.align(Alignment.CenterVertically)
             ) {
-                Text(
-                    text = "수정",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary,
-                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp)
-                )
+                TextButton(onClick = onUnlink) {
+                    Text(
+                        text = "해제",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColor.errorPrimary
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun AddUserButton(
-    onClick: () -> Unit
-) {
+private fun AddUserButton(onClick: () -> Unit) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = BrandWhite,
         shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
+        border = AppColor.cardBorder,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier.padding(vertical = 20.dp),
@@ -271,116 +277,94 @@ private fun AddUserButton(
                 text = "+  사용자 추가",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
+                color = AppColor.guardianPrimary
             )
         }
     }
 }
 
 @Composable
-private fun ManagedUserEditDialog(
-    title: String,
-    user: ManagedUser,
-    isAdding: Boolean,
+private fun AddPatientDialog(
+    errorMessage: String?,
     onDismiss: () -> Unit,
-    onSave: (ManagedUser) -> Unit
+    onConfirm: (code: String, name: String, phone: String, relation: String) -> Unit
 ) {
-    var name by remember { mutableStateOf(user.name) }
-    var relation by remember { mutableStateOf(user.relation) }
-    var phone by remember { mutableStateOf(user.phone) }
-    var birth by remember { mutableStateOf(user.birth) }
-    var userCode by remember { mutableStateOf(user.userCode) }
+    var code     by remember { mutableStateOf("") }
+    var name     by remember { mutableStateOf("") }
+    var phone    by remember { mutableStateOf("") }
+    var relation by remember { mutableStateOf("") }
+
+    val canSubmit = code.length == 8 && name.isNotBlank() && phone.isNotBlank()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text(
-                text = title,
-                fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
-            )
+            Text("사용자 추가", fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
         },
         text = {
             Column {
+                Text(
+                    text = "사용자 코드와 정보를 입력해 본인 확인 후 연동합니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColor.textSecondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = code,
+                    onValueChange = { code = it.uppercase().filter { c -> c.isLetterOrDigit() }.take(8) },
+                    label = { Text("사용자 코드 (8자리)") },
+                    placeholder = { Text("예: A1B2C3D4") },
+                    singleLine = true
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("이름") },
                     singleLine = true
                 )
+                Spacer(modifier = Modifier.height(8.dp))
 
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it.filter { c -> c.isDigit() || c == '-' } },
+                    label = { Text("전화번호") },
+                    placeholder = { Text("010-0000-0000") },
+                    singleLine = true
+                )
                 Spacer(modifier = Modifier.height(8.dp))
 
                 OutlinedTextField(
                     value = relation,
                     onValueChange = { relation = it },
-                    label = { Text("관계") },
+                    label = { Text("관계 (선택)") },
+                    placeholder = { Text("예: 부, 모, 조부") },
                     singleLine = true
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = phone,
-                    onValueChange = { phone = it },
-                    label = { Text("전화번호") },
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = birth,
-                    onValueChange = { birth = it },
-                    label = { Text("생년월일") },
-                    singleLine = true
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                OutlinedTextField(
-                    value = userCode,
-                    onValueChange = { input ->
-                        val filtered = input
-                            .uppercase()
-                            .filter { it in '0'..'9' || it in 'A'..'F' }
-                            .take(8)
-
-                        userCode = filtered
-                    },
-                    label = { Text("사용자 코드") },
-                    singleLine = true,
-                    enabled = isAdding
-                )
+                if (!errorMessage.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppColor.errorPrimary
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = {
-                    onSave(
-                        ManagedUser(
-                            name = name.ifBlank { "이름 없음" },
-                            relation = relation.ifBlank { "관계" },
-                            phone = phone.ifBlank { "010-0000-0000" },
-                            birth = birth.ifBlank { "1950.01.01" },
-                            userCode = userCode.ifBlank { "00000000" }.uppercase()
-                        )
-                    )
-                }
+                onClick = { if (canSubmit) onConfirm(code, name, phone, relation) },
+                enabled = canSubmit
             ) {
-                Text(
-                    text = "저장",
-                    color = AppColor.guardianDark,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("추가", color = AppColor.guardianPrimary, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text(
-                    text = "취소",
-                    color = AppColor.textTertiary
-                )
+                Text("취소", color = AppColor.textTertiary)
             }
         },
         containerColor = BrandWhite,

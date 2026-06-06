@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import com.midas26.mobileapp.network.ApiResponse
 import com.midas26.mobileapp.network.LoginRequest
-import com.midas26.mobileapp.network.ProtectorInfo
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.network.ResetPasswordRequest
 import com.midas26.mobileapp.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +24,13 @@ class ProfileEditViewModel : ViewModel() {
     private val _state = MutableStateFlow<ProfileEditState>(ProfileEditState.Idle)
     val state: StateFlow<ProfileEditState> = _state
 
-    private val _protectors = MutableStateFlow<List<ProtectorInfo>>(emptyList())
-    val protectors: StateFlow<List<ProtectorInfo>> = _protectors
+    private val _protectors = MutableStateFlow<List<LinkedUserInfo>>(emptyList())
+    val protectors: StateFlow<List<LinkedUserInfo>> = _protectors
 
-    fun loadProtectors(userId: Int) {
+    // 환자 입장: 나에게 연결된 보호자 목록 로드
+    fun loadProtectors(patientId: Int) {
         viewModelScope.launch {
-            runCatching { RetrofitClient.instance.getProtectors(userId) }
+            runCatching { RetrofitClient.instance.getGuardiansByPatient(patientId) }
                 .onSuccess { resp ->
                     _protectors.value = resp.body()?.data ?: emptyList()
                 }

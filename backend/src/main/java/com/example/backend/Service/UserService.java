@@ -79,23 +79,45 @@ public class UserService {
         recallQuestionRepository.saveAll(initialQuestions);
     }
 
-    // 보호자-환자 연동
+    // 보호자-환자 연동 해제
     @Transactional
-    public void linkProtector(Integer protectorId, String patientCode) {
-        // 입력된 코드로 환자 찾기
-        User patient = userRepository.findByPatientCode(patientCode)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
-
-        // 연동을 시도하는 보호자 정보 가져오기
+    public void unlinkPatient(Integer protectorId, Integer patientId) {
         User protector = userRepository.findById(protectorId)
                 .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
 
-        // 역할 검증
+        boolean removed = protector.getPatients().removeIf(p -> p.getId().equals(patientId));
+        if (!removed) {
+            throw new IllegalArgumentException("연동된 환자가 아닙니다.");
+        }
+    }
+
+    // 보호자-환자 연동
+    @Transactional
+    public void linkProtector(Integer protectorId, String patientCode) {
+        User patient = userRepository.findByPatientCode(patientCode)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
+
+        User protector = userRepository.findById(protectorId)
+                .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
+
         if (!"PROTECTOR".equalsIgnoreCase(protector.getRole())) {
             throw new IllegalStateException("보호자 계정만 환자를 등록할 수 있습니다.");
         }
 
-        protector.setTargetPatient(patient);
+        // 이미 연동된 경우 중복 추가 방지
+        boolean alreadyLinked = protector.getPatients().stream()
+                .anyMatch(p -> p.getId().equals(patient.getId()));
+        if (alreadyLinked) {
+            throw new IllegalStateException("이미 연동된 환자입니다.");
+        }
+
+        protector.getPatients().add(patient);
+    }
+
+    // 환자 코드로 환자 조회 (교차검증용 — 이름·전화번호만 반환)
+    public User findByPatientCode(String patientCode) {
+        return userRepository.findByPatientCode(patientCode)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
     }
 
     public boolean existsByPhone(String phone) {
@@ -127,8 +149,8 @@ public class UserService {
     }
 
     // 환자에 연결된 보호자 목록
-    public List<User> getProtectors(Integer patientId) {
-        return userRepository.findByTargetPatient_Id(patientId);
+    public List<User> getGuardiansByPatient(Integer patientId) {
+        return userRepository.findByPatients_Id(patientId);
     }
 
     // 보호자가 연결한 환자 목록
@@ -140,10 +162,6 @@ public class UserService {
             throw new IllegalStateException("보호자 계정만 연결된 환자 목록을 조회할 수 있습니다.");
         }
 
-        if (protector.getTargetPatient() == null) {
-            return List.of();
-        }
-
-        return List.of(protector.getTargetPatient());
+        return protector.getPatients();
     }
 }
