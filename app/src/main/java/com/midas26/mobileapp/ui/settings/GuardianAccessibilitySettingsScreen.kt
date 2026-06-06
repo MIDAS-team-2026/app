@@ -41,11 +41,6 @@ import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
@@ -68,7 +63,7 @@ fun GuardianAccessibilitySettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Gray100)
+            .background(AppColor.surfaceElevated)
     ) {
         GuardianAccessibilityTopBar(onBack = onBack)
 
@@ -199,7 +194,7 @@ private fun GuardianFontSizeSelector(
     val labels = listOf("작게", "보통", "크게", "매우\n크게")
     val previewSizes = listOf(14.sp, 17.sp, 21.sp, 26.sp)
     val highContrast = LocalHighContrast.current
-    val unselectedBorder = if (highContrast) Gray600 else Gray200
+    val unselectedBorder = if (highContrast) AppColor.textSecondary else AppColor.divider
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -234,7 +229,7 @@ private fun GuardianFontSizeSelector(
                             text = "가",
                             fontSize = previewSizes[index],
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) GuardianAccentDark else Gray600
+                            color = if (isSelected) GuardianAccentDark else AppColor.textSecondary
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -242,7 +237,7 @@ private fun GuardianFontSizeSelector(
                         Text(
                             text = label,
                             fontSize = previewSizes[index],
-                            color = if (isSelected) GuardianAccentDark else Gray400,
+                            color = if (isSelected) GuardianAccentDark else AppColor.textTertiary,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
                     }
@@ -289,7 +284,7 @@ private fun GuardianAccessibilityToggleRow(
                 checkedThumbColor = BrandWhite,
                 checkedTrackColor = GuardianAccentDark,
                 uncheckedThumbColor = BrandWhite,
-                uncheckedTrackColor = Gray200
+                uncheckedTrackColor = AppColor.divider
             )
         )
     }

@@ -72,14 +72,8 @@ import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
-import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -313,7 +307,7 @@ fun SettingsScreen(
             SettingsSection(title = "계정 관리") {
                 SettingsRow(
                     label = "로그아웃",
-                    labelColor = Gray800,
+                    labelColor = AppColor.textPrimary,
                     onClick = { showLogoutDialog = true }
                 )
 
@@ -325,7 +319,7 @@ fun SettingsScreen(
 
                 SettingsRow(
                     label = "회원탈퇴",
-                    labelColor = Red400,
+                    labelColor = AppColor.errorPrimary,
                     onClick = onDeleteAccount
                 )
             }
@@ -424,7 +418,7 @@ private fun WheelTimePickerDialog(
             ) {
                 Text(
                     text = "확인",
-                    color = Green400,
+                    color = AppColor.greenPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -508,7 +502,7 @@ private fun CollapsingSettingsHeader(
                     colors = if (isGuardian) {
                         listOf(GuardianAccentDark, GuardianAccent)
                     } else {
-                        listOf(Green600, Green400)
+                        listOf(AppColor.accentDark, AppColor.greenPrimary)
                     }
                 )
             )
@@ -606,7 +600,7 @@ private fun CollapsingSettingsHeader(
                                 text = role,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Green600,
+                                color = AppColor.accentDark,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                             )
                         }
@@ -726,7 +720,7 @@ private fun SettingsSection(
 private fun SettingsRow(
     label: String,
     trailingText: String? = null,
-    labelColor: Color = Gray800,
+    labelColor: Color = AppColor.textPrimary,
     showArrow: Boolean = trailingText == null,
     onClick: (() -> Unit)?
 ) {
@@ -799,7 +793,7 @@ private fun SettingsToggleRow(
                 checkedThumbColor = BrandWhite,
                 checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
-                uncheckedTrackColor = Gray200
+                uncheckedTrackColor = AppColor.divider
             )
         )
     }
@@ -833,7 +827,7 @@ private fun NotifTimeRow(
         ) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = Green50
+                color = AppColor.greenSurface
             ) {
                 Text(
                     text = formatNotifTime(hour, minute),
@@ -884,7 +878,7 @@ private fun ConfirmDialog(
             TextButton(onClick = onConfirm) {
                 Text(
                     text = confirmText,
-                    color = if (isDestructive) Red400 else Green400,
+                    color = if (isDestructive) AppColor.errorPrimary else AppColor.greenPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
             }

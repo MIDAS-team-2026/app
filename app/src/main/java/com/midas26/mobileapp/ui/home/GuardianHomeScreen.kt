@@ -1,4 +1,5 @@
 package com.midas26.mobileapp.ui.home
+import com.midas26.mobileapp.ui.theme.AppColor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -220,8 +221,8 @@ private fun GuardianMenuList(
             title = stringResource(R.string.menu_settings),
             desc = "앱 환경과 알림을 설정해요",
             onClick = { onMenuClick(GuardianMenu.Settings) },
-            accent = Gray100,
-            iconTint = Gray400,
+            accent = AppColor.surfaceElevated,
+            iconTint = AppColor.textTertiary,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -238,7 +239,7 @@ private fun SectionHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold
         )
 
@@ -248,7 +249,7 @@ private fun SectionHeader(
             modifier = Modifier
                 .weight(1f)
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
     }
 }

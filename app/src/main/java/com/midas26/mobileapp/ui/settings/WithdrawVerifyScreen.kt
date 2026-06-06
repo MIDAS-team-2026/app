@@ -46,9 +46,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -134,7 +131,7 @@ fun WithdrawVerifyScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Red400)
+                CircularProgressIndicator(color = AppColor.errorPrimary)
             }
         } else {
             Button(
@@ -145,8 +142,8 @@ fun WithdrawVerifyScreen(
                     .height(56.dp),
                 shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Red400,
-                    disabledContainerColor = Red400.copy(alpha = 0.4f)
+                    containerColor = AppColor.errorPrimary,
+                    disabledContainerColor = AppColor.errorPrimary.copy(alpha = 0.4f)
                 )
             ) {
                 Text(
@@ -183,7 +180,7 @@ fun WithdrawVerifyScreen(
                     }) {
                         Text(
                             text = "탈퇴하기",
-                            color = Red400,
+                            color = AppColor.errorPrimary,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -226,15 +223,15 @@ private fun WithdrawOtpRow(code: String, onCodeChange: (String) -> Unit) {
                     modifier = Modifier
                         .size(52.dp)
                         .background(
-                            color = if (char != null) Red400.copy(alpha = 0.08f) else BrandWhite,
+                            color = if (char != null) AppColor.errorPrimary.copy(alpha = 0.08f) else BrandWhite,
                             shape = RoundedCornerShape(14.dp)
                         )
                         .border(
                             width = if (isFocused) 2.dp else 1.5.dp,
                             color = when {
-                                isFocused -> Red400
-                                char != null -> Red400.copy(alpha = 0.5f)
-                                else -> Gray200
+                                isFocused -> AppColor.errorPrimary
+                                char != null -> AppColor.errorPrimary.copy(alpha = 0.5f)
+                                else -> AppColor.divider
                             },
                             shape = RoundedCornerShape(14.dp)
                         )

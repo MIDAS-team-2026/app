@@ -62,9 +62,6 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.GuardianAccent
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
@@ -188,7 +185,7 @@ fun ProfileEditScreen(
                                         Toast.makeText(context, "코드가 복사되었어요", Toast.LENGTH_SHORT).show()
                                     },
                                 shape = RoundedCornerShape(10.dp),
-                                color = Gray200
+                                color = AppColor.divider
                             ) {
                                 Text(
                                     text = "복사",
@@ -246,14 +243,14 @@ fun ProfileEditScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Surface(
                                             shape = CircleShape,
-                                            color = Green400.copy(alpha = 0.15f),
+                                            color = AppColor.greenPrimary.copy(alpha = 0.15f),
                                             modifier = Modifier.size(40.dp)
                                         ) {
                                             Box(contentAlignment = Alignment.Center) {
                                                 Icon(
                                                     imageVector = Icons.Default.Shield,
                                                     contentDescription = null,
-                                                    tint = Green600,
+                                                    tint = AppColor.accentDark,
                                                     modifier = Modifier.size(20.dp)
                                                 )
                                             }
@@ -275,13 +272,13 @@ fun ProfileEditScreen(
                                     }
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = Green400.copy(alpha = 0.15f)
+                                        color = AppColor.greenPrimary.copy(alpha = 0.15f)
                                     ) {
                                         Text(
                                             text = "보호자",
                                             style = MaterialTheme.typography.bodySmall,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = Green600,
+                                            color = AppColor.accentDark,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                         )
                                     }
@@ -386,7 +383,7 @@ fun ProfileEditScreen(
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Green400)
+                    CircularProgressIndicator(color = AppColor.greenPrimary)
                 }
             } else {
                 Button(
@@ -403,8 +400,8 @@ fun ProfileEditScreen(
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Green400,
-                        disabledContainerColor = Green400.copy(alpha = 0.4f),
+                        containerColor = AppColor.greenPrimary,
+                        disabledContainerColor = AppColor.greenPrimary.copy(alpha = 0.4f),
                         disabledContentColor = BrandWhite.copy(alpha = 0.6f)
                     )
                 ) {
@@ -457,7 +454,7 @@ private fun CollapsingProfileHeader(
             .height(headerHeight)
             .background(brush = Brush.verticalGradient(
                 colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
-                         else listOf(Green600, Green400)
+                         else listOf(AppColor.accentDark, AppColor.greenPrimary)
             ))
     ) {
         // ── 확장 아바타 (헤더 하단 중앙에 반 걸침, 접힐수록 사라짐) ──

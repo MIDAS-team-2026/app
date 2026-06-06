@@ -47,11 +47,6 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Red400
 
 @Composable
 fun PhoneVerificationScreen(
@@ -129,7 +124,7 @@ fun PhoneVerificationScreen(
             Text(
                 text = errorMsg!!,
                 style = MaterialTheme.typography.bodySmall,
-                color = Red400,
+                color = AppColor.errorPrimary,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -166,7 +161,7 @@ fun PhoneVerificationScreen(
                 Text(
                     text = stringResource(R.string.btn_resend),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Green500,
+                    color = AppColor.greenSecondary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -212,15 +207,15 @@ private fun OtpInputRow(
                     modifier = Modifier
                         .size(52.dp)
                         .background(
-                            color = if (char != null) Green50 else BrandWhite,
+                            color = if (char != null) AppColor.greenSurface else BrandWhite,
                             shape = RoundedCornerShape(14.dp)
                         )
                         .border(
                             width = if (isFocused) 2.dp else 1.5.dp,
                             color = when {
-                                isFocused -> Green400
-                                char != null -> Green400.copy(alpha = 0.5f)
-                                else -> Gray200
+                                isFocused -> AppColor.greenPrimary
+                                char != null -> AppColor.greenPrimary.copy(alpha = 0.5f)
+                                else -> AppColor.divider
                             },
                             shape = RoundedCornerShape(14.dp)
                         )

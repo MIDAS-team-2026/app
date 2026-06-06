@@ -24,9 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Red400
 
 @Composable
 fun WithdrawScreen(
@@ -77,14 +74,14 @@ fun WithdrawScreen(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = Red400.copy(alpha = 0.08f)
+            color = AppColor.errorPrimary.copy(alpha = 0.08f)
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
                     text = "⚠️ 탈퇴 시 주의사항",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Red400
+                    color = AppColor.errorPrimary
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 listOf(
@@ -95,7 +92,7 @@ fun WithdrawScreen(
                     Text(
                         text = "• $text",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Red400.copy(alpha = 0.8f),
+                        color = AppColor.errorPrimary.copy(alpha = 0.8f),
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -108,7 +105,7 @@ fun WithdrawScreen(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
-            color = Gray100
+            color = AppColor.surfaceElevated
         ) {
             Column(modifier = Modifier.padding(20.dp)) {
                 Text(
@@ -135,7 +132,7 @@ fun WithdrawScreen(
                 .fillMaxWidth()
                 .height(56.dp),
             shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Red400)
+            colors = ButtonDefaults.buttonColors(containerColor = AppColor.errorPrimary)
         ) {
             Text(
                 text = "인증번호 발송",

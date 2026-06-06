@@ -40,9 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
 import kotlinx.coroutines.delay
@@ -126,11 +123,11 @@ private fun SpinningRing() {
                 .background(
                     brush = Brush.sweepGradient(
                         listOf(
-                            Green400.copy(alpha = 0f),
-                            Green400.copy(alpha = 0.2f),
-                            Green400,
-                            Green400.copy(alpha = 0.2f),
-                            Green400.copy(alpha = 0f)
+                            AppColor.greenPrimary.copy(alpha = 0f),
+                            AppColor.greenPrimary.copy(alpha = 0.2f),
+                            AppColor.greenPrimary,
+                            AppColor.greenPrimary.copy(alpha = 0.2f),
+                            AppColor.greenPrimary.copy(alpha = 0f)
                         )
                     )
                 )
@@ -160,7 +157,7 @@ private fun ProgressItem(label: String, done: Boolean) {
             modifier = Modifier
                 .size(20.dp)
                 .clip(CircleShape)
-                .background(if (done) Green400 else Gray200),
+                .background(if (done) AppColor.greenPrimary else AppColor.divider),
             contentAlignment = Alignment.Center
         ) {
             if (done) {

@@ -68,8 +68,6 @@ import com.google.android.gms.location.Priority
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -570,7 +568,7 @@ private fun StatusBar(
             Icon(
                 imageVector = Icons.Default.LocationOn,
                 contentDescription = null,
-                tint = if (isError) Color(0xFFD9534F) else Green500,
+                tint = if (isError) Color(0xFFD9534F) else AppColor.greenSecondary,
                 modifier = Modifier.size(16.dp)
             )
 
@@ -579,7 +577,7 @@ private fun StatusBar(
             Text(
                 text = text,
                 fontSize = 12.sp,
-                color = if (isError) Color(0xFFD9534F) else Green600
+                color = if (isError) Color(0xFFD9534F) else AppColor.accentDark
             )
         }
     }
@@ -600,7 +598,7 @@ private fun LoadingBar() {
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(14.dp),
-                color = Green500,
+                color = AppColor.greenSecondary,
                 strokeWidth = 2.dp
             )
 
@@ -744,7 +742,7 @@ fun LocationRouteScreen(
                     Text(
                         text = "📍 위치는 5분마다 자동으로 업데이트돼요",
                         fontSize = 13.sp,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
                     )
@@ -812,7 +810,7 @@ private fun TimelineRow(
             Surface(
                 modifier = Modifier.size(18.dp),
                 shape = CircleShape,
-                color = if (item.isCurrent) Green500 else Color(0xFFB0CCA0)
+                color = if (item.isCurrent) AppColor.greenSecondary else Color(0xFFB0CCA0)
             ) {}
 
             if (!isLast) {
@@ -844,7 +842,7 @@ private fun TimelineRow(
                     text = item.label,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (item.isCurrent) Green500 else AppColor.textPrimary
+                    color = if (item.isCurrent) AppColor.greenSecondary else AppColor.textPrimary
                 )
             }
 

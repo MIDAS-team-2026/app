@@ -35,11 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
 import com.midas26.mobileapp.ui.theme.GuardianAccentDark
-import com.midas26.mobileapp.ui.theme.Red400
 
 private data class ManagedUser(
     val name: String,
@@ -81,7 +77,7 @@ fun ManagedUserScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Gray100)
+            .background(AppColor.surfaceElevated)
     ) {
         ManagedUserTopBar(
             title = "관리 중인 사용자",
@@ -239,7 +235,7 @@ private fun ManagedUserItem(
 
             Surface(
                 shape = RoundedCornerShape(999.dp),
-                color = Green50,
+                color = AppColor.greenSurface,
                 modifier = Modifier.clickable(onClick = onEdit)
             ) {
                 Text(
