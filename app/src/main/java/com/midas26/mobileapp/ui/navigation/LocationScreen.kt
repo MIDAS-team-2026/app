@@ -1,13 +1,7 @@
 package com.midas26.mobileapp.ui.navigation
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Looper
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,11 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -48,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -59,7 +56,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -132,15 +128,15 @@ fun LocationListScreen(
     onBack: () -> Unit,
     onUserClick: (LinkedUser) -> Unit
 ) {
+    var refreshKey by remember { mutableStateOf(0) }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📍", fontSize = 24.sp)
-
                         Spacer(modifier = Modifier.width(8.dp))
-
                         Text(
                             text = "GPS 위치 확인",
                             fontWeight = FontWeight.Bold,
@@ -151,6 +147,16 @@ fun LocationListScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { refreshKey++ }) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "새로고침",
+                            tint = Color.Black,
+                            modifier = Modifier.size(26.dp)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -183,21 +189,28 @@ fun LocationListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text("📡", fontSize = 26.sp)
-
                         Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "실시간 위치를 확인하세요",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFB8860B)
-                        )
+                        Column {
+                            Text(
+                                text = "실시간 위치를 확인하세요",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFFB8860B)
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "위치는 5분마다 갱신됩니다",
+                                fontSize = 13.sp,
+                                color = Color(0xFFB8860B).copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 }
 
                 users.forEach { user ->
                     UserLocationCard(
                         user = user,
+                        refreshKey = refreshKey,
                         onClick = { onUserClick(user) }
                     )
                 }
@@ -214,13 +227,42 @@ fun LocationListScreen(
 @Composable
 private fun UserLocationCard(
     user: LinkedUser,
+    refreshKey: Int = 0,
     onClick: () -> Unit
 ) {
+    val context = LocalContext.current
+    val userId = user.id.toIntOrNull() ?: 0
+    val relation = if (userId > 0) PrefsManager.from(context).getPatientRelation(userId) else ""
+
+    var coordText by remember { mutableStateOf("위치 불러오는 중...") }
+    var timeAgoText by remember { mutableStateOf("") }
+
+    LaunchedEffect(userId, refreshKey) {
+        if (userId <= 0) {
+            coordText = "위치 정보 없음"
+            return@LaunchedEffect
+        }
+        LocationRepository.getCurrentLocation(userId)
+            .onSuccess { loc ->
+                if (loc != null) {
+                    coordText = "%.4f, %.4f".format(loc.latitude, loc.longitude)
+                    timeAgoText = formatTimeAgo(loc.recordedAt)
+                } else {
+                    coordText = "위치 정보 없음"
+                    timeAgoText = ""
+                }
+            }
+            .onFailure {
+                coordText = "위치 조회 실패"
+                timeAgoText = ""
+            }
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .height(150.dp)
+            .height(110.dp)
             .clickable { onClick() }
             .border(
                 width = 1.5.dp,
@@ -233,48 +275,63 @@ private fun UserLocationCard(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 28.dp, vertical = 14.dp),
+                .padding(horizontal = 28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
             ) {
-                Text(
-                    text = "${user.name}  (${user.relation})",
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
+                // 이름 + 관계 pill
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("📍", fontSize = 18.sp)
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
                     Text(
-                        text = user.address,
-                        fontSize = 18.sp,
-                        color = AppColor.textTertiary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        text = user.name,
+                        fontSize = 25.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColor.textPrimary
                     )
+                    if (relation.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = AppColor.guardianSurface
+                        ) {
+                            Text(
+                                text = relation,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AppColor.guardianDark,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🕐", fontSize = 17.sp)
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
+                    Text("📍", fontSize = 15.sp)
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = "${user.lastUpdatedMin}분 전 업데이트",
-                        fontSize = 17.sp,
-                        color = AppColor.textTertiary
+                        text = coordText,
+                        fontSize = 14.sp,
+                        color = AppColor.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                }
+
+                if (timeAgoText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🕐", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "$timeAgoText 업데이트",
+                            fontSize = 14.sp,
+                            color = AppColor.textTertiary
+                        )
+                    }
                 }
             }
 
@@ -287,6 +344,30 @@ private fun UserLocationCard(
                 modifier = Modifier.size(26.dp)
             )
         }
+    }
+}
+
+private fun formatTimeAgo(recordedAt: String): String {
+    return try {
+        val formats = listOf(
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", Locale.KOREA),
+            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.KOREA)
+        )
+        var parsed: Date? = null
+        for (fmt in formats) {
+            parsed = runCatching { fmt.parse(recordedAt) }.getOrNull()
+            if (parsed != null) break
+        }
+        val past = parsed ?: return "시간 알 수 없음"
+        val diffSec = (System.currentTimeMillis() - past.time) / 1000
+        when {
+            diffSec < 60   -> "${diffSec}초 전"
+            diffSec < 3600 -> "${diffSec / 60}분 전"
+            diffSec < 86400 -> "${diffSec / 3600}시간 전"
+            else -> "${diffSec / 86400}일 전"
+        }
+    } catch (e: Exception) {
+        "시간 알 수 없음"
     }
 }
 
@@ -306,16 +387,20 @@ fun LocationDetailScreen(
     var serverLongitude by remember { mutableStateOf(user.longitude) }
     var isLoadingLocation by remember { mutableStateOf(true) }
     var locationError by remember { mutableStateOf("") }
+    var locationTimeAgo by remember { mutableStateOf("") }
+    var refreshKey by remember { mutableStateOf(0) }
 
-    LaunchedEffect(userId) {
+    LaunchedEffect(userId, refreshKey) {
         isLoadingLocation = true
         locationError = ""
+        locationTimeAgo = ""
 
         LocationRepository.getCurrentLocation(userId)
             .onSuccess { location ->
                 if (location != null) {
                     serverLatitude = location.latitude
                     serverLongitude = location.longitude
+                    locationTimeAgo = formatTimeAgo(location.recordedAt)
                 } else {
                     locationError = "저장된 위치가 아직 없어요"
                 }
@@ -351,6 +436,20 @@ fun LocationDetailScreen(
                             Icon(Icons.Default.ArrowBack, contentDescription = "뒤로")
                         }
                     },
+                    actions = {
+                        IconButton(
+                            onClick = { refreshKey++ },
+                            enabled = !isLoadingLocation
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "새로고침",
+                                tint = if (isLoadingLocation) Color.Black.copy(alpha = 0.3f)
+                                       else Color.Black,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                    },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
                 )
             },
@@ -371,7 +470,7 @@ fun LocationDetailScreen(
                     }
 
                     else -> {
-                        StatusBar("서버에서 최신 위치 조회 완료", isError = false)
+                        StatusBar("$locationTimeAgo 위치 정보를 가져왔습니다.", isError = false)
                     }
                 }
 
@@ -829,35 +928,13 @@ fun CallDialog(
 ) {
     val context = LocalContext.current
 
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            context.startActivity(
-                Intent(
-                    Intent.ACTION_CALL,
-                    Uri.parse("tel:${user.phone.replace("-", "")}")
-                )
-            )
-        }
-    }
-
     fun makeCall() {
-        if (
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.CALL_PHONE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            context.startActivity(
-                Intent(
-                    Intent.ACTION_CALL,
-                    Uri.parse("tel:${user.phone.replace("-", "")}")
-                )
+        context.startActivity(
+            Intent(
+                Intent.ACTION_DIAL,
+                Uri.parse("tel:${user.phone.replace("-", "")}")
             )
-        } else {
-            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
-        }
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
