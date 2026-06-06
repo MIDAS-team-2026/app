@@ -1,14 +1,15 @@
 import argparse
+import logging
 from typing import Dict, List
-
 import requests
 
-from recall.recall_score_calculator import (
+from .recall_score_calculator import (
     calculate_final_recall_score,
     calculate_final_risk_score,
 )
 
 BASE_URL = "http://localhost:8080"
+logger = logging.getLogger(__name__)
 
 
 def get_session_records(session_id: int, base_url: str = BASE_URL) -> List[dict]:
@@ -35,176 +36,143 @@ def get_recall_questions(user_id: int, base_url: str = BASE_URL) -> Dict[int, di
 
 
 def send_recall_result(
-    recall_question_id: int,
-    past_record_id: int,
-    current_record_id: int,
-    similarity_score: float,
-    keyword_score: float,
-    final_recall_score: float,
-    ai_label: str | None = None,
-    ai_confidence: float | None = None,
-    base_url: str = BASE_URL,
+        recall_question_id: int,
+        past_record_id: int,
+        current_record_id: int,
+        similarity_score: float,
+        keyword_score: float,
+        final_recall_score: float,
+        base_url: str = BASE_URL,
 ):
-    body = {
+    # 만약 과거 세션 질문이라 past_record_id가 없는 경우 0 또는 None 허용 처리
+    payload = {
         "recallQuestionId": recall_question_id,
-        "pastRecordId": past_record_id,
+        "pastRecordId": past_record_id if past_record_id else 0,
         "currentRecordId": current_record_id,
         "similarityScore": similarity_score,
         "keywordScore": keyword_score,
         "finalRecallScore": final_recall_score,
     }
-    if ai_label is not None:
-        body["aiLabel"] = ai_label
-    if ai_confidence is not None:
-        body["aiConfidence"] = ai_confidence
-
-    return requests.post(
-        f"{base_url}/api/ai/analysis/recall",
-        json=body,
+    response = requests.post(
+        f"{base_url}/api/recall/results",
+        json=payload,
         timeout=10,
     )
+    return response
 
 
 def send_risk_result(
-    session_id: int,
-    speech_risk_score: float,
-    recall_score: float,
-    final_risk_score: float,
-    risk_level: str,
-    base_url: str = BASE_URL,
+        session_id: int,
+        speech_risk_score: float,
+        recall_score: float,
+        final_risk_score: float,
+        risk_level: str,
+        base_url: str = BASE_URL,
 ):
-    body = {
+    payload = {
         "sessionId": session_id,
-        "speechScore": speech_risk_score,
-        "textScore": 0.0,
+        "speechRiskScore": speech_risk_score,
         "recallScore": recall_score,
         "finalRiskScore": final_risk_score,
         "riskLevel": risk_level,
     }
-
-    return requests.post(
-        f"{base_url}/api/ai/analysis/risk",
-        json=body,
+    response = requests.post(
+        f"{base_url}/api/session/risk",
+        json=payload,
         timeout=10,
     )
+    return response
 
 
-def find_recall_pairs(records: List[dict]) -> List[tuple]:
-    initial_by_question: Dict[int, dict] = {}
-    recall_by_question: Dict[int, dict] = {}
+def analyze_session_recall(user_id: int, records: List[dict], speech_risk_score: float = 0.0, base_url: str = BASE_URL):
+    logger.info("analyze_session_recall 시작: 총 records 수=%d", len(records))
 
-    for record in records:
-        question_id = record.get("recallQuestionId")
-        answer_role = record.get("answerRole")
-
-        if question_id is None or answer_role is None:
-            continue
-
-        question_id = int(question_id)
-
-        if answer_role == "INITIAL":
-            initial_by_question[question_id] = record
-        elif answer_role == "RECALL":
-            recall_by_question[question_id] = record
-
-    pairs = []
-
-    for question_id, recall_record in recall_by_question.items():
-        initial_record = initial_by_question.get(question_id)
-
-        if initial_record is None:
-            parent_id = recall_record.get("parentRecordId")
-            if parent_id is not None:
-                initial_record = next(
-                    (r for r in records if r.get("recordId") == parent_id),
-                    None,
-                )
-
-        if initial_record is None:
-            continue
-
-        pairs.append((question_id, initial_record, recall_record))
-
-    return pairs
-
-
-def analyze_session_recall(
-    user_id: int,
-    session_id: int,
-    speech_risk_score: float,
-    base_url: str = BASE_URL,
-) -> None:
-    records = get_session_records(session_id, base_url)
-    questions = get_recall_questions(user_id, base_url)
-
-    pairs = find_recall_pairs(records)
-
-    if not pairs:
-        print("분석 가능한 INITIAL/RECALL 답변 쌍이 없습니다.")
-        print("INITIAL과 RECALL은 같은 recallQuestionId를 사용해야 합니다.")
+    # 1. 사용자의 전체 과거 질문 리스트(정답 정보 포함)를 Spring DB에서 선제적 조회
+    try:
+        past_questions = get_recall_questions(user_id, base_url)
+    except Exception as e:
+        logger.error("분석을 위한 과거 질문 조회 실패: %s", e)
         return
 
     final_recall_scores = []
 
-    for question_id, initial_record, recall_record in pairs:
-        question = questions.get(question_id, {})
+    # 2. 이번 세션의 레코드를 순회하며 RECALL(회상 답변) 턴을 찾음
+    for r in records:
+        answer_role = r.get("answerRole")
+        question_id = r.get("recallQuestionId")
+        current_record_id = r.get("recordId")
+        current_text = r.get("transcriptText", "")
 
-        past_text = initial_record.get("transcriptText") or ""
-        current_text = recall_record.get("transcriptText") or ""
+        if answer_role == "RECALL" and question_id is not None:
+            question_id_int = int(question_id)
+            logger.info("RECALL 레코드 발견: recordId=%s, questionId=%d", current_record_id, question_id_int)
 
-        keywords = question.get("keywords") or []
-        question_type = question.get("questionType") or "DEFAULT"
+            past_text = ""
+            past_record_id = 0
+            keywords = []
 
-        recall_scores = calculate_final_recall_score(
-            past_text=past_text,
-            current_text=current_text,
-            keywords=keywords,
-            question_type=question_type,
-        )
+            # [핵심 로직 1] 우선 이번 세션 안에서 생성된 INITIAL이 있는지 찾아봄
+            initial_record = None
+            for rec in records:
+                if rec.get("answerRole") == "INITIAL" and rec.get("recallQuestionId") == question_id_int:
+                    initial_record = rec
+                    break
 
-        recall_response = send_recall_result(
-            recall_question_id=question_id,
-            past_record_id=initial_record["recordId"],
-            current_record_id=recall_record["recordId"],
-            similarity_score=recall_scores["similarityScore"],
-            keyword_score=recall_scores["keywordScore"],
-            final_recall_score=recall_scores["finalRecallScore"],
-            base_url=base_url,
-        )
+            if initial_record:
+                past_text = initial_record.get("transcriptText", "")
+                past_record_id = initial_record.get("recordId")
+                keywords = [w for w in past_text.split() if len(w) > 1]
+                logger.info("-> 동일 세션 내 INITIAL과 매칭 성공")
 
-        print(
-            f"recall question {question_id} status:",
-            recall_response.status_code,
-            recall_response.text,
-        )
-        recall_response.raise_for_status()
+            # [핵심 로직 2] 이번 세션에 없다면? -> 과거 DB의 정답(expectedAnswer)을 기준으로 채점!
+            elif question_id_int in past_questions:
+                q_info = past_questions[question_id_int]
+                past_text = q_info.get("expectedAnswer", "")
+                past_record_id = 0  # 과거 세션이므로 0으로 처리
+                keywords = [w.strip() for w in past_text.split() if len(w.strip()) > 0]
+                logger.info("-> 과거 질문 DB와 매칭 성공 (과거 정답: '%s')", past_text)
 
-        final_recall_scores.append(recall_scores["finalRecallScore"])
+            else:
+                logger.warning("-> [경고] ID=%d 에 해당하는 초기 정보가 세션/과거 DB 어디에도 없습니다.", question_id_int)
+                continue
 
-    recall_score = round(sum(final_recall_scores) / len(final_recall_scores), 2)
+            # 3. 매칭된 텍스트(past_text)를 기준으로 회상 점수 계산
+            try:
+                scores = calculate_final_recall_score(
+                    past_text=past_text,
+                    current_text=current_text,
+                    keywords=keywords,
+                    question_type="RECALL"
+                )
 
-    risk_scores = calculate_final_risk_score(
-        speech_risk_score=speech_risk_score,
-        recall_score=recall_score,
-    )
+                # 4. 분석 결과 백엔드(Spring) 전송
+                send_recall_result(
+                    recall_question_id=question_id_int,
+                    past_record_id=past_record_id,
+                    current_record_id=current_record_id,
+                    similarity_score=scores["similarityScore"],
+                    keyword_score=scores["keywordScore"],
+                    final_recall_score=scores["finalRecallScore"],
+                    base_url=base_url
+                )
+                final_recall_scores.append(scores["finalRecallScore"])
+            except Exception as e:
+                logger.error("   점수 계산/전송 중 오류 발생: %s", e)
 
-    risk_response = send_risk_result(
-        session_id=session_id,
-        speech_risk_score=speech_risk_score,
-        recall_score=recall_score,
-        final_risk_score=risk_scores["finalRiskScore"],
-        risk_level=risk_scores["riskLevel"],
-        base_url=base_url,
-    )
+    # 5. 종합 위험도 계산 및 전송
+    if final_recall_scores:
+        recall_score = round(sum(final_recall_scores) / len(final_recall_scores), 2)
+    else:
+        logger.warning("정상적으로 분석된 회상 답변 쌍이 없습니다. 기본값 0.0 설정.")
+        recall_score = 0.0
 
-    print("risk status:", risk_response.status_code, risk_response.text)
-    risk_response.raise_for_status()
+    risk_scores = calculate_final_risk_score(speech_risk_score, recall_score)
 
-    print("분석 완료")
-    print("recallScore:", recall_score)
-    print("finalRiskScore:", risk_scores["finalRiskScore"])
-    print("riskLevel:", risk_scores["riskLevel"])
-
+    try:
+        session_id = records[0].get("sessionId") if records else 0
+        send_risk_result(session_id, speech_risk_score, recall_score, risk_scores["finalRiskScore"], risk_scores["riskLevel"], base_url)
+    except Exception as e:
+        logger.error("종합 위험도 전송 실패: %s", e)
 
 def main():
     parser = argparse.ArgumentParser()
@@ -215,12 +183,16 @@ def main():
 
     args = parser.parse_args()
 
-    analyze_session_recall(
-        user_id=args.user_id,
-        session_id=args.session_id,
-        speech_risk_score=args.speech_risk_score,
-        base_url=args.base_url,
-    )
+    try:
+        records = get_session_records(args.session_id, args.base_url)
+        analyze_session_recall(
+            user_id=args.user_id,
+            records=records,
+            speech_risk_score=args.speech_risk_score,
+            base_url=args.base_url
+        )
+    except Exception as e:
+        print("메인 실행 실패:", e)
 
 
 if __name__ == "__main__":

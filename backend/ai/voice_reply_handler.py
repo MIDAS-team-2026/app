@@ -1,209 +1,101 @@
 """
 음성 업로드 후 AI 답변 생성 및 회상 질문 저장 로직.
-
 STT는 Spring STTService가 업로드 시점에 처리하므로,
 이 모듈은 Spring API에서 transcriptText를 조회해 사용한다.
 """
 
+import json
 import logging
 import os
-import time
-
 import requests
 
 from recall.conversation_recall_generator import (
-    generate_recall_question_from_conversation,
-    save_recall_question_to_spring,
+    generate_recall_question_from_conversation, save_recall_question_to_spring,
 )
-from recall.recall_api_client import find_recall_pairs, get_recall_questions, send_recall_result
-from recall.recall_score_calculator import calculate_final_recall_score
+from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
-
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
-RECORD_FETCH_RETRIES = 3
-RECORD_FETCH_DELAY_SEC = 0.5
 
 
 def _fetch_session_records(session_id: int) -> list[dict]:
-    last_error: Exception | None = None
-
-    for attempt in range(1, RECORD_FETCH_RETRIES + 1):
-        try:
-            resp = requests.get(
-                f"{SPRING_BASE_URL}/api/voice/session/{session_id}/records",
-                timeout=10,
-            )
-            resp.raise_for_status()
-            records = resp.json()
-            if not isinstance(records, list):
-                raise ValueError(f"records 응답 형식 오류: {type(records)}")
-
-            if any(r.get("transcriptText") for r in records) or attempt == RECORD_FETCH_RETRIES:
-                return records
-
-            logger.info(
-                "transcript 없음, 재시도 %s/%s sessionId=%s",
-                attempt,
-                RECORD_FETCH_RETRIES,
-                session_id,
-            )
-        except Exception as exc:
-            last_error = exc
-            logger.warning(
-                "세션 records 조회 실패 attempt=%s sessionId=%s: %s",
-                attempt,
-                session_id,
-                exc,
-            )
-
-        time.sleep(RECORD_FETCH_DELAY_SEC)
-
-    if last_error:
-        raise last_error
-    return []
-
-
-def _save_ai_reply(record_id: int, reply_text: str) -> None:
-    resp = requests.post(
-        f"{SPRING_BASE_URL}/api/voice/reply",
-        json={"recordId": record_id, "replyText": reply_text},
-        timeout=10,
-    )
-    if resp.status_code >= 400:
-        logger.error(
-            "AI reply 저장 실패 recordId=%s status=%s body=%s",
-            record_id,
-            resp.status_code,
-            resp.text,
-        )
-    resp.raise_for_status()
-
-
-def _link_recall_question(record_id: int, question_id: int) -> None:
-    resp = requests.post(
-        f"{SPRING_BASE_URL}/api/voice/recall-link",
-        json={
-            "recordId": record_id,
-            "recallQuestionId": question_id,
-            "answerRole": "INITIAL",
-        },
-        timeout=10,
-    )
-    if resp.status_code >= 400:
-        logger.error(
-            "회상 질문 연결 실패 recordId=%s questionId=%s status=%s body=%s",
-            record_id,
-            question_id,
-            resp.status_code,
-            resp.text,
-        )
-    resp.raise_for_status()
-
-
-def _resolve_ai_label(final_score: float) -> tuple[str, float]:
-    if final_score >= 80:
-        label = "GOOD"
-    elif final_score >= 50:
-        label = "PARTIAL"
-    else:
-        label = "LOW"
-    return label, round(final_score / 100, 2)
-
-
-def _save_recall_analysis(user_id: int, records: list[dict]) -> None:
-    pairs = find_recall_pairs(records)
-    if not pairs:
-        return
-
-    questions = get_recall_questions(user_id, SPRING_BASE_URL)
-
-    for question_id, initial_record, recall_record in pairs:
-        question = questions.get(question_id, {})
-        past_text = initial_record.get("transcriptText") or ""
-        current_text = recall_record.get("transcriptText") or ""
-
-        if not past_text or not current_text:
-            logger.info(
-                "회상 분석 스킵 — transcript 없음 questionId=%s past=%s current=%s",
-                question_id,
-                bool(past_text),
-                bool(current_text),
-            )
-            continue
-
-        scores = calculate_final_recall_score(
-            past_text=past_text,
-            current_text=current_text,
-            keywords=question.get("keywords") or [],
-            question_type=question.get("questionType") or "DEFAULT",
-        )
-        final_score = scores["finalRecallScore"]
-        ai_label, ai_confidence = _resolve_ai_label(final_score)
-
-        resp = send_recall_result(
-            recall_question_id=question_id,
-            past_record_id=initial_record["recordId"],
-            current_record_id=recall_record["recordId"],
-            similarity_score=scores["similarityScore"],
-            keyword_score=scores["keywordScore"],
-            final_recall_score=final_score,
-            ai_label=ai_label,
-            ai_confidence=ai_confidence,
-            base_url=SPRING_BASE_URL,
-        )
-        if resp.status_code >= 400:
-            logger.error(
-                "회상 분석 저장 실패 questionId=%s status=%s body=%s",
-                question_id,
-                resp.status_code,
-                resp.text,
-            )
-        resp.raise_for_status()
-        logger.info("회상 분석 저장 완료 questionId=%s finalScore=%s", question_id, final_score)
-
-
-def process_voice_reply(record_id: int, session_id: int, user_id: int) -> None:
     try:
-        records = _fetch_session_records(session_id)
-        transcripts = [
-            r["transcriptText"]
-            for r in records
-            if r.get("transcriptText")
-        ]
+        resp = requests.get(
+            f"{SPRING_BASE_URL}/api/voice/session/{session_id}/records",
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.error("세션 레코드 실시간 동기화 조회 실패: sessionId=%s, 에러=%s", session_id, e)
+        return []
 
-        logger.info(
-            "process 시작 recordId=%s sessionId=%s transcript_count=%s",
-            record_id,
-            session_id,
-            len(transcripts),
+
+def _save_ai_reply(record_id: int, reply_text: str):
+    """생성된 AI 오디오 가이드 텍스트 답변을 Spring DB에 저장합니다."""
+    payload = {"recordId": record_id, "replyText": reply_text}
+    resp = requests.post(f"{SPRING_BASE_URL}/api/voice/reply", json=payload, timeout=10)
+    resp.raise_for_status()
+
+
+def _link_recall_question(record_id: int, recall_question_id: int, answer_role: str):
+    try:
+        payload = {
+            "recordId": record_id,
+            "recallQuestionId": recall_question_id,
+            "answerRole": answer_role
+        }
+        # Spring 인프라 구조의 세부 매핑 엔드포인트명에 맞추어 호출하세요.
+        resp = requests.post(f"{SPRING_BASE_URL}/api/voice/record/link-recall", json=payload, timeout=10)
+        resp.raise_for_status()
+        logger.info("-> 성공적으로 레코드에 질문 ID 주입 완료: recordId=%d, questionId=%d, role=%s", record_id, recall_question_id, answer_role)
+    except Exception as e:
+        logger.error("-> 레코드 질문 ID 주입(Link) API 통신 실패: recordId=%d, 에러=%s", record_id, e)
+
+
+def process_voice_reply(record_id: int, session_id: int, user_id: int, transcript_text: str):
+    logger.info("AI 답변 및 매핑 시작: recordId=%s sessionId=%s", record_id, session_id)
+    try:
+        session_records = _fetch_session_records(session_id)
+        if not session_records:
+            session_records = [{"recordId": record_id, "transcriptText": transcript_text}]
+
+        # 🔥 세션 ID를 파라미터로 넘겨, 정확한 턴을 계산하도록 변경
+        reply_data = generate_recall_question_from_conversation(
+            user_id=user_id,
+            session_id=session_id,
+            records=session_records
         )
 
-        result = generate_recall_question_from_conversation(transcripts)
-        reply_text = result.get("question") or "오늘 이야기 즐거웠어요!"
+        reply_text = reply_data.get("question")
+        recall_question_id = reply_data.get("recallQuestionId")
+        new_memory_point = reply_data.get("newMemoryPoint")
+        new_question_text = reply_data.get("newQuestionText")
 
-        _save_ai_reply(record_id, reply_text)
-        logger.info("AI reply 저장 완료 recordId=%s", record_id)
+        # 1. AI 답변 전송
+        if reply_text:
+            _save_ai_reply(record_id=record_id, reply_text=reply_text)
 
-        memory_point = result.get("memoryPoint", "")
-        if reply_text and memory_point:
-            saved = save_recall_question_to_spring(
-                user_id=user_id,
-                memory_point=memory_point,
-                question_text=reply_text,
-                base_url=SPRING_BASE_URL,
-            )
-            question_id = saved.get("questionId")
-            logger.info("회상 질문 저장 완료 userId=%s questionId=%s", user_id, question_id)
-            if question_id:
-                _link_recall_question(record_id, question_id)
+        # 2. 🔥 [핵심] 이제 recall_question_id는 '노인이 정답을 말한 턴'에만 반환됩니다!
+        # 따라서 현재 들어온 record_id(정답 문장)에 완벽하게 도장을 찍습니다.
+        if recall_question_id:
+            logger.info("정답 턴 감지. 현재 레코드를 RECALL로 매핑합니다. ID=%s", recall_question_id)
+            _link_recall_question(record_id, recall_question_id, "RECALL")
 
-        records = _fetch_session_records(session_id)
-        _save_recall_analysis(user_id, records)
+        # 3. 새로운 기억 정보(INITIAL) 추출 시 DB에 저장 및 링크
+        if new_memory_point and new_question_text:
+            try:
+                new_q = save_recall_question_to_spring(user_id, new_memory_point, new_question_text)
+                new_q_id = new_q.get("questionId") if new_q else None
+                if new_q_id:
+                    _link_recall_question(record_id, new_q_id, "INITIAL")
+            except Exception as e:
+                logger.error("신규 질문 저장 실패: %s", e)
+
+        # 4. 실시간 평가
+        updated_records = _fetch_session_records(session_id)
+        if not updated_records: updated_records = session_records
+        analyze_session_recall(user_id=user_id, records=updated_records, speech_risk_score=0.0)
 
     except Exception as e:
-        logger.exception("처리 실패 recordId=%s sessionId=%s: %s", record_id, session_id, e)
-        try:
-            _save_ai_reply(record_id, "잠시 오류가 생겼어요. 다시 말씀해 주시겠어요?")
-        except Exception:
-            logger.exception("fallback reply 저장도 실패 recordId=%s", record_id)
+        logger.exception("process_voice_reply 파이프라인 처리 중 치명적 예외 발생: %s", str(e))

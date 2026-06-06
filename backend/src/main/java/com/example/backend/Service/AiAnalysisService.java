@@ -162,8 +162,15 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(dto.getSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        RiskAnalysisResult result = new RiskAnalysisResult();
-        result.setChatSession(session);
+        RiskAnalysisResult result = riskAnalysisRepository
+                .findByChatSession_Id(dto.getSessionId())
+                .orElseGet(RiskAnalysisResult::new);
+
+        boolean isNew = (result.getId() == null);
+        if (isNew) {
+            result.setChatSession(session);
+        }
+
         result.setSpeechScore(dto.getSpeechScore());
         result.setTextScore(dto.getTextScore());
         result.setRecallScore(dto.getRecallScore());
@@ -171,6 +178,9 @@ public class AiAnalysisService {
         result.setRiskLevel(dto.getRiskLevel());
 
         riskAnalysisRepository.save(result);
+
+        log.info("RiskAnalysis 저장 sessionId={} isNew={}",
+                dto.getSessionId(), isNew);
 
         if (dto.getFinalRiskScore() >= 70.0) {
             User patient = session.getUser();
