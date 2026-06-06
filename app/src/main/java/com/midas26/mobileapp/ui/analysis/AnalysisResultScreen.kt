@@ -67,13 +67,6 @@ import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.AppColor.textTertiary
-import com.midas26.mobileapp.ui.theme.AppColor.textSecondary
-import com.midas26.mobileapp.ui.theme.AppColor.greenPrimary
-import com.midas26.mobileapp.ui.theme.AppColor.greenSecondary
-import com.midas26.mobileapp.ui.theme.AppColor.accentDark
-import com.midas26.mobileapp.ui.theme.AppColor.guardianPrimary
-import com.midas26.mobileapp.ui.theme.AppColor.guardianDark
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.util.PrefsManager
@@ -555,6 +548,9 @@ private fun GuardianWeeklyLineChart(
 ) {
     if (points.isEmpty()) return
 
+    val colorGuardianPrimary = AppColor.guardianPrimary
+    val colorGuardianDark    = AppColor.guardianDark
+
     Column(modifier = modifier) {
         Canvas(
             modifier = Modifier
@@ -596,8 +592,8 @@ private fun GuardianWeeklyLineChart(
                 path = areaPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        AppColor.guardianPrimary.copy(alpha = 0.35f),
-                        AppColor.guardianPrimary.copy(alpha = 0f)
+                        colorGuardianPrimary.copy(alpha = 0.35f),
+                        colorGuardianPrimary.copy(alpha = 0f)
                     )
                 )
             )
@@ -615,8 +611,8 @@ private fun GuardianWeeklyLineChart(
                 path = linePath,
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        AppColor.guardianPrimary,
-                        AppColor.guardianDark
+                        colorGuardianPrimary,
+                        colorGuardianDark
                     ),
                     startX = 0f,
                     endX = w
@@ -632,7 +628,7 @@ private fun GuardianWeeklyLineChart(
                 )
 
                 drawCircle(
-                    color = AppColor.guardianDark,
+                    color = colorGuardianDark,
                     radius = 11f,
                     center = Offset(xs[i], ys[i])
                 )
@@ -715,15 +711,13 @@ private fun UserAnalysisResultContent(
             val animSpec = tween<Color>(durationMillis = 400)
 
             val topColor by animateColorAsState(
-                targetValue = if (isGuardian) AppColor.guardianDark
-                              else if (isToday) AppColor.accentDark else AppColor.textSecondary,
+                targetValue = if (isToday) AppColor.accentDark else AppColor.textSecondary,
                 animationSpec = animSpec,
                 label = "top_color"
             )
 
             val botColor by animateColorAsState(
-                targetValue = if (isGuardian) AppColor.guardianPrimary
-                              else if (isToday) AppColor.greenPrimary else AppColor.textTertiary,
+                targetValue = if (isToday) AppColor.greenPrimary else AppColor.textTertiary,
                 animationSpec = animSpec,
                 label = "bottom_color"
             )
@@ -979,6 +973,12 @@ private fun WeeklyLineChart(
     var computedXs = remember { listOf<Float>() }
     var lastDragIdx = remember { -1 }
 
+    // Canvas는 @Composable 컨텍스트가 아니므로 색상 미리 캡처
+    val colorGreenPrimary  = AppColor.greenPrimary
+    val colorAccentDark    = AppColor.accentDark
+    val colorGreenSecondary = AppColor.greenSecondary
+    val colorTextTertiary  = AppColor.textTertiary
+
     fun nearestIdx(offsetX: Float): Int {
         if (computedXs.isEmpty()) return -1
 
@@ -1104,8 +1104,8 @@ private fun WeeklyLineChart(
                 path = areaPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        AppColor.greenPrimary.copy(alpha = 0.35f),
-                        AppColor.greenPrimary.copy(alpha = 0f)
+                        colorGreenPrimary.copy(alpha = 0.35f),
+                        colorGreenPrimary.copy(alpha = 0f)
                     )
                 )
             )
@@ -1122,7 +1122,7 @@ private fun WeeklyLineChart(
             drawPath(
                 path = linePath,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(AppColor.greenPrimary, AppColor.accentDark),
+                    colors = listOf(colorGreenPrimary, colorAccentDark),
                     startX = 0f,
                     endX = w
                 ),
@@ -1133,9 +1133,9 @@ private fun WeeklyLineChart(
                 val fraction = (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f)
 
                 val dotColor = if (hasData[i]) {
-                    if (fraction > 0.5f) AppColor.greenSecondary else AppColor.accentDark
+                    if (fraction > 0.5f) colorGreenSecondary else colorAccentDark
                 } else {
-                    AppColor.textTertiary
+                    colorTextTertiary
                 }
 
                 val outerRadius = lerp(12f, 28f, fraction)
