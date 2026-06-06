@@ -41,6 +41,7 @@ fun GuardianHomeScreen(
     guardianName: String,
     patients: List<LinkedUserInfo>,
     isLoading: Boolean = false,
+    patientScores: Map<Int, Int?> = emptyMap(),
     onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
     var selectedPatient by remember(patients) {
@@ -57,6 +58,7 @@ fun GuardianHomeScreen(
             patients = patients,
             selectedPatient = selectedPatient,
             isLoading = isLoading,
+            todayScore = selectedPatient?.userId?.let { patientScores[it] },
             onPatientSelected = { selectedPatient = it }
         )
 
@@ -77,6 +79,7 @@ private fun GuardianHomeHeader(
     patients: List<LinkedUserInfo>,
     selectedPatient: LinkedUserInfo?,
     isLoading: Boolean,
+    todayScore: Int?,           // null = 로딩 중 또는 데이터 없음
     onPatientSelected: (LinkedUserInfo) -> Unit
 ) {
     Box(
@@ -112,12 +115,20 @@ private fun GuardianHomeHeader(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "-",
-                    fontSize = 52.sp,
-                    color = BrandWhite,
-                    fontWeight = FontWeight.Bold
-                )
+                if (isLoading || (patients.isNotEmpty() && todayScore == null && selectedPatient != null)) {
+                    CircularProgressIndicator(
+                        color = BrandWhite,
+                        modifier = Modifier.size(36.dp),
+                        strokeWidth = 3.dp
+                    )
+                } else {
+                    Text(
+                        text = todayScore?.toString() ?: "-",
+                        fontSize = 52.sp,
+                        color = BrandWhite,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 

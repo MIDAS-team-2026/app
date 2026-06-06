@@ -413,6 +413,7 @@ fun AppNavHost(
                 composable(Routes.UserHome) {
                     UserHomeScreen(
                         userName = PrefsManager.from(context).getUserName(),
+                        weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                         streakDays = analysisViewModel.streakDays,
                         weeklyChecks = analysisViewModel.weeklyChecks,
                         weeklyDayLabels = analysisViewModel.weeklyDayLabels,
@@ -434,15 +435,20 @@ fun AppNavHost(
                     val guardianName = prefs.getUserName()
                     val patients by guardianViewModel.patients.collectAsState()
                     val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+                    val patientScores by guardianViewModel.patientScores.collectAsState()
 
                     androidx.compose.runtime.LaunchedEffect(guardianId) {
                         guardianViewModel.loadPatients(guardianId)
+                    }
+                    androidx.compose.runtime.LaunchedEffect(patients) {
+                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
                     }
 
                     GuardianHomeScreen(
                         guardianName = guardianName,
                         patients = patients,
                         isLoading = isLoadingPatients,
+                        patientScores = patientScores,
                         onMenuClick = { menu ->
                             when (menu) {
                                 GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
@@ -705,15 +711,23 @@ fun AppNavHost(
                 composable(Routes.AnalysisUserSelect) {
                     val patients by guardianViewModel.patients.collectAsState()
                     val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+                    val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
+
+                    // 환자 목록이 준비되면 상태 조회 시작
+                    androidx.compose.runtime.LaunchedEffect(patients) {
+                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                    }
 
                     AnalysisUserSelectScreen(
                         patients = patients,
                         isLoading = isLoadingPatients,
+                        patientStatuses = patientStatuses,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                         },
                         onUserClick = { patient ->
                             patient.userId?.let { patientId ->
+                                guardianViewModel.markPatientViewed(patientId)
                                 analysisViewModel.loadForPatient(patientId)
                                 navController.navigate(Routes.AnalysisResult)
                             }
