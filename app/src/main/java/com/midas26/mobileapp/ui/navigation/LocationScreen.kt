@@ -232,7 +232,7 @@ private fun UserLocationCard(
 ) {
     val context = LocalContext.current
     val userId = user.id.toIntOrNull() ?: 0
-    val relation = if (userId > 0) PrefsManager.from(context).getPatientRelation(userId) else ""
+    val relation = if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" } else "사용자"
 
     var coordText by remember { mutableStateOf("위치 불러오는 중...") }
     var timeAgoText by remember { mutableStateOf("") }
@@ -290,20 +290,18 @@ private fun UserLocationCard(
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
-                    if (relation.isNotEmpty()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = AppColor.guardianSurface
-                        ) {
-                            Text(
-                                text = relation,
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = AppColor.guardianDark,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                            )
-                        }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = AppColor.guardianSurface
+                    ) {
+                        Text(
+                            text = relation,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppColor.guardianDark,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
                     }
                 }
 
