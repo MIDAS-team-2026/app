@@ -82,6 +82,7 @@ def calculate_final_recall_score(
         "similarityScore": round(similarity_score, 2),
         "keywordScore": round(keyword_score, 2),
         "finalRecallScore": round(final_recall_score, 2),
+        "textScore": round(similarity_score, 2),
     }
 
 

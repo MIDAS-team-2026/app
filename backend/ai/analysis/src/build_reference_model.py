@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import joblib
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -12,8 +13,13 @@ from speech_abnormality_scoring import (
 )
 
 
-FEATURE_CSV = Path(r"D:\MIDAS_EXTRACTED\dysarthria_25_reference_features.csv")
-MODEL_DIR = Path(r"D:\MIDAS_EXTRACTED\model")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+
+FEATURE_CSV = Path(
+    os.getenv("MIDAS_REFERENCE_FEATURE_CSV", OUTPUT_DIR / "dysarthria_25_reference_features.csv")
+)
+MODEL_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "model"))
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
 
