@@ -8,11 +8,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,25 +34,58 @@ enum class GuardianMenu {
     Settings
 }
 
+data class LinkedUserDummyData(
+    val userId: Int,
+    val userName: String,
+    val todayScore: Int?
+)
+
+data class GuardianLinkedDummyData(
+    val guardianName: String,
+    val linkedUsers: List<LinkedUserDummyData>
+)
+
+private val guardianLinkedDummyData = GuardianLinkedDummyData(
+    guardianName = "홍철수",
+    linkedUsers = listOf(
+        LinkedUserDummyData(
+            userId = 1,
+            userName = "홍길동",
+            todayScore = 75
+        ),
+        LinkedUserDummyData(
+            userId = 2,
+            userName = "김영희",
+            todayScore = null
+        ),
+        LinkedUserDummyData(
+            userId = 3,
+            userName = "박민수",
+            todayScore = 68
+        )
+    )
+)
+
 @Composable
 fun GuardianHomeScreen(
-    guardianName: String = "홍철수",
-    linkedUserName: String = "홍길동",
-    todayScore: Int = 75,
-    weeklyScore: Int = 75,
-    voiceCheckDone: Boolean = true,
-    recallCheckDone: Boolean = false,
     onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
+    val guardianData = guardianLinkedDummyData
+
+    var selectedUser by remember {
+        mutableStateOf(guardianData.linkedUsers.first())
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
         GuardianHomeHeader(
-            guardianName = guardianName,
-            linkedUserName = linkedUserName,
-            todayScore = todayScore
+            guardianName = guardianData.guardianName,
+            linkedUsers = guardianData.linkedUsers,
+            selectedUser = selectedUser,
+            onUserSelected = { selectedUser = it }
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -67,8 +102,9 @@ fun GuardianHomeScreen(
 @Composable
 private fun GuardianHomeHeader(
     guardianName: String,
-    linkedUserName: String,
-    todayScore: Int
+    linkedUsers: List<LinkedUserDummyData>,
+    selectedUser: LinkedUserDummyData,
+    onUserSelected: (LinkedUserDummyData) -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -108,19 +144,21 @@ private fun GuardianHomeHeader(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     Text(
-                        text = todayScore.toString(),
+                        text = selectedUser.todayScore?.toString() ?: "-",
                         fontSize = 52.sp,
                         color = BrandWhite,
                         fontWeight = FontWeight.Bold
                     )
 
-                    Text(
-                        text = stringResource(R.string.home_score_unit),
-                        fontSize = 19.sp,
-                        color = BrandWhite.copy(alpha = 0.9f),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
+                    if (selectedUser.todayScore != null) {
+                        Text(
+                            text = stringResource(R.string.home_score_unit),
+                            fontSize = 19.sp,
+                            color = BrandWhite.copy(alpha = 0.9f),
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
                 }
             }
         }
@@ -148,30 +186,89 @@ private fun GuardianHomeHeader(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = BrandWhite.copy(alpha = 0.22f)
+            LinkedUserDropdown(
+                linkedUsers = linkedUsers,
+                selectedUser = selectedUser,
+                onUserSelected = onUserSelected
+            )
+        }
+    }
+}
+
+@Composable
+private fun LinkedUserDropdown(
+    linkedUsers: List<LinkedUserDummyData>,
+    selectedUser: LinkedUserDummyData,
+    onUserSelected: (LinkedUserDummyData) -> Unit
+) {
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+
+    Box {
+        Surface(
+            modifier = Modifier.clickable {
+                expanded = !expanded
+            },
+            shape = RoundedCornerShape(24.dp),
+            color = BrandWhite.copy(alpha = 0.22f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        tint = AppColor.guardianDark,
-                        modifier = Modifier.size(24.dp)
-                    )
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    tint = AppColor.guardianDark,
+                    modifier = Modifier.size(24.dp)
+                )
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                    Text(
-                        text = stringResource(R.string.guardian_linked, linkedUserName),
-                        fontSize = 18.sp,
-                        color = BrandWhite,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+                Text(
+                    text = "${selectedUser.userName} 님 연결됨",
+                    fontSize = 18.sp,
+                    color = BrandWhite,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
+                    contentDescription = null,
+                    tint = BrandWhite,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            linkedUsers.forEach { user ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = "${user.userName} 님",
+                            fontWeight = if (user.userId == selectedUser.userId) {
+                                FontWeight.Bold
+                            } else {
+                                FontWeight.Normal
+                            }
+                        )
+                    },
+                    onClick = {
+                        onUserSelected(user)
+                        expanded = false
+                    }
+                )
             }
         }
     }

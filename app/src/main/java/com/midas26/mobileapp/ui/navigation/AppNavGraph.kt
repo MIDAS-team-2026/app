@@ -676,7 +676,7 @@ fun AppNavHost(
                             navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                         },
                         onUserClick = { _ ->
-                            navController.navigate(Routes.AnalysisResult)
+                            // 사용자 카드를 눌러도 분석 결과 화면으로 이동하지 않음
                         }
                     )
                 }
