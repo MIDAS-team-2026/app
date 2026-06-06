@@ -64,8 +64,6 @@ import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import androidx.compose.ui.platform.LocalContext
 import com.midas26.mobileapp.util.PrefsManager
@@ -125,12 +123,12 @@ fun AnalysisResultScreen(
         val isToday = viewModel.isViewingToday && viewModel.hasTodayData
         val animSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 400)
         val topColor by animateColorAsState(
-            if (isGuardian) GuardianAccentDark
+            if (isGuardian) AppColor.guardianDark
             else if (isToday) AppColor.accentDark else AppColor.textSecondary,
             animSpec
         )
         val botColor by animateColorAsState(
-            if (isGuardian) GuardianAccent
+            if (isGuardian) AppColor.guardianPrimary
             else if (isToday) AppColor.greenPrimary else AppColor.textTertiary,
             animSpec
         )

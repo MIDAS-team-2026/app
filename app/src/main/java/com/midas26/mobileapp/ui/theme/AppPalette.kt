@@ -47,6 +47,11 @@ data class AppPalette(
     val red50:  Color,
     val red400: Color,
 
+    // ── Guardian (보호자 화면 — 코랄/레드 계열) ────────────────────────────────
+    val guardianAccent:      Color,
+    val guardianAccentDark:  Color,
+    val guardianAccentLight: Color,
+
     // ── Base ───────────────────────────────────────
     val brandWhite: Color,
     val brandBlack: Color,
@@ -82,6 +87,10 @@ val NormalPalette = AppPalette(
 
     red50  = Red50,
     red400 = Red400,
+
+    guardianAccent      = GuardianAccent,
+    guardianAccentDark  = GuardianAccentDark,
+    guardianAccentLight = GuardianAccentLight,
 
     brandWhite = BrandWhite,
     brandBlack = BrandBlack,
@@ -121,6 +130,10 @@ val ContrastPalette = AppPalette(
     red50  = Color(0xFFFFD6D6),
     red400 = Color(0xFFCC0000),
 
+    guardianAccent      = ContrastGuardianAccent,
+    guardianAccentDark  = ContrastGuardianAccentDark,
+    guardianAccentLight = ContrastGuardianAccentLight,
+
     brandWhite = BrandWhite,
     brandBlack = BrandBlack,
 )
@@ -157,6 +170,10 @@ val DarkPalette = AppPalette(
 
     red50  = Color(0xFF4A0000),
     red400 = Color(0xFFFF6B6B),
+
+    guardianAccent      = Color(0xFFFF8A75),
+    guardianAccentDark  = Color(0xFFFF6B55),
+    guardianAccentLight = Color(0xFF5A1A10),
 
     brandWhite = BrandBlack,
     brandBlack = BrandWhite,

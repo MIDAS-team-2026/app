@@ -57,7 +57,6 @@ import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
@@ -159,7 +158,7 @@ fun AppNavHost(
                             }
                         }
                     },
-                    accent = if (isGuardian) GuardianAccentDark else AppColor.greenSecondary
+                    accent = if (isGuardian) AppColor.guardianDark else AppColor.greenSecondary
                 )
             }
         }

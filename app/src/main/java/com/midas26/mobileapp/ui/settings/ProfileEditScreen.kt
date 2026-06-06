@@ -62,8 +62,6 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.foundation.layout.offset
 
@@ -453,7 +451,7 @@ private fun CollapsingProfileHeader(
             .fillMaxWidth()
             .height(headerHeight)
             .background(brush = Brush.verticalGradient(
-                colors = if (isGuardian) listOf(GuardianAccentDark, GuardianAccent)
+                colors = if (isGuardian) listOf(AppColor.guardianDark, AppColor.guardianPrimary)
                          else listOf(AppColor.accentDark, AppColor.greenPrimary)
             ))
     ) {

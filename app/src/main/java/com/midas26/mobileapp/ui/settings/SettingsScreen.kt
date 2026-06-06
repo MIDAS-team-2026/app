@@ -72,8 +72,6 @@ import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -500,7 +498,7 @@ private fun CollapsingSettingsHeader(
             .background(
                 brush = Brush.verticalGradient(
                     colors = if (isGuardian) {
-                        listOf(GuardianAccentDark, GuardianAccent)
+                        listOf(AppColor.guardianDark, AppColor.guardianPrimary)
                     } else {
                         listOf(AppColor.accentDark, AppColor.greenPrimary)
                     }

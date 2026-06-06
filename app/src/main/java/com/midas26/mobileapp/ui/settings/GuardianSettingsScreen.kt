@@ -65,8 +65,6 @@ import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -346,7 +344,7 @@ private fun WheelTimePickerDialog(
             TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
                 Text(
                     text = "확인",
-                    color = GuardianAccentDark,
+                    color = AppColor.guardianDark,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -426,7 +424,7 @@ private fun CollapsingGuardianSettingsHeader(
             .height(headerHeight)
             .background(
                 brush = Brush.verticalGradient(
-                    colors = listOf(GuardianAccentDark, GuardianAccent)
+                    colors = listOf(AppColor.guardianDark, AppColor.guardianPrimary)
                 )
             )
     ) {
@@ -523,7 +521,7 @@ private fun CollapsingGuardianSettingsHeader(
                                 text = role,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = GuardianAccentDark,
+                                color = AppColor.guardianDark,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                             )
                         }

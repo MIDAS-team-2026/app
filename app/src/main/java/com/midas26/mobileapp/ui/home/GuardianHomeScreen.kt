@@ -77,8 +77,8 @@ private fun GuardianHomeHeader(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        GuardianAccentDark,
-                        GuardianAccent
+                        AppColor.guardianDark,
+                        AppColor.guardianPrimary
                     )
                 )
             )
@@ -159,7 +159,7 @@ private fun GuardianHomeHeader(
                     Icon(
                         imageVector = Icons.Default.Person,
                         contentDescription = null,
-                        tint = GuardianAccentDark,
+                        tint = AppColor.guardianDark,
                         modifier = Modifier.size(24.dp)
                     )
 
@@ -261,9 +261,11 @@ private fun GuardianMenuCard(
     desc: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = GuardianAccentLight,
-    iconTint: Color = GuardianAccentDark
+    accent: Color = Color.Unspecified,
+    iconTint: Color = Color.Unspecified
 ) {
+    val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
+    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
     Surface(
         modifier = modifier
             .height(104.dp)
@@ -302,13 +304,13 @@ private fun GuardianMenuCard(
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = accent
+                color = resolvedAccent
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = iconTint,
+                        tint = resolvedIconTint,
                         modifier = Modifier.size(40.dp)
                     )
                 }

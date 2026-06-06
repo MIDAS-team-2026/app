@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Brush
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
@@ -70,10 +73,12 @@ fun AccessibilitySettingsScreen(
     var hapticFeedback by remember { mutableStateOf(prefs.getHapticFeedback()) }
     var largeTouchArea by remember { mutableStateOf(prefs.getLargeTouchArea()) }
 
+    val isHighContrast = LocalHighContrast.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppColor.surfaceElevated)
+            .background(BrandWhite)
     ) {
         AccessibilityTopBar(onBack = onBack)
 
@@ -200,29 +205,37 @@ fun AccessibilitySettingsScreen(
 
 @Composable
 private fun AccessibilityTopBar(onBack: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(AppColor.accentDark, AppColor.greenPrimary)
+                )
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary
+                    tint = BrandWhite,
+                    modifier = Modifier.size(28.dp)
                 )
             }
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "접근성 설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
+                color = BrandWhite,
+                modifier = Modifier.weight(1f)
             )
         }
     }

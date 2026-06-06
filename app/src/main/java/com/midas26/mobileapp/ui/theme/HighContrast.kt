@@ -87,6 +87,19 @@ object AppColor {
     val errorPrimary: Color
         @Composable get() = LocalAppPalette.current.red400
 
+    // ── Guardian (보호자 화면 전용) ───────────────────────────────────────────
+    /** 보호자 주요 액션색 (버튼·헤더 등) */
+    val guardianPrimary: Color
+        @Composable get() = LocalAppPalette.current.guardianAccent
+
+    /** 보호자 진한 액션색 (그라데이션 시작점 등) */
+    val guardianDark: Color
+        @Composable get() = LocalAppPalette.current.guardianAccentDark
+
+    /** 보호자 연한 서피스 (카드 배경 등) */
+    val guardianSurface: Color
+        @Composable get() = LocalAppPalette.current.guardianAccentLight
+
     // ── 카드 비주얼 동작 (팔레트 외 — 모드별 동작 차이) ─────────────────────────
     /** 고대비: 그림자 제거, 일반: 3dp 그림자 */
     val cardShadowElevation: Dp

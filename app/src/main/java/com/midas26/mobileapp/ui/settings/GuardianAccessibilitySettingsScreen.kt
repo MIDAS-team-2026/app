@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -41,8 +44,6 @@ import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.util.PrefsManager
 
@@ -63,7 +64,7 @@ fun GuardianAccessibilitySettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppColor.surfaceElevated)
+            .background(BrandWhite)
     ) {
         GuardianAccessibilityTopBar(onBack = onBack)
 
@@ -131,30 +132,37 @@ fun GuardianAccessibilitySettingsScreen(
 
 @Composable
 private fun GuardianAccessibilityTopBar(onBack: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(AppColor.guardianDark, AppColor.guardianPrimary)
+                )
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary
+                    tint = BrandWhite,
+                    modifier = Modifier.size(28.dp)
                 )
             }
-
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "접근성 설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
+                color = BrandWhite,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -209,13 +217,13 @@ private fun GuardianFontSizeSelector(
                         .weight(1f)
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) GuardianAccentDark else unselectedBorder,
+                            color = if (isSelected) AppColor.guardianDark else unselectedBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clip(RoundedCornerShape(12.dp))
                         .background(
                             if (isSelected) {
-                                GuardianAccent.copy(alpha = 0.16f)
+                                AppColor.guardianPrimary.copy(alpha = 0.16f)
                             } else {
                                 BrandWhite
                             }
@@ -229,7 +237,7 @@ private fun GuardianFontSizeSelector(
                             text = "가",
                             fontSize = previewSizes[index],
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) GuardianAccentDark else AppColor.textSecondary
+                            color = if (isSelected) AppColor.guardianDark else AppColor.textSecondary
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
@@ -237,7 +245,7 @@ private fun GuardianFontSizeSelector(
                         Text(
                             text = label,
                             fontSize = previewSizes[index],
-                            color = if (isSelected) GuardianAccentDark else AppColor.textTertiary,
+                            color = if (isSelected) AppColor.guardianDark else AppColor.textTertiary,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
                     }
@@ -282,7 +290,7 @@ private fun GuardianAccessibilityToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BrandWhite,
-                checkedTrackColor = GuardianAccentDark,
+                checkedTrackColor = AppColor.guardianDark,
                 uncheckedThumbColor = BrandWhite,
                 uncheckedTrackColor = AppColor.divider
             )

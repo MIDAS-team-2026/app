@@ -35,7 +35,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 
 private data class ManagedUser(
     val name: String,
@@ -371,7 +370,7 @@ private fun ManagedUserEditDialog(
             ) {
                 Text(
                     text = "저장",
-                    color = GuardianAccentDark,
+                    color = AppColor.guardianDark,
                     fontWeight = FontWeight.Bold
                 )
             }

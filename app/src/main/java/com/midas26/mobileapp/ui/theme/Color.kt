@@ -45,9 +45,14 @@ val Red400 = Color(0xFFEF4444)
 val Red50 = Color(0xFFFEF2F2)
 
 // Guardian accent (보호자 화면 — 따뜻한 코랄)
-val GuardianAccent = Color(0xFFE4725B)
-val GuardianAccentDark = Color(0xFFC85E48)
+val GuardianAccent      = Color(0xFFE4725B)
+val GuardianAccentDark  = Color(0xFFC85E48)
 val GuardianAccentLight = Color(0xFFFEE5E0)
+
+// High Contrast Guardian — 채도 강화, 흰 배경 기준 WCAG 대비 충족
+val ContrastGuardianAccent      = Color(0xFFB5321A)  // 6.2:1 ✅ AAA
+val ContrastGuardianAccentDark  = Color(0xFF8B2212)  // 8.5:1 ✅ AAA
+val ContrastGuardianAccentLight = Color(0xFFFFD5CD)  // 선명한 연핑크 서피스
 
 // Base
 val BrandWhite = Color(0xFFFFFFFF)
