@@ -102,7 +102,7 @@ fun AnalysisResultScreen(
         label = "analysis_crossfade"
     ) { loading ->
         if (loading) {
-            AnalysisLoadingScreen(isLoading = viewModel.isLoading, onFinished = {})
+            AnalysisLoadingScreen(isLoading = viewModel.isLoading, onFinished = {}, isGuardian = isGuardian)
             return@Crossfade
         }
 
@@ -210,7 +210,7 @@ fun AnalysisResultScreen(
                             Text(
                                 text = viewModel.displayRiskLevel,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isToday) AppColor.accentDark else AppColor.textSecondary,
+                                color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
@@ -309,6 +309,7 @@ fun AnalysisResultScreen(
                     WeeklyLineChart(
                         points = viewModel.graphPoints,
                         highlightIndex = viewModel.graphHighlightIndex,
+                        isGuardian = isGuardian,
                         onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
                         onDragStart = { viewModel.onGraphDragStart() },
                         onDragMove = { date -> viewModel.onGraphDragMove(date) },
@@ -333,6 +334,7 @@ fun AnalysisResultScreen(
 private fun WeeklyLineChart(
     points: List<DailyScore>,
     highlightIndex: Int = points.lastIndex,
+    isGuardian: Boolean = false,
     onPointTapped: (String?) -> Unit = {},
     onDragStart: () -> Unit = {},
     onDragMove: (String?) -> Unit = {},
@@ -381,9 +383,9 @@ private fun WeeklyLineChart(
     }
 
     // Canvas DrawScope는 @Composable 컨텍스트가 아니므로 미리 캡처
-    val colorGreenPrimary   = AppColor.greenPrimary
-    val colorAccentDark     = AppColor.accentDark
-    val colorGreenSecondary = AppColor.greenSecondary
+    val colorGreenPrimary   = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+    val colorAccentDark     = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
+    val colorGreenSecondary = if (isGuardian) AppColor.guardianPrimary else AppColor.greenSecondary
     val colorTextTertiary   = AppColor.textTertiary
 
     Column(modifier = modifier) {

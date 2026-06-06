@@ -799,7 +799,7 @@ private fun ConfirmDialog(
             TextButton(onClick = onConfirm) {
                 Text(
                     text = confirmText,
-                    color = if (isDestructive) AppColor.errorPrimary else AppColor.greenPrimary,
+                    color = if (isDestructive) AppColor.errorPrimary else AppColor.guardianPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
             }

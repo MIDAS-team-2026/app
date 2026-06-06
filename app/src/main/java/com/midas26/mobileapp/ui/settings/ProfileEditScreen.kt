@@ -75,7 +75,10 @@ fun ProfileEditScreen(
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val prefs = PrefsManager.from(context)
-    val isPatient = prefs.getUserRole() == PrefsManager.ROLE_USER
+    val isPatient  = prefs.getUserRole() == PrefsManager.ROLE_USER
+    val isGuardian = !isPatient
+    val accentColor      = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+    val accentColorDark  = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
     val userCode = prefs.getUserCode()
 
     var currentPassword by remember { mutableStateOf("") }
@@ -381,7 +384,7 @@ fun ProfileEditScreen(
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AppColor.greenPrimary)
+                    CircularProgressIndicator(color = accentColor)
                 }
             } else {
                 Button(
@@ -398,8 +401,8 @@ fun ProfileEditScreen(
                         .height(56.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = AppColor.greenPrimary,
-                        disabledContainerColor = AppColor.greenPrimary.copy(alpha = 0.4f),
+                        containerColor = accentColor,
+                        disabledContainerColor = accentColor.copy(alpha = 0.4f),
                         disabledContentColor = BrandWhite.copy(alpha = 0.6f)
                     )
                 ) {

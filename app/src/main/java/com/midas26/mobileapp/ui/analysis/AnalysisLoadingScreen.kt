@@ -42,12 +42,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 
 @Composable
 fun AnalysisLoadingScreen(
     isLoading: Boolean,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    isGuardian: Boolean = false
 ) {
     var step1 by remember { mutableStateOf(false) } // 서버 연결 완료
     var step2 by remember { mutableStateOf(false) } // 분석 데이터 수신 완료
@@ -74,7 +76,7 @@ fun AnalysisLoadingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        SpinningRing()
+        SpinningRing(isGuardian = isGuardian)
         Spacer(modifier = Modifier.height(28.dp))
 
         Text(
@@ -94,16 +96,16 @@ fun AnalysisLoadingScreen(
         )
         Spacer(modifier = Modifier.height(36.dp))
 
-        ProgressItem(label = "서버 연결 완료",       done = step1)
+        ProgressItem(label = "서버 연결 완료",       done = step1, isGuardian = isGuardian)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "분석 데이터 수신 완료", done = step2)
+        ProgressItem(label = "분석 데이터 수신 완료", done = step2, isGuardian = isGuardian)
         Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "결과 화면 준비 완료",   done = step3)
+        ProgressItem(label = "결과 화면 준비 완료",   done = step3, isGuardian = isGuardian)
     }
 }
 
 @Composable
-private fun SpinningRing() {
+private fun SpinningRing(isGuardian: Boolean = false) {
     val transition = rememberInfiniteTransition(label = "ring")
     val rotation by transition.animateFloat(
         initialValue = 0f, targetValue = 360f,
@@ -122,13 +124,10 @@ private fun SpinningRing() {
                 .clip(CircleShape)
                 .background(
                     brush = Brush.sweepGradient(
-                        listOf(
-                            AppColor.greenPrimary.copy(alpha = 0f),
-                            AppColor.greenPrimary.copy(alpha = 0.2f),
-                            AppColor.greenPrimary,
-                            AppColor.greenPrimary.copy(alpha = 0.2f),
-                            AppColor.greenPrimary.copy(alpha = 0f)
-                        )
+                        run {
+                            val c = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+                            listOf(c.copy(alpha = 0f), c.copy(alpha = 0.2f), c, c.copy(alpha = 0.2f), c.copy(alpha = 0f))
+                        }
                     )
                 )
         )
@@ -143,7 +142,7 @@ private fun SpinningRing() {
             Icon(
                 imageVector = Icons.Default.BarChart,
                 contentDescription = null,
-                tint = AppColor.accent,
+                tint = if (isGuardian) AppColor.guardianPrimary else AppColor.accent,
                 modifier = Modifier.size(56.dp)
             )
         }
@@ -151,13 +150,13 @@ private fun SpinningRing() {
 }
 
 @Composable
-private fun ProgressItem(label: String, done: Boolean) {
+private fun ProgressItem(label: String, done: Boolean, isGuardian: Boolean = false) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(20.dp)
                 .clip(CircleShape)
-                .background(if (done) AppColor.greenPrimary else AppColor.divider),
+                .background(if (done) (if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary) else AppColor.divider),
             contentAlignment = Alignment.Center
         ) {
             if (done) {

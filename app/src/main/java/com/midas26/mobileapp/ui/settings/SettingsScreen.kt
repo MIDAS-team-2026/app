@@ -164,6 +164,7 @@ fun SettingsScreen(
             title = "로그아웃",
             message = "정말 로그아웃 하시겠어요?",
             confirmText = "로그아웃",
+            isGuardian = isGuardian,
             onConfirm = {
                 PrefsManager.from(context).clearToken()
                 onLogout()
@@ -852,6 +853,7 @@ private fun ConfirmDialog(
     message: String,
     confirmText: String,
     isDestructive: Boolean = false,
+    isGuardian: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -876,7 +878,11 @@ private fun ConfirmDialog(
             TextButton(onClick = onConfirm) {
                 Text(
                     text = confirmText,
-                    color = if (isDestructive) AppColor.errorPrimary else AppColor.greenPrimary,
+                    color = when {
+                        isDestructive -> AppColor.errorPrimary
+                        isGuardian    -> AppColor.guardianPrimary
+                        else          -> AppColor.greenPrimary
+                    },
                     fontWeight = FontWeight.SemiBold
                 )
             }
