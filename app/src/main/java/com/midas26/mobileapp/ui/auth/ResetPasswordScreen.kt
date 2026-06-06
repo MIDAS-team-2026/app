@@ -36,7 +36,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
 
 @Composable
 fun ResetPasswordScreen(
@@ -158,7 +157,7 @@ fun ResetPasswordScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Green500)
+                CircularProgressIndicator(color = AppColor.greenSecondary)
             }
         } else {
             AppPrimaryButton(

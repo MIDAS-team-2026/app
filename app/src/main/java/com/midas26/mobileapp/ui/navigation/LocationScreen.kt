@@ -68,8 +68,6 @@ import com.google.android.gms.location.Priority
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -161,126 +159,6 @@ val sampleUsers = listOf(
     )
 )
 
-@SuppressLint("MissingPermission")
-@Composable
-fun rememberGpsState(
-    userId: Int = 5,
-    saveToServer: Boolean = true
-): GpsState {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var gpsState by remember { mutableStateOf(GpsState()) }
-
-    fun saveLocationToServer(latitude: Double, longitude: Double) {
-        if (!saveToServer) return
-
-        scope.launch {
-            LocationRepository.saveLocation(
-                userId = userId,
-                latitude = latitude,
-                longitude = longitude
-            )
-        }
-    }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { perms ->
-        val granted =
-            perms[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                    perms[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-
-        gpsState = gpsState.copy(
-            hasPermission = granted,
-            isLoading = !granted,
-            errorMsg = if (!granted) "위치 권한이 필요해요" else ""
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        val fineGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        val coarseGranted = ContextCompat.checkSelfPermission(
-            context,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (fineGranted || coarseGranted) {
-            gpsState = gpsState.copy(hasPermission = true)
-        } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
-        }
-    }
-
-    DisposableEffect(gpsState.hasPermission) {
-        if (!gpsState.hasPermission) {
-            onDispose { }
-        } else {
-            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
-
-            fusedClient.lastLocation.addOnSuccessListener { location ->
-                location?.let {
-                    gpsState = gpsState.copy(
-                        latitude = it.latitude,
-                        longitude = it.longitude,
-                        isLoading = false,
-                        errorMsg = ""
-                    )
-
-                    saveLocationToServer(
-                        latitude = it.latitude,
-                        longitude = it.longitude
-                    )
-                }
-            }
-
-            val request = LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY,
-                5 * 60 * 1000L
-            )
-                .setMinUpdateIntervalMillis(60 * 1000L)
-                .build()
-
-            val callback = object : LocationCallback() {
-                override fun onLocationResult(result: LocationResult) {
-                    val loc = result.lastLocation ?: return
-
-                    gpsState = gpsState.copy(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude,
-                        isLoading = false,
-                        errorMsg = ""
-                    )
-
-                    saveLocationToServer(
-                        latitude = loc.latitude,
-                        longitude = loc.longitude
-                    )
-                }
-            }
-
-            fusedClient.requestLocationUpdates(
-                request,
-                callback,
-                Looper.getMainLooper()
-            )
-
-            onDispose {
-                fusedClient.removeLocationUpdates(callback)
-            }
-        }
-    }
-
-    return gpsState
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -690,7 +568,7 @@ private fun StatusBar(
             Icon(
                 imageVector = Icons.Default.LocationOn,
                 contentDescription = null,
-                tint = if (isError) Color(0xFFD9534F) else Green500,
+                tint = if (isError) Color(0xFFD9534F) else AppColor.greenSecondary,
                 modifier = Modifier.size(16.dp)
             )
 
@@ -699,7 +577,7 @@ private fun StatusBar(
             Text(
                 text = text,
                 fontSize = 12.sp,
-                color = if (isError) Color(0xFFD9534F) else Green600
+                color = if (isError) Color(0xFFD9534F) else AppColor.accentDark
             )
         }
     }
@@ -720,7 +598,7 @@ private fun LoadingBar() {
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(14.dp),
-                color = Green500,
+                color = AppColor.greenSecondary,
                 strokeWidth = 2.dp
             )
 
@@ -864,7 +742,7 @@ fun LocationRouteScreen(
                     Text(
                         text = "📍 위치는 5분마다 자동으로 업데이트돼요",
                         fontSize = 13.sp,
-                        color = Green600,
+                        color = AppColor.accentDark,
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
                     )
@@ -932,7 +810,7 @@ private fun TimelineRow(
             Surface(
                 modifier = Modifier.size(18.dp),
                 shape = CircleShape,
-                color = if (item.isCurrent) Green500 else Color(0xFFB0CCA0)
+                color = if (item.isCurrent) AppColor.greenSecondary else Color(0xFFB0CCA0)
             ) {}
 
             if (!isLast) {
@@ -964,7 +842,7 @@ private fun TimelineRow(
                     text = item.label,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (item.isCurrent) Green500 else AppColor.textPrimary
+                    color = if (item.isCurrent) AppColor.greenSecondary else AppColor.textPrimary
                 )
             }
 

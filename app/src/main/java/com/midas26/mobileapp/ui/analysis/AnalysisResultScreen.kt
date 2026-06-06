@@ -67,13 +67,13 @@ import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
+import com.midas26.mobileapp.ui.theme.AppColor.textTertiary
+import com.midas26.mobileapp.ui.theme.AppColor.textSecondary
+import com.midas26.mobileapp.ui.theme.AppColor.greenPrimary
+import com.midas26.mobileapp.ui.theme.AppColor.greenSecondary
+import com.midas26.mobileapp.ui.theme.AppColor.accentDark
+import com.midas26.mobileapp.ui.theme.AppColor.guardianPrimary
+import com.midas26.mobileapp.ui.theme.AppColor.guardianDark
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.util.PrefsManager
@@ -248,7 +248,7 @@ private fun GuardianAnalysisUserSelectScreen(
                 Text(
                     text = "분석 결과를 확인할 사용자를 선택하세요",
                     fontSize = 20.sp,
-                    color = GuardianAccentDark,
+                    color = AppColor.guardianDark,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -325,8 +325,8 @@ private fun GuardianAnalysisDetailScreen(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            GuardianAccentDark,
-                            GuardianAccent
+                            AppColor.guardianDark,
+                            AppColor.guardianPrimary
                         )
                     )
                 )
@@ -407,7 +407,7 @@ private fun GuardianAnalysisDetailScreen(
                             Text(
                                 text = analysis.riskLevel,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = GuardianAccentDark,
+                                color = AppColor.guardianDark,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
@@ -596,8 +596,8 @@ private fun GuardianWeeklyLineChart(
                 path = areaPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        GuardianAccent.copy(alpha = 0.35f),
-                        GuardianAccent.copy(alpha = 0f)
+                        AppColor.guardianPrimary.copy(alpha = 0.35f),
+                        AppColor.guardianPrimary.copy(alpha = 0f)
                     )
                 )
             )
@@ -615,8 +615,8 @@ private fun GuardianWeeklyLineChart(
                 path = linePath,
                 brush = Brush.horizontalGradient(
                     colors = listOf(
-                        GuardianAccent,
-                        GuardianAccentDark
+                        AppColor.guardianPrimary,
+                        AppColor.guardianDark
                     ),
                     startX = 0f,
                     endX = w
@@ -632,7 +632,7 @@ private fun GuardianWeeklyLineChart(
                 )
 
                 drawCircle(
-                    color = GuardianAccentDark,
+                    color = AppColor.guardianDark,
                     radius = 11f,
                     center = Offset(xs[i], ys[i])
                 )
@@ -715,13 +715,15 @@ private fun UserAnalysisResultContent(
             val animSpec = tween<Color>(durationMillis = 400)
 
             val topColor by animateColorAsState(
-                targetValue = if (isToday) Green600 else Gray600,
+                targetValue = if (isGuardian) AppColor.guardianDark
+                              else if (isToday) AppColor.accentDark else AppColor.textSecondary,
                 animationSpec = animSpec,
                 label = "top_color"
             )
 
             val botColor by animateColorAsState(
-                targetValue = if (isToday) Green400 else Gray400,
+                targetValue = if (isGuardian) AppColor.guardianPrimary
+                              else if (isToday) AppColor.greenPrimary else AppColor.textTertiary,
                 animationSpec = animSpec,
                 label = "bottom_color"
             )
@@ -815,7 +817,7 @@ private fun UserAnalysisResultContent(
                                 Text(
                                     text = viewModel.displayRiskLevel,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (isToday) AppColor.accentDark else Gray600,
+                                    color = if (isToday) AppColor.accentDark else AppColor.textSecondary,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                                 )
@@ -1102,8 +1104,8 @@ private fun WeeklyLineChart(
                 path = areaPath,
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        Green400.copy(alpha = 0.35f),
-                        Green400.copy(alpha = 0f)
+                        AppColor.greenPrimary.copy(alpha = 0.35f),
+                        AppColor.greenPrimary.copy(alpha = 0f)
                     )
                 )
             )
@@ -1120,7 +1122,7 @@ private fun WeeklyLineChart(
             drawPath(
                 path = linePath,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Green400, Green600),
+                    colors = listOf(AppColor.greenPrimary, AppColor.accentDark),
                     startX = 0f,
                     endX = w
                 ),
@@ -1131,9 +1133,9 @@ private fun WeeklyLineChart(
                 val fraction = (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f)
 
                 val dotColor = if (hasData[i]) {
-                    if (fraction > 0.5f) Green500 else Green600
+                    if (fraction > 0.5f) AppColor.greenSecondary else AppColor.accentDark
                 } else {
-                    Gray400
+                    AppColor.textTertiary
                 }
 
                 val outerRadius = lerp(12f, 28f, fraction)
@@ -1163,7 +1165,7 @@ private fun WeeklyLineChart(
                 Text(
                     text = point.dayLabel,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (hasData[i]) AppColor.textTertiary else Gray400
+                    color = if (hasData[i]) AppColor.textTertiary else AppColor.textTertiary
                 )
             }
         }

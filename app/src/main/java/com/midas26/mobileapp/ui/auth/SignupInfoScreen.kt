@@ -43,11 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -75,7 +71,14 @@ fun SignupInfoScreen(
 
     LaunchedEffect(authState) {
         when (authState) {
+            is AuthState.PhoneChecked -> {
+                // 환자: 중복 없음 확인 + 인증코드 발송 완료 → 인증 화면으로
+                viewModel.resetState()
+                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
+                onVerify(phone.trim())
+            }
             is AuthState.Success -> {
+                // 보호자: 회원가입 완료 → 인증 화면(완료 화면)으로
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
                 prefs.saveToken(user.token.orEmpty())
@@ -87,7 +90,7 @@ fun SignupInfoScreen(
             }
             is AuthState.Error -> {
                 val msg = (authState as AuthState.Error).message
-                if (msg.contains("전화번호")) phoneError = msg
+                if (msg.contains("전화번호") || msg.contains("가입")) phoneError = msg
                 else serverError = msg
             }
             else -> {}
@@ -155,13 +158,13 @@ fun SignupInfoScreen(
                     .weight(1f)
                     .height(6.dp)
                     .padding(end = 6.dp)
-                    .background(Green400, RoundedCornerShape(3.dp))
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
-                    .background(Green400, RoundedCornerShape(3.dp))
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -233,7 +236,7 @@ fun SignupInfoScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Green500)
+                CircularProgressIndicator(color = AppColor.greenSecondary)
             }
         } else {
             AppPrimaryButton(
@@ -244,9 +247,8 @@ fun SignupInfoScreen(
                             // 보호자: 즉시 회원가입 API 호출
                             viewModel.signup(phone.trim(), password, name.trim(), role)
                         } else {
-                            // 환자: 데이터 보관 후 전화 인증으로 이동 (API는 SignupCompleteScreen에서 호출)
-                            viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
-                            onVerify(phone.trim())
+                            // 환자: 중복 체크 + 인증코드 발송 → PhoneChecked 상태 되면 인증 화면으로
+                            viewModel.checkPhoneAndSendCode(phone.trim())
                         }
                     }
                 }

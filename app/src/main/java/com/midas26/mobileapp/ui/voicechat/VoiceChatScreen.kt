@@ -32,7 +32,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.LocalTapToReplay
 import com.midas26.mobileapp.ui.theme.LocalTtsManager
 import kotlinx.coroutines.delay
@@ -169,7 +169,7 @@ fun VoiceChatScreen(
                 ) {
                     if (state is VoiceChatState.Processing) {
                         Waveform(
-                            barColor     = Green400,
+                            barColor     = AppColor.greenPrimary,
                             barCount     = 13,
                             maxBarHeight = 40.dp,
                             barWidth     = 12.dp,

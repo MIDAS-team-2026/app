@@ -1,6 +1,9 @@
 package com.midas26.mobileapp.ui.settings
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.NumberPicker
 import android.widget.Toast
@@ -60,21 +63,15 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.location.LocationForegroundService
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
-import com.midas26.mobileapp.ui.theme.Red400
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
@@ -109,6 +106,7 @@ fun SettingsScreen(
         }
     }
 
+    var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
     var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
@@ -133,6 +131,18 @@ fun SettingsScreen(
         )
     }
 
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            prefs.setLocationSharingEnabled(true)
+            startLocationService(context)
+        } else {
+            locationSharingEnabled = false
+            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -154,6 +164,7 @@ fun SettingsScreen(
             title = "로그아웃",
             message = "정말 로그아웃 하시겠어요?",
             confirmText = "로그아웃",
+            isGuardian = isGuardian,
             onConfirm = {
                 PrefsManager.from(context).clearToken()
                 onLogout()
@@ -182,6 +193,45 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             SettingsSection(title = "앱 설정") {
+                if (!isGuardian) {
+                    SettingsToggleRow(
+                        label = "보호자에게 위치 정보 제공",
+                        description = "보호자가 내 위치를 확인할 수 있어요",
+                        checked = locationSharingEnabled,
+                        onCheckedChange = { enabled ->
+                            locationSharingEnabled = enabled
+
+                            if (enabled) {
+                                val bgGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+                                        ContextCompat.checkSelfPermission(
+                                            context,
+                                            Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                        ) == PackageManager.PERMISSION_GRANTED
+
+                                if (bgGranted) {
+                                    prefs.setLocationSharingEnabled(true)
+                                    startLocationService(context)
+                                } else {
+                                    backgroundLocationLauncher.launch(
+                                        Manifest.permission.ACCESS_BACKGROUND_LOCATION
+                                    )
+                                }
+                            } else {
+                                prefs.setLocationSharingEnabled(false)
+                                context.stopService(
+                                    Intent(context, LocationForegroundService::class.java)
+                                )
+                            }
+                        }
+                    )
+
+                    HorizontalDivider(
+                        color = AppColor.divider,
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+
                 SettingsToggleRow(
                     label = "점검 알림",
                     description = "매일 점검 시간에 알림을 받아요",
@@ -256,7 +306,7 @@ fun SettingsScreen(
             SettingsSection(title = "계정 관리") {
                 SettingsRow(
                     label = "로그아웃",
-                    labelColor = Gray800,
+                    labelColor = AppColor.textPrimary,
                     onClick = { showLogoutDialog = true }
                 )
 
@@ -268,7 +318,7 @@ fun SettingsScreen(
 
                 SettingsRow(
                     label = "회원탈퇴",
-                    labelColor = Red400,
+                    labelColor = AppColor.errorPrimary,
                     onClick = onDeleteAccount
                 )
             }
@@ -367,7 +417,7 @@ private fun WheelTimePickerDialog(
             ) {
                 Text(
                     text = "확인",
-                    color = Green400,
+                    color = AppColor.greenPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -449,9 +499,9 @@ private fun CollapsingSettingsHeader(
             .background(
                 brush = Brush.verticalGradient(
                     colors = if (isGuardian) {
-                        listOf(GuardianAccentDark, GuardianAccent)
+                        listOf(AppColor.guardianDark, AppColor.guardianPrimary)
                     } else {
-                        listOf(Green600, Green400)
+                        listOf(AppColor.accentDark, AppColor.greenPrimary)
                     }
                 )
             )
@@ -549,7 +599,7 @@ private fun CollapsingSettingsHeader(
                                 text = role,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = Green600,
+                                color = AppColor.accentDark,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
                             )
                         }
@@ -669,7 +719,7 @@ private fun SettingsSection(
 private fun SettingsRow(
     label: String,
     trailingText: String? = null,
-    labelColor: Color = Gray800,
+    labelColor: Color = AppColor.textPrimary,
     showArrow: Boolean = trailingText == null,
     onClick: (() -> Unit)?
 ) {
@@ -742,7 +792,7 @@ private fun SettingsToggleRow(
                 checkedThumbColor = BrandWhite,
                 checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
-                uncheckedTrackColor = Gray200
+                uncheckedTrackColor = AppColor.divider
             )
         )
     }
@@ -776,7 +826,7 @@ private fun NotifTimeRow(
         ) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = Green50
+                color = AppColor.greenSurface
             ) {
                 Text(
                     text = formatNotifTime(hour, minute),
@@ -803,6 +853,7 @@ private fun ConfirmDialog(
     message: String,
     confirmText: String,
     isDestructive: Boolean = false,
+    isGuardian: Boolean = false,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -827,7 +878,11 @@ private fun ConfirmDialog(
             TextButton(onClick = onConfirm) {
                 Text(
                     text = confirmText,
-                    color = if (isDestructive) Red400 else Green400,
+                    color = when {
+                        isDestructive -> AppColor.errorPrimary
+                        isGuardian    -> AppColor.guardianPrimary
+                        else          -> AppColor.greenPrimary
+                    },
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -852,4 +907,9 @@ private fun formatNotifTime(hour: Int, minute: Int): String {
     }
 
     return "$period $h:${minute.toString().padStart(2, '0')}"
+}
+
+private fun startLocationService(context: Context) {
+    val intent = Intent(context, LocationForegroundService::class.java)
+    context.startForegroundService(intent)
 }

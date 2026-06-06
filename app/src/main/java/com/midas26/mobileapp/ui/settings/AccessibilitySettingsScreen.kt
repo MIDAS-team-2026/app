@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -42,17 +44,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Brush
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.Gray100
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.util.PrefsManager
 
@@ -78,10 +73,12 @@ fun AccessibilitySettingsScreen(
     var hapticFeedback by remember { mutableStateOf(prefs.getHapticFeedback()) }
     var largeTouchArea by remember { mutableStateOf(prefs.getLargeTouchArea()) }
 
+    val isHighContrast = LocalHighContrast.current
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Gray100)
+            .background(BrandWhite)
     ) {
         AccessibilityTopBar(onBack = onBack)
 
@@ -120,7 +117,7 @@ fun AccessibilitySettingsScreen(
                 )
 /*
                 HorizontalDivider(
-                    color = Gray200,
+                    color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
@@ -208,29 +205,37 @@ fun AccessibilitySettingsScreen(
 
 @Composable
 private fun AccessibilityTopBar(onBack: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = BrandWhite,
-        shadowElevation = 0.dp
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(AppColor.accentDark, AppColor.greenPrimary)
+                )
+            )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 48.dp, bottom = 12.dp, start = 4.dp, end = 16.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp)
+                .height(56.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
+            IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "뒤로가기",
-                    tint = AppColor.textPrimary
+                    tint = BrandWhite,
+                    modifier = Modifier.size(28.dp)
                 )
             }
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
                 text = "접근성 설정",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
+                color = BrandWhite,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -269,7 +274,7 @@ private fun FontSizeSelector(
     val labels = listOf("작게", "보통", "크게", "매우\n크게")
     val previewSizes = listOf(14.sp, 17.sp, 21.sp, 26.sp)
     val highContrast = LocalHighContrast.current
-    val unselectedBorder = if (highContrast) Gray600 else Gray200
+    val unselectedBorder = if (highContrast) AppColor.textSecondary else AppColor.divider
 
     Column(modifier = Modifier.padding(16.dp)) {
         Row(
@@ -283,11 +288,11 @@ private fun FontSizeSelector(
                         .weight(1f)
                         .border(
                             width = if (isSelected) 2.dp else 1.dp,
-                            color = if (isSelected) Green400 else unselectedBorder,
+                            color = if (isSelected) AppColor.greenPrimary else unselectedBorder,
                             shape = RoundedCornerShape(12.dp)
                         )
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Green50 else BrandWhite)
+                        .background(if (isSelected) AppColor.greenSurface else BrandWhite)
                         .clickable { onSelect(index) }
                         .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
@@ -297,13 +302,13 @@ private fun FontSizeSelector(
                             text = "가",
                             fontSize = previewSizes[index],
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) Green600 else Gray600
+                            color = if (isSelected) AppColor.accentDark else AppColor.textSecondary
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = label,
                             fontSize = previewSizes[index],
-                            color = if (isSelected) Green600 else Gray400,
+                            color = if (isSelected) AppColor.accentDark else AppColor.textTertiary,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                         )
                     }
@@ -318,7 +323,7 @@ private fun FontSizeSelector(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Gray100)
+                .background(AppColor.surfaceElevated)
                 .padding(horizontal = 14.dp, vertical = 12.dp)
         )
     }
@@ -361,7 +366,7 @@ private fun TtsSpeedSelector(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSelected) Green400 else Gray100)
+                        .background(if (isSelected) AppColor.greenPrimary else AppColor.surfaceElevated)
                         .clickable { onSpeedChange(option.value) }
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center
@@ -371,7 +376,7 @@ private fun TtsSpeedSelector(
                             text = option.label,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) BrandWhite else Gray600
+                            color = if (isSelected) BrandWhite else AppColor.textSecondary
                         )
                         Text(
                             text = option.desc,
@@ -387,7 +392,7 @@ private fun TtsSpeedSelector(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
-                .background(Gray100)
+                .background(AppColor.surfaceElevated)
                 .clickable { onPreview() }
                 .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center
@@ -436,7 +441,7 @@ private fun AccessibilityToggleRow(
                 checkedThumbColor = BrandWhite,
                 checkedTrackColor = AppColor.accent,
                 uncheckedThumbColor = BrandWhite,
-                uncheckedTrackColor = Gray200
+                uncheckedTrackColor = AppColor.divider
             )
         )
     }

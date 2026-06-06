@@ -1,4 +1,5 @@
 package com.midas26.mobileapp.ui.home
+import com.midas26.mobileapp.ui.theme.AppColor
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -112,8 +113,8 @@ private fun GuardianHomeHeader(
             .background(
                 brush = Brush.verticalGradient(
                     colors = listOf(
-                        GuardianAccentDark,
-                        GuardianAccent
+                        AppColor.guardianDark,
+                        AppColor.guardianPrimary
                     )
                 )
             )
@@ -219,7 +220,7 @@ private fun LinkedUserDropdown(
                 Icon(
                     imageVector = Icons.Default.Person,
                     contentDescription = null,
-                    tint = GuardianAccentDark,
+                    tint = AppColor.guardianDark,
                     modifier = Modifier.size(24.dp)
                 )
 
@@ -317,8 +318,8 @@ private fun GuardianMenuList(
             title = stringResource(R.string.menu_settings),
             desc = "앱 환경과 알림을 설정해요",
             onClick = { onMenuClick(GuardianMenu.Settings) },
-            accent = Gray100,
-            iconTint = Gray400,
+            accent = AppColor.surfaceElevated,
+            iconTint = AppColor.textTertiary,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -335,7 +336,7 @@ private fun SectionHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.labelLarge,
-            color = Gray400,
+            color = AppColor.textTertiary,
             fontWeight = FontWeight.SemiBold
         )
 
@@ -345,7 +346,7 @@ private fun SectionHeader(
             modifier = Modifier
                 .weight(1f)
                 .height(1.dp)
-                .background(Gray200)
+                .background(AppColor.divider)
         )
     }
 }
@@ -357,9 +358,11 @@ private fun GuardianMenuCard(
     desc: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accent: Color = GuardianAccentLight,
-    iconTint: Color = GuardianAccentDark
+    accent: Color = Color.Unspecified,
+    iconTint: Color = Color.Unspecified
 ) {
+    val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
+    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
     Surface(
         modifier = modifier
             .height(104.dp)
@@ -398,13 +401,13 @@ private fun GuardianMenuCard(
             Surface(
                 modifier = Modifier.size(72.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = accent
+                color = resolvedAccent
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = iconTint,
+                        tint = resolvedIconTint,
                         modifier = Modifier.size(40.dp)
                     )
                 }
