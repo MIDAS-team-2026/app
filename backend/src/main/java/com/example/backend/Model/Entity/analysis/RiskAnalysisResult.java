@@ -37,10 +37,11 @@ public class RiskAnalysisResult {
     @Column(name = "risk_level", length = 20)
     private String riskLevel;
 
-    @Column(name = "analyzed_at", nullable = false, updatable = false)
+    @Column(name = "analyzed_at", nullable = false)
     private LocalDateTime analyzedAt;
 
     @PrePersist
+    @PreUpdate
     protected void onAnalyze() {
         this.analyzedAt = LocalDateTime.now();
     }
