@@ -1,25 +1,41 @@
 from pathlib import Path
 import json
+import os
 
 
-BASELINE_PROFILE_PATH = Path(r"D:\MIDAS_EXTRACTED\elderly_baseline_profile.json")
+DEFAULT_THRESHOLDS = {
+    "short_answer_word_count": 5,
+    "slow_speech_rate_word": 1.117,
+    "slow_speech_rate_char": 3.103,
+    "long_record_time": 6.4,
+    "low_content_word_count": 6,
+}
+
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_PROFILE_PATH = AI_ANALYSIS_ROOT / "config" / "elderly_baseline_profile.default.json"
 
 
-def load_baseline_profile(profile_path=BASELINE_PROFILE_PATH):
+def get_baseline_profile_path():
+    env_path = os.getenv("MIDAS_ELDERLY_BASELINE_PROFILE")
+    if env_path:
+        return Path(env_path)
+    return DEFAULT_PROFILE_PATH
+
+
+def load_baseline_profile(profile_path=None):
+    if profile_path is None:
+        profile_path = get_baseline_profile_path()
+
+    profile_path = Path(profile_path)
 
     if not profile_path.exists():
-
         print(
             f"[WARN] baseline profile 없음. 기본 threshold 사용: {profile_path}"
         )
 
         return {
-            "thresholds": {
-                "short_answer_word_count": 5,
-                "slow_speech_rate_word": 1.5,
-                "long_record_time": 8.0,
-                "low_content_word_count": 6
-            }
+            "thresholds": DEFAULT_THRESHOLDS,
+            "source": "default_fallback",
         }
 
     with open(profile_path, "r", encoding="utf-8") as f:
@@ -80,7 +96,7 @@ def analyze_baseline_from_features(
     word_count,
     speech_rate_word,
     record_time_float,
-    profile_path=BASELINE_PROFILE_PATH
+    profile_path=None
 ):
     """
     baseline profile을 불러온 뒤,

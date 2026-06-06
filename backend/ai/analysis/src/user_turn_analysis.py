@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import pickle
 import tempfile
 from urllib.parse import urlparse
@@ -26,7 +27,8 @@ from speech_abnormality_scoring import (
 # 실제 reference profile 파일은 GitHub에 올리지 않고 로컬에만 둔다.
 # build_reference_model.py 또는 build_reference_features.py 실행 후 생성되는 파일을 기준으로 사용한다.
 
-MODEL_DIR = Path(r"D:\MIDAS_EXTRACTED\model")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+MODEL_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "model"))
 
 REFERENCE_MEAN_PATH = MODEL_DIR / "reference_mean.pkl"
 REFERENCE_STD_PATH = MODEL_DIR / "reference_std.pkl"

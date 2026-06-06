@@ -68,6 +68,7 @@ def send_recall_result(
 def send_risk_result(
     session_id: int,
     speech_risk_score: float,
+    text_score: float,
     recall_score: float,
     final_risk_score: float,
     risk_level: str,
@@ -76,7 +77,7 @@ def send_risk_result(
     body = {
         "sessionId": session_id,
         "speechScore": speech_risk_score,
-        "textScore": 0.0,
+        "textScore": text_score,
         "recallScore": recall_score,
         "finalRiskScore": final_risk_score,
         "riskLevel": risk_level,
@@ -145,6 +146,7 @@ def analyze_session_recall(
         return
 
     final_recall_scores = []
+    text_scores = []
 
     for question_id, initial_record, recall_record in pairs:
         question = questions.get(question_id, {})
@@ -180,8 +182,10 @@ def analyze_session_recall(
         recall_response.raise_for_status()
 
         final_recall_scores.append(recall_scores["finalRecallScore"])
+        text_scores.append(recall_scores.get("textScore", recall_scores["similarityScore"]))
 
     recall_score = round(sum(final_recall_scores) / len(final_recall_scores), 2)
+    text_score = round(sum(text_scores) / len(text_scores), 2)
 
     risk_scores = calculate_final_risk_score(
         speech_risk_score=speech_risk_score,
@@ -191,6 +195,7 @@ def analyze_session_recall(
     risk_response = send_risk_result(
         session_id=session_id,
         speech_risk_score=speech_risk_score,
+        text_score=text_score,
         recall_score=recall_score,
         final_risk_score=risk_scores["finalRiskScore"],
         risk_level=risk_scores["riskLevel"],

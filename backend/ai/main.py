@@ -284,11 +284,27 @@ def run_full_dummy_mode():
     )
 
     # 5. 최종 위험도 계산
+    # RiskAnalysisDTO 기준:
+    # - speechScore: 세션 음성 위험 점수
+    # - textScore: 회상 모델의 순수 텍스트 의미 유사도 점수
+    # - recallScore: 키워드/질문유형 가중치까지 반영한 최종 회상 점수
+    speech_score = speech_summary.get("speechRiskScore", 0.0)
+    text_score = recall_scores.get("textScore", recall_scores["similarityScore"])
+    recall_score = recall_scores["finalRecallScore"]
+
     risk_scores = calculate_final_risk_score(
-        speech_score=session_speech_health_score,
-        text_score=session_speech_health_score,
-        recall_score=recall_scores["finalRecallScore"],
+        speech_risk_score=speech_score,
+        recall_score=recall_score,
     )
+
+    risk_analysis_dto = {
+        "sessionId": session_id,
+        "speechScore": speech_score,
+        "textScore": text_score,
+        "recallScore": recall_score,
+        "finalRiskScore": risk_scores["finalRiskScore"],
+        "riskLevel": risk_scores["riskLevel"],
+    }
 
     return {
         "success": True,
@@ -309,6 +325,7 @@ def run_full_dummy_mode():
         },
 
         "finalRiskResult": risk_scores,
+        "riskAnalysisDto": risk_analysis_dto,
     }
 
 
@@ -331,8 +348,7 @@ def main():
             response = run_record_mode(args)
 
         elif args.mode == "full_dummy":
-            # dummy mode도 필요하다면 내부에 send_analysis_to_spring 적용 가능
-            pass
+            response = run_full_dummy_mode()
 
         print(json.dumps(response, ensure_ascii=False, indent=2))
 
