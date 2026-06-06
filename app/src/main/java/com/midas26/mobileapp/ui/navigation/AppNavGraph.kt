@@ -1,5 +1,6 @@
 package com.midas26.mobileapp.ui.navigation
 
+import com.midas26.mobileapp.ui.theme.AppColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
@@ -56,8 +57,6 @@ import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
@@ -159,7 +158,7 @@ fun AppNavHost(
                             }
                         }
                     },
-                    accent = if (isGuardian) GuardianAccentDark else Green500
+                    accent = if (isGuardian) AppColor.guardianDark else AppColor.greenSecondary
                 )
             }
         }

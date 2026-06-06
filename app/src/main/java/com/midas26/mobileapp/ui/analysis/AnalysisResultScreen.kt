@@ -54,12 +54,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -70,8 +64,6 @@ import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
-import com.midas26.mobileapp.ui.theme.GuardianAccent
-import com.midas26.mobileapp.ui.theme.GuardianAccentDark
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import androidx.compose.ui.platform.LocalContext
 import com.midas26.mobileapp.util.PrefsManager
@@ -110,7 +102,7 @@ fun AnalysisResultScreen(
         label = "analysis_crossfade"
     ) { loading ->
         if (loading) {
-            AnalysisLoadingScreen(isLoading = viewModel.isLoading, onFinished = {})
+            AnalysisLoadingScreen(isLoading = viewModel.isLoading, onFinished = {}, isGuardian = isGuardian)
             return@Crossfade
         }
 
@@ -131,13 +123,13 @@ fun AnalysisResultScreen(
         val isToday = viewModel.isViewingToday && viewModel.hasTodayData
         val animSpec = tween<androidx.compose.ui.graphics.Color>(durationMillis = 400)
         val topColor by animateColorAsState(
-            if (isGuardian) GuardianAccentDark
-            else if (isToday) Green600 else Gray600,
+            if (isGuardian) AppColor.guardianDark
+            else if (isToday) AppColor.accentDark else AppColor.textSecondary,
             animSpec
         )
         val botColor by animateColorAsState(
-            if (isGuardian) GuardianAccent
-            else if (isToday) Green400 else Gray400,
+            if (isGuardian) AppColor.guardianPrimary
+            else if (isToday) AppColor.greenPrimary else AppColor.textTertiary,
             animSpec
         )
         // 헤더 전체 — 배경 그라디언트
@@ -218,7 +210,7 @@ fun AnalysisResultScreen(
                             Text(
                                 text = viewModel.displayRiskLevel,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isToday) AppColor.accentDark else Gray600,
+                                color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                             )
@@ -317,6 +309,7 @@ fun AnalysisResultScreen(
                     WeeklyLineChart(
                         points = viewModel.graphPoints,
                         highlightIndex = viewModel.graphHighlightIndex,
+                        isGuardian = isGuardian,
                         onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
                         onDragStart = { viewModel.onGraphDragStart() },
                         onDragMove = { date -> viewModel.onGraphDragMove(date) },
@@ -341,6 +334,7 @@ fun AnalysisResultScreen(
 private fun WeeklyLineChart(
     points: List<DailyScore>,
     highlightIndex: Int = points.lastIndex,
+    isGuardian: Boolean = false,
     onPointTapped: (String?) -> Unit = {},
     onDragStart: () -> Unit = {},
     onDragMove: (String?) -> Unit = {},
@@ -387,6 +381,12 @@ private fun WeeklyLineChart(
         return computedXs.indices.minByOrNull { abs(computedXs[it] - offsetX) }
             ?.takeIf { hasData[it] } ?: -1
     }
+
+    // Canvas DrawScope는 @Composable 컨텍스트가 아니므로 미리 캡처
+    val colorGreenPrimary   = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+    val colorAccentDark     = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
+    val colorGreenSecondary = if (isGuardian) AppColor.guardianPrimary else AppColor.greenSecondary
+    val colorTextTertiary   = AppColor.textTertiary
 
     Column(modifier = modifier) {
         Canvas(
@@ -486,7 +486,7 @@ private fun WeeklyLineChart(
             drawPath(
                 path = areaPath,
                 brush = Brush.verticalGradient(
-                    colors = listOf(Green400.copy(alpha = 0.35f), Green400.copy(alpha = 0f))
+                    colors = listOf(colorGreenPrimary.copy(alpha = 0.35f), colorGreenPrimary.copy(alpha = 0f))
                 )
             )
 
@@ -501,7 +501,7 @@ private fun WeeklyLineChart(
             drawPath(
                 path = linePath,
                 brush = Brush.horizontalGradient(
-                    colors = listOf(Green400, Green600),
+                    colors = listOf(colorGreenPrimary, colorAccentDark),
                     startX = 0f,
                     endX = w
                 ),
@@ -513,9 +513,9 @@ private fun WeeklyLineChart(
                 // 0~1 사이 강조 비율 (1 = 완전 강조, 0 = 일반)
                 val fraction = (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f)
                 val dotColor = if (hasData[i]) {
-                    if (fraction > 0.5f) Green500 else Green600
+                    if (fraction > 0.5f) colorGreenSecondary else colorAccentDark
                 } else {
-                    Gray400
+                    colorTextTertiary
                 }
                 val outerRadius = lerp(12f, 28f, fraction)
                 val innerRadius = lerp(8f,  19f, fraction)
@@ -535,7 +535,7 @@ private fun WeeklyLineChart(
                 Text(
                     text = p.dayLabel,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (hasData[i]) AppColor.textTertiary else Gray400
+                    color = if (hasData[i]) AppColor.textTertiary else AppColor.textTertiary
                 )
             }
         }

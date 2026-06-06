@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -37,15 +38,15 @@ private val AppLightColorScheme = lightColorScheme(
 )
 
 private val AppHighContrastColorScheme = lightColorScheme(
-    primary = Green600,
+    primary = ContrastGreen400,
     onPrimary = BrandWhite,
-    primaryContainer = Green100,
-    onPrimaryContainer = Green900,
-    secondary = Green500,
+    primaryContainer = ContrastGreen100,
+    onPrimaryContainer = ContrastGreen900,
+    secondary = ContrastGreen500,
     onSecondary = BrandWhite,
-    secondaryContainer = Green100,
-    onSecondaryContainer = Green900,
-    tertiary = Green600,
+    secondaryContainer = ContrastGreen100,
+    onSecondaryContainer = ContrastGreen900,
+    tertiary = ContrastGreen400,
     background = BrandWhite,
     onBackground = BrandBlack,
     surface = BrandWhite,
@@ -110,10 +111,22 @@ fun AppTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography.scaled(LocalFontSizeScale.current),
-        content = content
-    )
+    // 모드에 따라 적절한 팔레트를 제공한다.
+    // 다크 모드 추가 시 DarkPalette를 여기서 연결하면 전체 반영됨.
+    val appPalette = when {
+        highContrast -> ContrastPalette
+        darkTheme    -> DarkPalette
+        else         -> NormalPalette
+    }
+
+    CompositionLocalProvider(
+        LocalAppPalette provides appPalette
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography.scaled(LocalFontSizeScale.current),
+            content = content
+        )
+    }
 }
 

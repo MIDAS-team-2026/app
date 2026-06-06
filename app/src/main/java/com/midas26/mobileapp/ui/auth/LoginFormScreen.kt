@@ -50,7 +50,6 @@ import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Green500
 import com.midas26.mobileapp.util.PrefsManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -223,7 +222,7 @@ fun LoginFormScreen(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = Green500)
+                        CircularProgressIndicator(color = AppColor.greenSecondary)
                     }
                 } else {
                     AppPrimaryButton(

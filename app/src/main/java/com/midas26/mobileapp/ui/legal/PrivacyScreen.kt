@@ -42,16 +42,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green100
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
 
@@ -93,14 +83,14 @@ fun PrivacyScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(170.dp)
-                .background(Green50)
+                .background(AppColor.greenSurface)
         ) {
             Box(
                 modifier = Modifier
                     .size(170.dp)
                     .offset(x = 270.dp, y = 30.dp)
                     .clip(CircleShape)
-                    .background(Green100.copy(alpha = 0.7f))
+                    .background(AppColor.greenSurfaceVariant.copy(alpha = 0.7f))
             )
         }
 
@@ -115,7 +105,7 @@ fun PrivacyScreen(
             Surface(
                 modifier = Modifier.size(88.dp),
                 shape = RoundedCornerShape(22.dp),
-                color = Green400,
+                color = AppColor.greenPrimary,
                 shadowElevation = 4.dp
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -178,26 +168,26 @@ private fun AgreeAllCard(
             .fillMaxWidth()
             .clickable(onClick = onToggle),
         shape = RoundedCornerShape(18.dp),
-        color = Green50,
-        border = BorderStroke(2.5.dp, Green400)
+        color = AppColor.greenSurface,
+        border = BorderStroke(2.5.dp, AppColor.greenPrimary)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = checked, accent = Green400)
+            Checkbox(checked = checked, accent = AppColor.greenPrimary)
             Spacer(modifier = Modifier.size(12.dp))
             Column {
                 Text(
                     text = stringResource(R.string.privacy_agree_all),
                     style = MaterialTheme.typography.titleMedium,
-                    color = Green600,
+                    color = AppColor.accentDark,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = stringResource(R.string.privacy_agree_all_desc),
                     style = MaterialTheme.typography.bodySmall,
-                    color = Green500
+                    color = AppColor.greenSecondary
                 )
             }
         }
@@ -222,7 +212,7 @@ private fun PrivacyRow(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = checked, accent = if (item.isRequired) Green400 else Green400)
+            Checkbox(checked = checked, accent = if (item.isRequired) AppColor.greenPrimary else AppColor.greenPrimary)
             Spacer(modifier = Modifier.size(14.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -241,7 +231,7 @@ private fun PrivacyRow(
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (item.isRequired) Green50 else Green50)
+                    .background(if (item.isRequired) AppColor.greenSurface else AppColor.greenSurface)
                     .padding(horizontal = 10.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -251,7 +241,7 @@ private fun PrivacyRow(
                         else R.string.permission_optional
                     ),
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (item.isRequired) Green400 else Green400,
+                    color = if (item.isRequired) AppColor.greenPrimary else AppColor.greenPrimary,
                     fontWeight = FontWeight.SemiBold
                 )
             }

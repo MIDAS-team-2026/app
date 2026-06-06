@@ -26,10 +26,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray600
-import com.midas26.mobileapp.ui.theme.Green400
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
 
 /**
@@ -58,7 +55,7 @@ fun AppOutlinedTextField(
     var passwordVisible by remember { mutableStateOf(false) }
     val isError = errorText != null
     val highContrast = LocalHighContrast.current
-    val unfocusedBorder = if (highContrast) Gray600 else Gray200
+    val unfocusedBorder = AppColor.divider
 
     OutlinedTextField(
         value = value,
@@ -81,7 +78,7 @@ fun AppOutlinedTextField(
                 Icon(
                     imageVector = it,
                     contentDescription = null,
-                    tint = Gray400,
+                    tint = AppColor.textTertiary,
                     modifier = Modifier.size(28.dp)
                 )
             }
@@ -93,7 +90,7 @@ fun AppOutlinedTextField(
                         imageVector = if (passwordVisible) Icons.Filled.VisibilityOff
                                       else Icons.Filled.Visibility,
                         contentDescription = null,
-                        tint = Gray400,
+                        tint = AppColor.textTertiary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -109,13 +106,13 @@ fun AppOutlinedTextField(
         isError = isError,
         supportingText = supportingTextSlot(errorText = errorText, helperText = helperText),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = Green400,
+            focusedBorderColor = AppColor.greenPrimary,
             unfocusedBorderColor = unfocusedBorder,
-            focusedLabelColor = Green400,
-            unfocusedLabelColor = Gray400,
-            cursorColor = Green400,
-            focusedLeadingIconColor = Green400,
-            unfocusedLeadingIconColor = Gray400
+            focusedLabelColor = AppColor.greenPrimary,
+            unfocusedLabelColor = AppColor.textTertiary,
+            cursorColor = AppColor.greenPrimary,
+            focusedLeadingIconColor = AppColor.greenPrimary,
+            unfocusedLeadingIconColor = AppColor.textTertiary
         ),
         textStyle = MaterialTheme.typography.bodyLarge
     )
