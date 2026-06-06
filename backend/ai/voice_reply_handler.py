@@ -166,6 +166,11 @@ def _save_recall_analysis(user_id: int, records: list[dict]) -> None:
 def process_voice_reply(record_id: int, session_id: int, user_id: int) -> None:
     try:
         records = _fetch_session_records(session_id)
+        current_record = next(
+            (r for r in records if r.get("recordId") == record_id),
+            {},
+        )
+        is_recall_answer = (current_record.get("answerRole") or "").upper() == "RECALL"
         transcripts = [
             r["transcriptText"]
             for r in records
@@ -186,7 +191,7 @@ def process_voice_reply(record_id: int, session_id: int, user_id: int) -> None:
         logger.info("AI reply 저장 완료 recordId=%s", record_id)
 
         memory_point = result.get("memoryPoint", "")
-        if reply_text and memory_point:
+        if reply_text and memory_point and not is_recall_answer:
             saved = save_recall_question_to_spring(
                 user_id=user_id,
                 memory_point=memory_point,
@@ -197,6 +202,8 @@ def process_voice_reply(record_id: int, session_id: int, user_id: int) -> None:
             logger.info("회상 질문 저장 완료 userId=%s questionId=%s", user_id, question_id)
             if question_id:
                 _link_recall_question(record_id, question_id)
+        elif is_recall_answer:
+            logger.info("RECALL 답변 recordId=%s는 새 INITIAL 질문 연결을 건너뜁니다.", record_id)
 
         records = _fetch_session_records(session_id)
         _save_recall_analysis(user_id, records)
