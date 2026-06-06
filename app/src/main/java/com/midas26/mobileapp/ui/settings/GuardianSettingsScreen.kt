@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
@@ -69,9 +70,10 @@ import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun GuardianSettingsScreen(
-    userName: String = "홍길동",
-    weeklyScore: Int = 75,
-    streakDays: Int = 4,
+    userName: String = "",
+    patients: List<LinkedUserInfo> = emptyList(),
+    noResultCount: Int = 0,
+    unviewedCount: Int = 0,
     onBack: () -> Unit = {},
     onLogout: () -> Unit = {},
     onDeleteAccount: () -> Unit = {},
@@ -81,12 +83,11 @@ fun GuardianSettingsScreen(
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val protectors by profileViewModel.protectors.collectAsState()
 
-    val guardianLabel = when {
-        protectors.isEmpty() -> "없음"
-        protectors.size == 1 -> protectors[0].name ?: "보호자"
-        else -> "${protectors[0].name ?: "보호자"} +${protectors.size - 1}"
+    val patientsLabel = when {
+        patients.isEmpty() -> "없음"
+        patients.size == 1 -> patients[0].name ?: "사용자"
+        else -> "${patients[0].name ?: "사용자"} +${patients.size - 1}명"
     }
 
     var analysisAlertEnabled by remember { mutableStateOf(false) }
@@ -271,9 +272,9 @@ fun GuardianSettingsScreen(
             p = p,
             userName = userName,
             role = "보호자",
-            weeklyScore = weeklyScore,
-            streakDays = streakDays,
-            guardianLabel = guardianLabel,
+            patientsLabel = patientsLabel,
+            noResultCount = noResultCount,
+            unviewedCount = unviewedCount,
             onBack = onBack,
             onProfileEdit = onProfileEdit
         )
@@ -404,9 +405,9 @@ private fun CollapsingGuardianSettingsHeader(
     p: Float,
     userName: String,
     role: String,
-    weeklyScore: Int,
-    streakDays: Int,
-    guardianLabel: String,
+    patientsLabel: String,
+    noResultCount: Int,
+    unviewedCount: Int,
     onBack: () -> Unit,
     onProfileEdit: () -> Unit
 ) {
@@ -548,8 +549,8 @@ private fun CollapsingGuardianSettingsHeader(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     StatItem(
-                        value = if (weeklyScore > 0) "${weeklyScore}점" else "-",
-                        label = "오늘 점수",
+                        value = patientsLabel,
+                        label = "연결 사용자",
                         modifier = Modifier.weight(1f)
                     )
 
@@ -561,8 +562,8 @@ private fun CollapsingGuardianSettingsHeader(
                     )
 
                     StatItem(
-                        value = "🔥 ${streakDays}일",
-                        label = "연속 점검",
+                        value = "${noResultCount}건",
+                        label = "미도착 결과",
                         modifier = Modifier.weight(1f)
                     )
 
@@ -574,8 +575,8 @@ private fun CollapsingGuardianSettingsHeader(
                     )
 
                     StatItem(
-                        value = guardianLabel,
-                        label = "연결 보호자",
+                        value = "${unviewedCount}건",
+                        label = "미확인 결과",
                         modifier = Modifier.weight(1f)
                     )
                 }

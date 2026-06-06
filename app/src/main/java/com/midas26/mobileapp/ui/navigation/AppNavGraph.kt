@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -527,10 +528,25 @@ fun AppNavHost(
 
                 composable(Routes.Settings) {
                     if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
+
+                        LaunchedEffect(patients) {
+                            if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                        }
+
+                        val noResultCount = patientStatuses.values.count {
+                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NO_RESULT
+                        }
+                        val unviewedCount = patientStatuses.values.count {
+                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NEW_RESULT
+                        }
+
                         GuardianSettingsScreen(
                             userName = PrefsManager.from(context).getUserName(),
-                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
-                            streakDays = analysisViewModel.streakDays,
+                            patients = patients,
+                            noResultCount = noResultCount,
+                            unviewedCount = unviewedCount,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.Settings)
                             },
