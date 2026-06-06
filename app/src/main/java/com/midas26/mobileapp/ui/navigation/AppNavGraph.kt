@@ -712,8 +712,11 @@ fun AppNavHost(
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                         },
-                        onUserClick = { _ ->
-                            // TODO: 선택한 환자의 분석 결과 화면으로 이동
+                        onUserClick = { patient ->
+                            patient.userId?.let { patientId ->
+                                analysisViewModel.loadForPatient(patientId)
+                                navController.navigate(Routes.AnalysisResult)
+                            }
                         }
                     )
                 }
@@ -721,6 +724,7 @@ fun AppNavHost(
                 composable(Routes.AnalysisResult) {
                     AnalysisResultScreen(
                         onBack = {
+                            analysisViewModel.resetToSelf()
                             navController.popBackStackIfCurrent(Routes.AnalysisResult)
                         },
                         viewModel = analysisViewModel
