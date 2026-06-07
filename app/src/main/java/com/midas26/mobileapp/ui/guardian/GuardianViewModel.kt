@@ -82,7 +82,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     if (data == null) {
                         PatientAnalysisStatus.NO_RESULT
                     } else {
-                        score = data.finalRiskScore?.let { (it * 100).toInt() }
+                        score = data.finalRiskScore?.let { it.toInt() }
                         if (prefs.hasViewedPatientResultToday(id)) PatientAnalysisStatus.VIEWED_TODAY
                         else PatientAnalysisStatus.NEW_RESULT
                     }
