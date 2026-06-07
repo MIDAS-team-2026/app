@@ -30,17 +30,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +70,11 @@ import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
+
+private val AnalysisAlertToggleColor = Color(0xFFC85E48)
+private val NotificationTimeBackgroundColor = Color(0xFFFFD5CD)
+private val NotificationTimeTextColor = Color(0xFFC85E48)
+private val DialogButtonPressedColor = Color(0xFFFFD5CD)
 
 @Composable
 fun GuardianSettingsScreen(
@@ -281,6 +289,7 @@ fun GuardianSettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WheelTimePickerDialog(
     title: String,
@@ -291,6 +300,10 @@ private fun WheelTimePickerDialog(
 ) {
     var selectedHour by remember { mutableIntStateOf(initialHour) }
     var selectedMinute by remember { mutableIntStateOf(initialMinute) }
+
+    val dialogButtonRipple = RippleConfiguration(
+        color = DialogButtonPressedColor
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -342,20 +355,29 @@ private fun WheelTimePickerDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
-                Text(
-                    text = "확인",
-                    color = AppColor.guardianDark,
-                    fontWeight = FontWeight.Bold
-                )
+            CompositionLocalProvider(
+                LocalRippleConfiguration provides dialogButtonRipple
+            ) {
+                TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
+                    Text(
+                        text = "확인",
+                        color = AnalysisAlertToggleColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "취소",
-                    color = AppColor.textTertiary
-                )
+            CompositionLocalProvider(
+                LocalRippleConfiguration provides dialogButtonRipple
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(
+                        text = "취소",
+                        color = AppColor.textTertiary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         containerColor = BrandWhite,
@@ -713,7 +735,7 @@ private fun SettingsToggleRow(
             onCheckedChange = onCheckedChange,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = BrandWhite,
-                checkedTrackColor = AppColor.accent,
+                checkedTrackColor = AnalysisAlertToggleColor,
                 uncheckedThumbColor = BrandWhite,
                 uncheckedTrackColor = AppColor.divider
             )
@@ -749,13 +771,13 @@ private fun NotifTimeRow(
         ) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = AppColor.greenSurface
+                color = NotificationTimeBackgroundColor
             ) {
                 Text(
                     text = formatNotifTime(hour, minute),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = AppColor.accentDark,
+                    color = NotificationTimeTextColor,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
                 )
             }
