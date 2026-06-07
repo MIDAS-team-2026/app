@@ -1,6 +1,8 @@
 package com.midas26.mobileapp.ui.navigation
 
+import android.content.Context
 import android.content.Intent
+import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -33,6 +35,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -205,9 +209,16 @@ private fun UserLocationCard(
         LocationRepository.getCurrentLocation(userId)
             .onSuccess { loc ->
                 if (loc != null) {
-                    val address = getDisplayAddressFromApiObject(loc)
+                    val apiAddress = getDisplayAddressFromApiObject(loc)
+                    val convertedAddress = apiAddress.ifBlank {
+                        getAddressFromLatLng(
+                            context = context,
+                            latitude = loc.latitude,
+                            longitude = loc.longitude
+                        )
+                    }
 
-                    locationText = address.ifBlank {
+                    locationText = convertedAddress.ifBlank {
                         "%.4f, %.4f".format(loc.latitude, loc.longitude)
                     }
 
@@ -339,7 +350,7 @@ fun LocationDetailScreen(
     LaunchedEffect(Unit) {
         Configuration.getInstance().load(
             context,
-            context.getSharedPreferences("osmdroid", android.content.Context.MODE_PRIVATE)
+            context.getSharedPreferences("osmdroid", Context.MODE_PRIVATE)
         )
         Configuration.getInstance().userAgentValue = context.packageName
     }
@@ -455,6 +466,8 @@ fun LocationRouteScreen(
     user: LinkedUser,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
+
     val today = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
     }
@@ -494,6 +507,16 @@ fun LocationRouteScreen(
                     getDisplayAddressFromApiObject(it)
                 }
 
+                val convertedAddresses = routePoints.mapIndexed { index, point ->
+                    apiAddresses.getOrNull(index).orEmpty().ifBlank {
+                        getAddressFromLatLng(
+                            context = context,
+                            latitude = point.latitude,
+                            longitude = point.longitude
+                        )
+                    }
+                }
+
                 val apiPlaceNames = points.map {
                     getPlaceNameFromApiObject(it)
                 }
@@ -502,7 +525,7 @@ fun LocationRouteScreen(
                     buildTimelineItems(
                         points = routePoints,
                         recordedTimes = recordedTimes,
-                        apiAddresses = apiAddresses,
+                        apiAddresses = convertedAddresses,
                         apiPlaceNames = apiPlaceNames
                     )
                 } else {
@@ -670,8 +693,8 @@ private fun HighlightLocationMap(
             mapView.overlays.add(
                 Polygon().apply {
                     points = Polygon.pointsAsCircle(currentPoint, 85.0)
-                    fillColor = 0x334CAF50
-                    strokeColor = 0xFF2FA84F.toInt()
+                    fillColor = 0x33C85E48
+                    strokeColor = 0xFFC85E48.toInt()
                     strokeWidth = 4f
                 }
             )
@@ -688,8 +711,8 @@ private fun HighlightLocationMap(
             mapView.overlays.add(
                 Polygon().apply {
                     points = Polygon.pointsAsCircle(currentPoint, 6.0)
-                    fillColor = 0xFF2FA84F.toInt()
-                    strokeColor = 0xFF1E7F3A.toInt()
+                    fillColor = 0xFFC85E48.toInt()
+                    strokeColor = 0xFFB5503D.toInt()
                     strokeWidth = 2f
                 }
             )
@@ -706,7 +729,7 @@ private fun SummaryRow(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFF0F7EC),
+        color = Color(0xFFE4725B),
         border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
     ) {
         Row(
@@ -738,7 +761,7 @@ private fun TimelineRow(
             Surface(
                 modifier = Modifier.size(18.dp),
                 shape = CircleShape,
-                color = if (item.isCurrent) AppColor.greenSecondary else Color(0xFFB0CCA0)
+                color = if (item.isCurrent) Color(0xFFC85E48) else Color(0xFFE4725B)
             ) {}
 
             if (!isLast) {
@@ -746,7 +769,7 @@ private fun TimelineRow(
                     modifier = Modifier
                         .width(2.dp)
                         .height(52.dp)
-                        .background(Color(0xFFB0CCA0))
+                        .background(if (item.isCurrent) Color(0xFFC85E48) else Color(0xFFE4725B))
                 )
             }
         }
@@ -770,7 +793,7 @@ private fun TimelineRow(
                     text = item.label,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (item.isCurrent) AppColor.greenSecondary else AppColor.textPrimary
+                    color = if (item.isCurrent) Color(0xFFC85E48) else AppColor.textPrimary
                 )
             }
 
@@ -1145,6 +1168,44 @@ private fun buildTimelineItems(
     }
 
     return items
+}
+
+private suspend fun getAddressFromLatLng(
+    context: Context,
+    latitude: Double,
+    longitude: Double
+): String {
+    return withContext(Dispatchers.IO) {
+        try {
+            val geocoder = Geocoder(context, Locale.KOREA)
+            val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+
+            if (!addresses.isNullOrEmpty()) {
+                val address = addresses[0]
+
+                val adminArea = address.adminArea.orEmpty()
+                val locality = address.locality.orEmpty()
+                val subLocality = address.subLocality.orEmpty()
+                val thoroughfare = address.thoroughfare.orEmpty()
+                val featureName = address.featureName.orEmpty()
+
+                listOf(
+                    adminArea,
+                    locality,
+                    subLocality,
+                    thoroughfare,
+                    featureName
+                )
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .joinToString(" ")
+            } else {
+                ""
+            }
+        } catch (e: Exception) {
+            ""
+        }
+    }
 }
 
 private fun getDisplayAddressFromApiObject(obj: Any): String {
