@@ -1,21 +1,12 @@
 package com.midas26.mobileapp.ui.navigation
 
 import android.content.Intent
+import android.location.Location
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,25 +16,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,15 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.google.android.gms.location.LocationCallback
-import com.google.android.gms.location.LocationRequest
-import com.google.android.gms.location.LocationResult
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
-import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
@@ -74,6 +42,7 @@ import org.osmdroid.views.overlay.Polyline
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 data class LinkedUser(
     val id: String,
@@ -106,20 +75,18 @@ data class GpsState(
     val errorMsg: String = ""
 )
 
-/** LinkedUserInfo(API) → LocationScreen에서 사용하는 LinkedUser 변환. 위치 데이터는 이후 API에서 채워짐. */
 fun com.midas26.mobileapp.network.LinkedUserInfo.toLinkedUser() = LinkedUser(
-    id       = userId?.toString() ?: "",
-    name     = name ?: "이름 없음",
+    id = userId?.toString() ?: "",
+    name = name ?: "이름 없음",
     relation = "",
-    address  = "",
-    phone    = phone ?: "",
-    lastUpdatedMin  = 0,
+    address = "",
+    phone = phone ?: "",
+    lastUpdatedMin = 0,
     totalDistanceKm = 0.0,
-    visitedPlaces   = 0,
-    travelHours     = 0,
-    timeline        = emptyList()
+    visitedPlaces = 0,
+    travelHours = 0,
+    timeline = emptyList()
 )
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -137,11 +104,7 @@ fun LocationListScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📍", fontSize = 24.sp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "GPS 위치 확인",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
+                        Text("GPS 위치 확인", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                     }
                 },
                 navigationIcon = {
@@ -151,12 +114,7 @@ fun LocationListScreen(
                 },
                 actions = {
                     IconButton(onClick = { refreshKey++ }) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "새로고침",
-                            tint = Color.Black,
-                            modifier = Modifier.size(26.dp)
-                        )
+                        Icon(Icons.Default.Refresh, contentDescription = "새로고침", tint = Color.Black)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -197,7 +155,6 @@ fun LocationListScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFB8860B)
                             )
-                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = "위치는 5분마다 갱신됩니다",
                                 fontSize = 13.sp,
@@ -232,28 +189,36 @@ private fun UserLocationCard(
 ) {
     val context = LocalContext.current
     val userId = user.id.toIntOrNull() ?: 0
-    val relation = if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" } else "사용자"
+    val relation =
+        if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" }
+        else "사용자"
 
-    var coordText by remember { mutableStateOf("위치 불러오는 중...") }
+    var locationText by remember { mutableStateOf("위치 불러오는 중...") }
     var timeAgoText by remember { mutableStateOf("") }
 
     LaunchedEffect(userId, refreshKey) {
         if (userId <= 0) {
-            coordText = "위치 정보 없음"
+            locationText = "위치 정보 없음"
             return@LaunchedEffect
         }
+
         LocationRepository.getCurrentLocation(userId)
             .onSuccess { loc ->
                 if (loc != null) {
-                    coordText = "%.4f, %.4f".format(loc.latitude, loc.longitude)
+                    val address = getDisplayAddressFromApiObject(loc)
+
+                    locationText = address.ifBlank {
+                        "%.4f, %.4f".format(loc.latitude, loc.longitude)
+                    }
+
                     timeAgoText = formatTimeAgo(loc.recordedAt)
                 } else {
-                    coordText = "위치 정보 없음"
+                    locationText = "위치 정보 없음"
                     timeAgoText = ""
                 }
             }
             .onFailure {
-                coordText = "위치 조회 실패"
+                locationText = "위치 조회 실패"
                 timeAgoText = ""
             }
     }
@@ -264,11 +229,7 @@ private fun UserLocationCard(
             .padding(horizontal = 12.dp, vertical = 6.dp)
             .height(110.dp)
             .clickable { onClick() }
-            .border(
-                width = 1.5.dp,
-                color = Color(0xFFB3D4F5),
-                shape = RoundedCornerShape(16.dp)
-            ),
+            .border(1.5.dp, Color(0xFFB3D4F5), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         color = Color.White
     ) {
@@ -278,11 +239,7 @@ private fun UserLocationCard(
                 .padding(horizontal = 28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                // 이름 + 관계 pill
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = user.name,
@@ -297,7 +254,6 @@ private fun UserLocationCard(
                     ) {
                         Text(
                             text = relation,
-                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold,
                             color = AppColor.guardianDark,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
@@ -311,7 +267,7 @@ private fun UserLocationCard(
                     Text("📍", fontSize = 15.sp)
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = coordText,
+                        text = locationText,
                         fontSize = 14.sp,
                         color = AppColor.textTertiary,
                         maxLines = 1,
@@ -321,19 +277,13 @@ private fun UserLocationCard(
 
                 if (timeAgoText.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(3.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🕐", fontSize = 14.sp)
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "$timeAgoText 업데이트",
-                            fontSize = 14.sp,
-                            color = AppColor.textTertiary
-                        )
-                    }
+                    Text(
+                        text = "🕐 $timeAgoText 업데이트",
+                        fontSize = 14.sp,
+                        color = AppColor.textTertiary
+                    )
                 }
             }
-
-            Spacer(modifier = Modifier.width(10.dp))
 
             Icon(
                 imageVector = Icons.Default.ChevronRight,
@@ -342,30 +292,6 @@ private fun UserLocationCard(
                 modifier = Modifier.size(26.dp)
             )
         }
-    }
-}
-
-private fun formatTimeAgo(recordedAt: String): String {
-    return try {
-        val formats = listOf(
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", Locale.KOREA),
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.KOREA)
-        )
-        var parsed: Date? = null
-        for (fmt in formats) {
-            parsed = runCatching { fmt.parse(recordedAt) }.getOrNull()
-            if (parsed != null) break
-        }
-        val past = parsed ?: return "시간 알 수 없음"
-        val diffSec = (System.currentTimeMillis() - past.time) / 1000
-        when {
-            diffSec < 60   -> "${diffSec}초 전"
-            diffSec < 3600 -> "${diffSec / 60}분 전"
-            diffSec < 86400 -> "${diffSec / 3600}시간 전"
-            else -> "${diffSec / 86400}일 전"
-        }
-    } catch (e: Exception) {
-        "시간 알 수 없음"
     }
 }
 
@@ -423,11 +349,7 @@ fun LocationDetailScreen(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(
-                            text = "위치 정보",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
-                        )
+                        Text("위치 정보", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
@@ -442,9 +364,7 @@ fun LocationDetailScreen(
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "새로고침",
-                                tint = if (isLoadingLocation) Color.Black.copy(alpha = 0.3f)
-                                       else Color.Black,
-                                modifier = Modifier.size(26.dp)
+                                tint = if (isLoadingLocation) Color.Black.copy(alpha = 0.3f) else Color.Black
                             )
                         }
                     },
@@ -459,17 +379,9 @@ fun LocationDetailScreen(
                     .padding(innerPadding)
             ) {
                 when {
-                    isLoadingLocation -> {
-                        LoadingBar()
-                    }
-
-                    locationError.isNotBlank() -> {
-                        StatusBar(locationError, isError = true)
-                    }
-
-                    else -> {
-                        StatusBar("$locationTimeAgo 위치 정보를 가져왔습니다.", isError = false)
-                    }
+                    isLoadingLocation -> LoadingBar()
+                    locationError.isNotBlank() -> StatusBar(locationError, isError = true)
+                    else -> StatusBar("$locationTimeAgo 위치 정보를 가져왔습니다.", isError = false)
                 }
 
                 HighlightLocationMap(
@@ -532,9 +444,182 @@ fun LocationDetailScreen(
         }
 
         if (showCallDialog) {
-            CallDialog(
-                user = user,
-                onDismiss = { showCallDialog = false }
+            CallDialog(user = user, onDismiss = { showCallDialog = false })
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun LocationRouteScreen(
+    user: LinkedUser,
+    onBack: () -> Unit
+) {
+    val today = remember {
+        SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
+    }
+
+    val userId = user.id.toIntOrNull() ?: 0
+
+    var routePoints by remember { mutableStateOf(user.routePoints) }
+    var timelineItems by remember { mutableStateOf(user.timeline) }
+
+    var totalDistanceKm by remember { mutableStateOf(user.totalDistanceKm) }
+    var visitedPlaces by remember { mutableStateOf(user.visitedPlaces) }
+    var travelTimeText by remember { mutableStateOf("0분") }
+
+    var isLoadingRoute by remember { mutableStateOf(true) }
+    var routeError by remember { mutableStateOf("") }
+
+    LaunchedEffect(userId) {
+        isLoadingRoute = true
+        routeError = ""
+
+        LocationRepository.getRoute(userId, today)
+            .onSuccess { points ->
+                routePoints = points.map {
+                    GeoPoint(it.latitude, it.longitude)
+                }
+
+                totalDistanceKm = calculateTotalDistanceKm(routePoints)
+                visitedPlaces = estimateVisitedPlaces(routePoints)
+
+                val recordedTimes = points.mapNotNull {
+                    runCatching { it.recordedAt }.getOrNull()
+                }
+
+                travelTimeText = calculateTravelTimeText(recordedTimes)
+
+                val apiAddresses = points.map {
+                    getDisplayAddressFromApiObject(it)
+                }
+
+                val apiPlaceNames = points.map {
+                    getPlaceNameFromApiObject(it)
+                }
+
+                timelineItems = if (routePoints.isNotEmpty()) {
+                    buildTimelineItems(
+                        points = routePoints,
+                        recordedTimes = recordedTimes,
+                        apiAddresses = apiAddresses,
+                        apiPlaceNames = apiPlaceNames
+                    )
+                } else {
+                    emptyList()
+                }
+
+                if (routePoints.isEmpty()) {
+                    routeError = "오늘 저장된 이동 경로가 없어요"
+                }
+            }
+            .onFailure {
+                routeError = "이동 경로 조회에 실패했어요"
+            }
+
+        isLoadingRoute = false
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text("위치 정보", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "뒤로")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+            )
+        },
+        containerColor = Color.White
+    ) { innerPadding ->
+        val scrollState = rememberScrollState()
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                when {
+                    isLoadingRoute -> LoadingBar()
+                    routeError.isNotBlank() -> StatusBar(routeError, isError = true)
+                    else -> StatusBar("서버에서 이동 경로 조회 완료", isError = false)
+                }
+
+                if (routePoints.isNotEmpty()) {
+                    HighlightLocationMap(
+                        latitude = routePoints.last().latitude,
+                        longitude = routePoints.last().longitude,
+                        routePoints = routePoints,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
+                }
+
+                SummaryRow("총 경로", String.format(Locale.KOREA, "%.1f km", totalDistanceKm))
+                SummaryRow("방문 장소", "$visitedPlaces 곳")
+                SummaryRow("이동 시간", travelTimeText)
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "타임 라인",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppColor.textPrimary
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (timelineItems.isEmpty()) {
+                    Text(
+                        text = "표시할 타임라인이 없어요",
+                        fontSize = 14.sp,
+                        color = AppColor.textTertiary
+                    )
+                } else {
+                    Column {
+                        timelineItems.forEachIndexed { idx, item ->
+                            TimelineRow(
+                                item = item,
+                                isLast = idx == timelineItems.size - 1
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF0F7EC)
+                ) {
+                    Text(
+                        text = "📍 위치는 5분마다 자동으로 업데이트돼요",
+                        fontSize = 13.sp,
+                        color = AppColor.accentDark,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
+            VerticalScrollbar(
+                state = scrollState,
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }
@@ -569,10 +654,15 @@ private fun HighlightLocationMap(
                 mapView.overlays.add(
                     Polyline().apply {
                         setPoints(routePoints)
-                        outlinePaint.color = 0xFF1689D9.toInt()
-                        outlinePaint.strokeWidth = 13f
-                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
-                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
+
+                        outlinePaint.color = 0xFFC85E48.toInt()
+                        outlinePaint.strokeWidth = 10f
+
+                        outlinePaint.strokeCap =
+                            android.graphics.Paint.Cap.ROUND
+
+                        outlinePaint.strokeJoin =
+                            android.graphics.Paint.Join.ROUND
                     }
                 )
             }
@@ -612,220 +702,7 @@ private fun HighlightLocationMap(
 }
 
 @Composable
-private fun StatusBar(
-    text: String,
-    isError: Boolean
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = if (isError) Color(0xFFFCEEED) else Color(0xFFF0F7EC)
-    ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.LocationOn,
-                contentDescription = null,
-                tint = if (isError) Color(0xFFD9534F) else AppColor.greenSecondary,
-                modifier = Modifier.size(16.dp)
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Text(
-                text = text,
-                fontSize = 12.sp,
-                color = if (isError) Color(0xFFD9534F) else AppColor.accentDark
-            )
-        }
-    }
-}
-
-@Composable
-private fun LoadingBar() {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = Color(0xFFF0F7EC)
-    ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(14.dp),
-                color = AppColor.greenSecondary,
-                strokeWidth = 2.dp
-            )
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            Text(
-                text = "GPS 위치 불러오는 중...",
-                fontSize = 12.sp,
-                color = AppColor.textTertiary
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun LocationRouteScreen(
-    user: LinkedUser,
-    onBack: () -> Unit
-) {
-    val today = remember {
-        SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
-    }
-
-    val userId = user.id.toIntOrNull() ?: 0
-
-    var routePoints by remember { mutableStateOf(user.routePoints) }
-    var isLoadingRoute by remember { mutableStateOf(true) }
-    var routeError by remember { mutableStateOf("") }
-
-    LaunchedEffect(userId) {
-        isLoadingRoute = true
-        routeError = ""
-
-        LocationRepository.getRoute(userId, today)
-            .onSuccess { points ->
-                routePoints = points.map {
-                    GeoPoint(it.latitude, it.longitude)
-                }
-
-                if (routePoints.isEmpty()) {
-                    routeError = "오늘 저장된 이동 경로가 없어요"
-                }
-            }
-            .onFailure {
-                routeError = "이동 경로 조회에 실패했어요"
-            }
-
-        isLoadingRoute = false
-    }
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "위치 정보",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "뒤로")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
-        containerColor = Color.White
-    ) { innerPadding ->
-        val scrollState = rememberScrollState()
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                when {
-                    isLoadingRoute -> {
-                        LoadingBar()
-                    }
-
-                    routeError.isNotBlank() -> {
-                        StatusBar(routeError, isError = true)
-                    }
-
-                    else -> {
-                        StatusBar("서버에서 이동 경로 조회 완료", isError = false)
-                    }
-                }
-
-                if (routePoints.isNotEmpty()) {
-                    HighlightLocationMap(
-                        latitude = routePoints.last().latitude,
-                        longitude = routePoints.last().longitude,
-                        routePoints = routePoints,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(260.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                    )
-                }
-
-                SummaryRow("총 경로", "${user.totalDistanceKm} km")
-                SummaryRow("방문 장소", "${user.visitedPlaces} 곳")
-                SummaryRow("이동 시간", "${user.travelHours} 시간")
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "타임 라인",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Column {
-                    user.timeline.forEachIndexed { idx, item ->
-                        TimelineRow(
-                            item = item,
-                            isLast = idx == user.timeline.size - 1
-                        )
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF0F7EC)
-                ) {
-                    Text(
-                        text = "📍 위치는 5분마다 자동으로 업데이트돼요",
-                        fontSize = 13.sp,
-                        color = AppColor.accentDark,
-                        modifier = Modifier.padding(12.dp),
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-
-            VerticalScrollbar(
-                state = scrollState,
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
-        }
-    }
-}
-
-@Composable
-private fun SummaryRow(
-    label: String,
-    value: String
-) {
+private fun SummaryRow(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
@@ -839,19 +716,8 @@ private fun SummaryRow(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = label,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
-            )
-
-            Text(
-                text = value,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = AppColor.textPrimary
-            )
+            Text(label, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
+            Text(value, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
         }
     }
 }
@@ -920,6 +786,70 @@ private fun TimelineRow(
 }
 
 @Composable
+private fun StatusBar(
+    text: String,
+    isError: Boolean
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = if (isError) Color(0xFFFCEEED) else Color(0xFFF0F7EC)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.LocationOn,
+                contentDescription = null,
+                tint = if (isError) Color(0xFFD9534F) else AppColor.greenSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = text,
+                fontSize = 12.sp,
+                color = if (isError) Color(0xFFD9534F) else AppColor.accentDark
+            )
+        }
+    }
+}
+
+@Composable
+private fun LoadingBar() {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = Color(0xFFF0F7EC)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(14.dp),
+                color = AppColor.greenSecondary,
+                strokeWidth = 2.dp
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            Text(
+                text = "GPS 위치 불러오는 중...",
+                fontSize = 12.sp,
+                color = AppColor.textTertiary
+            )
+        }
+    }
+}
+
+@Composable
 fun CallDialog(
     user: LinkedUser,
     onDismiss: () -> Unit
@@ -947,10 +877,7 @@ fun CallDialog(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter),
-            shape = RoundedCornerShape(
-                topStart = 24.dp,
-                topEnd = 24.dp
-            ),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             color = Color.White
         ) {
             Column(
@@ -963,10 +890,7 @@ fun CallDialog(
                     modifier = Modifier
                         .width(40.dp)
                         .height(4.dp)
-                        .background(
-                            Color(0xFFDDDDDD),
-                            RoundedCornerShape(2.dp)
-                        )
+                        .background(Color(0xFFDDDDDD), RoundedCornerShape(2.dp))
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -1060,6 +984,221 @@ fun CallDialog(
             }
         }
     }
+}
+
+private fun formatTimeAgo(recordedAt: String): String {
+    return try {
+        val past = parseServerDate(recordedAt) ?: return "시간 알 수 없음"
+        val diffSec = (System.currentTimeMillis() - past.time) / 1000
+
+        when {
+            diffSec < 60 -> "${diffSec}초 전"
+            diffSec < 3600 -> "${diffSec / 60}분 전"
+            diffSec < 86400 -> "${diffSec / 3600}시간 전"
+            else -> "${diffSec / 86400}일 전"
+        }
+    } catch (e: Exception) {
+        "시간 알 수 없음"
+    }
+}
+
+private fun parseServerDate(value: String): Date? {
+    val formats = listOf(
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSSSS", Locale.KOREA),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.KOREA),
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.KOREA),
+        SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
+    )
+
+    for (format in formats) {
+        val parsed = runCatching { format.parse(value) }.getOrNull()
+        if (parsed != null) return parsed
+    }
+
+    return null
+}
+
+private fun formatRouteTime(value: String?): String {
+    if (value.isNullOrBlank()) return "--:--"
+
+    val date = parseServerDate(value) ?: return "--:--"
+    return SimpleDateFormat("HH:mm", Locale.KOREA).format(date)
+}
+
+private fun calculateTotalDistanceKm(points: List<GeoPoint>): Double {
+    if (points.size < 2) return 0.0
+
+    var totalMeter = 0f
+
+    for (i in 0 until points.size - 1) {
+        val result = FloatArray(1)
+
+        Location.distanceBetween(
+            points[i].latitude,
+            points[i].longitude,
+            points[i + 1].latitude,
+            points[i + 1].longitude,
+            result
+        )
+
+        totalMeter += result[0]
+    }
+
+    return ((totalMeter / 1000.0) * 10).roundToInt() / 10.0
+}
+
+private fun calculateTravelTimeText(recordedTimes: List<String>): String {
+    if (recordedTimes.size < 2) return "0분"
+
+    val start = parseServerDate(recordedTimes.first()) ?: return "0분"
+    val end = parseServerDate(recordedTimes.last()) ?: return "0분"
+
+    val diffMillis = end.time - start.time
+    if (diffMillis <= 0) return "0분"
+
+    val totalMinutes = diffMillis / (1000 * 60)
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+
+    return when {
+        totalMinutes <= 0 -> "0분"
+        hours <= 0 -> "${minutes}분"
+        minutes <= 0 -> "${hours}시간"
+        else -> "${hours}시간 ${minutes}분"
+    }
+}
+
+private fun estimateVisitedPlaces(points: List<GeoPoint>): Int {
+    if (points.isEmpty()) return 0
+    if (points.size < 3) return 1
+
+    var count = 1
+    var lastPlace = points.first()
+
+    points.drop(1).forEach { point ->
+        val result = FloatArray(1)
+
+        Location.distanceBetween(
+            lastPlace.latitude,
+            lastPlace.longitude,
+            point.latitude,
+            point.longitude,
+            result
+        )
+
+        if (result[0] >= 300f) {
+            count++
+            lastPlace = point
+        }
+    }
+
+    return count
+}
+
+private fun buildTimelineItems(
+    points: List<GeoPoint>,
+    recordedTimes: List<String>,
+    apiAddresses: List<String>,
+    apiPlaceNames: List<String>
+): List<TimelineItem> {
+    if (points.isEmpty()) return emptyList()
+
+    val firstIndex = 0
+    val lastIndex = points.lastIndex
+    val middleIndex = if (points.size >= 3) points.size / 2 else -1
+
+    val items = mutableListOf<TimelineItem>()
+
+    items.add(
+        TimelineItem(
+            time = formatRouteTime(recordedTimes.getOrNull(lastIndex)),
+            label = apiPlaceNames.getOrNull(lastIndex).orEmpty().ifBlank { "현 위치" },
+            address = apiAddresses.getOrNull(lastIndex).orEmpty().ifBlank {
+                "%.4f, %.4f".format(points[lastIndex].latitude, points[lastIndex].longitude)
+            },
+            isCurrent = true
+        )
+    )
+
+    if (middleIndex != -1) {
+        items.add(
+            TimelineItem(
+                time = formatRouteTime(recordedTimes.getOrNull(middleIndex)),
+                label = apiPlaceNames.getOrNull(middleIndex).orEmpty().ifBlank { "이동 중" },
+                address = apiAddresses.getOrNull(middleIndex).orEmpty().ifBlank {
+                    "%.4f, %.4f".format(points[middleIndex].latitude, points[middleIndex].longitude)
+                }
+            )
+        )
+    }
+
+    if (points.size >= 2) {
+        items.add(
+            TimelineItem(
+                time = formatRouteTime(recordedTimes.getOrNull(firstIndex)),
+                label = apiPlaceNames.getOrNull(firstIndex).orEmpty().ifBlank { "출발 위치" },
+                address = apiAddresses.getOrNull(firstIndex).orEmpty().ifBlank {
+                    "%.4f, %.4f".format(points[firstIndex].latitude, points[firstIndex].longitude)
+                }
+            )
+        )
+    }
+
+    return items
+}
+
+private fun getDisplayAddressFromApiObject(obj: Any): String {
+    val roadAddress = getStringProperty(
+        obj = obj,
+        names = listOf("roadAddress", "road_address")
+    )
+
+    val address = getStringProperty(
+        obj = obj,
+        names = listOf("address", "addressName", "address_name")
+    )
+
+    return roadAddress.ifBlank { address }
+}
+
+private fun getPlaceNameFromApiObject(obj: Any): String {
+    return getStringProperty(
+        obj = obj,
+        names = listOf("placeName", "place_name", "zoneName", "zone_name")
+    )
+}
+
+private fun getStringProperty(
+    obj: Any,
+    names: List<String>
+): String {
+    for (name in names) {
+        val getterName = "get" + name.replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase(Locale.ROOT) else it.toString()
+        }
+
+        val methodValue = runCatching {
+            obj.javaClass.methods
+                .firstOrNull { method ->
+                    method.name == getterName && method.parameterTypes.isEmpty()
+                }
+                ?.invoke(obj)
+                ?.toString()
+                ?.trim()
+        }.getOrNull()
+
+        if (!methodValue.isNullOrBlank()) return methodValue
+
+        val fieldValue = runCatching {
+            val field = obj.javaClass.getDeclaredField(name)
+            field.isAccessible = true
+            field.get(obj)?.toString()?.trim()
+        }.getOrNull()
+
+        if (!fieldValue.isNullOrBlank()) return fieldValue
+    }
+
+    return ""
 }
 
 sealed class LocationScreenState {
