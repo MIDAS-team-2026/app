@@ -283,8 +283,8 @@ public class AiAnalysisService {
     }
 
     private String resolveRiskLevel(float score) {
-        if (score < 0.30f) return "LOW";
-        if (score < 0.60f) return "MEDIUM";
+        if (score < 30f) return "LOW";
+        if (score < 60f) return "MEDIUM";
         return "HIGH";
     }
 

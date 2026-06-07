@@ -23,7 +23,7 @@ public class FirebaseConfig {
 
             if (FirebaseApp.getApps().isEmpty()) {
                 FirebaseApp.initializeApp(options);
-                System.out.println("FirebaseApp 초기화 완료");
+                // System.out.println("FirebaseApp 초기화 완료");
             }
         } catch (Exception e) {
             e.printStackTrace();

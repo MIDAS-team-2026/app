@@ -13,21 +13,18 @@ from text_features import extract_text_features, calculate_basic_speech_features
 # 라벨: [라벨]1.AI챗봇
 # 원천: [원천]1.AI챗봇_1, [원천]1.AI챗봇_2
 
-ELDERLY_LABEL_ROOT = Path(
-    r"D:\자유대화 음성(노인남녀)\Training\[라벨]1.AI챗봇"
-)
-
-
-ELDERLY_AUDIO_ROOTS = [
-    Path(r"D:\자유대화 음성(노인남녀)\Training\[원천]1.AI챗봇_1"),
-    Path(r"D:\자유대화 음성(노인남녀)\Training\[원천]1.AI챗봇_2"),
-]
-
-
-OUTPUT_DIR = Path(r"D:\MIDAS_EXTRACTED")
+AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
+OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 OUTPUT_CSV = OUTPUT_DIR / "elderly_chatbot_features.csv"
+
+ELDERLY_LABEL_ROOT = Path(os.getenv("MIDAS_ELDERLY_LABEL_ROOT", ""))
+ELDERLY_AUDIO_ROOTS = [
+    Path(path)
+    for path in os.getenv("MIDAS_ELDERLY_AUDIO_ROOTS", "").split(os.pathsep)
+    if path
+]
 
 
 def collect_wav_files(audio_roots):
