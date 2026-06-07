@@ -12,4 +12,5 @@ public class RecallQuestionResponseDTO {
     private String questionType;
     private String category;
     private List<String> keywords;
+    private String expectedAnswer;
 }
