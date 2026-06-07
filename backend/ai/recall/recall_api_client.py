@@ -1,14 +1,45 @@
 import argparse
-from typing import Dict, List
+import re
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import requests
 
 from recall.recall_score_calculator import (
     calculate_final_recall_score,
-    calculate_final_risk_score,
 )
 
 BASE_URL = "http://localhost:8080"
+
+
+PLACEHOLDER_EXPECTED_ANSWERS = {
+    "USER_NAME",
+    "BIRTH_DATE",
+    "FAMILY_NAME",
+    "TODAY_WEEKDAY",
+    "TODAY_DATE",
+}
+
+KOREAN_WEEKDAYS = [
+    "월요일",
+    "화요일",
+    "수요일",
+    "목요일",
+    "금요일",
+    "토요일",
+    "일요일",
+]
+
+
+def clean_text(text: str) -> str:
+    text = str(text or "").strip()
+    text = re.sub(r"[^가-힣a-zA-Z0-9\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def clamp_score(score: float) -> float:
+    return round(max(0.0, min(float(score), 100.0)), 2)
 
 
 def get_session_records(session_id: int, base_url: str = BASE_URL) -> List[dict]:
@@ -28,6 +59,7 @@ def get_recall_questions(user_id: int, base_url: str = BASE_URL) -> Dict[int, di
     response.raise_for_status()
 
     questions = response.json()
+
     return {
         int(question["questionId"]): question
         for question in questions
@@ -78,18 +110,9 @@ def send_risk_result(
 ):
     body = {
         "sessionId": session_id,
-
-        # 현재 Spring DTO 필드명은 speechScore지만,
-        # Python 쪽에서는 speechRiskScore 값을 넣는다.
         "speechScore": speech_risk_score,
-
-        # 민정님 커밋 기준:
-        # textScore = similarityScore 평균
         "textScore": text_score,
-
-        # recallScore = finalRecallScore 평균
         "recallScore": recall_score,
-
         "finalRiskScore": final_risk_score,
         "riskLevel": risk_level,
     }
@@ -107,9 +130,9 @@ def find_recall_pairs(records: List[dict]) -> List[tuple]:
 
     for record in records:
         question_id = record.get("recallQuestionId")
-        answer_role = record.get("answerRole")
+        answer_role = str(record.get("answerRole") or "").upper()
 
-        if question_id is None or answer_role is None:
+        if question_id is None or not answer_role:
             continue
 
         question_id = int(question_id)
@@ -151,6 +174,224 @@ def find_recall_pairs(records: List[dict]) -> List[tuple]:
     return pairs
 
 
+def calculate_personal_fact_score(
+    expected_answer: str,
+    current_text: str,
+) -> Optional[float]:
+    expected_answer = clean_text(expected_answer)
+    current_text = clean_text(current_text)
+
+    if not expected_answer or not current_text:
+        return None
+
+    if expected_answer in PLACEHOLDER_EXPECTED_ANSWERS:
+        return None
+
+    if expected_answer == current_text:
+        return 100.0
+
+    if expected_answer in current_text or current_text in expected_answer:
+        return 70.0
+
+    return 0.0
+
+
+def get_today_weekday_text() -> str:
+    today = datetime.now()
+    return KOREAN_WEEKDAYS[today.weekday()]
+
+
+def calculate_weekday_score(current_text: str) -> Optional[float]:
+    current_text = clean_text(current_text)
+
+    if not current_text:
+        return None
+
+    correct_weekday = get_today_weekday_text()
+    correct_short = correct_weekday.replace("요일", "")
+
+    if correct_weekday in current_text or correct_short in current_text:
+        return 100.0
+
+    for weekday in KOREAN_WEEKDAYS:
+        short = weekday.replace("요일", "")
+
+        if weekday in current_text or short in current_text:
+            return 0.0
+
+    return None
+
+
+def extract_month_day(text: str) -> Optional[tuple[int, int]]:
+    text = str(text or "")
+
+    match = re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일?", text)
+
+    if match:
+        return int(match.group(1)), int(match.group(2))
+
+    match = re.search(r"(\d{1,2})[./-](\d{1,2})", text)
+
+    if match:
+        return int(match.group(1)), int(match.group(2))
+
+    return None
+
+
+def calculate_date_score(current_text: str) -> Optional[float]:
+    parsed = extract_month_day(current_text)
+
+    if parsed is None:
+        return None
+
+    month, day = parsed
+
+    today = datetime.now()
+    current_year = today.year
+
+    try:
+        answered_date = datetime(current_year, month, day)
+    except ValueError:
+        return 0.0
+
+    diff_days = abs((today.date() - answered_date.date()).days)
+
+    if diff_days == 0:
+        return 100.0
+
+    if diff_days == 1:
+        return 80.0
+
+    if diff_days <= 3:
+        return 60.0
+
+    if diff_days <= 7:
+        return 40.0
+
+    return 0.0
+
+
+def calculate_orientation_score(
+    expected_answer: str,
+    current_text: str,
+) -> Optional[float]:
+    expected_answer = str(expected_answer or "").upper()
+
+    if expected_answer == "TODAY_WEEKDAY":
+        return calculate_weekday_score(current_text)
+
+    if expected_answer == "TODAY_DATE":
+        return calculate_date_score(current_text)
+
+    return calculate_personal_fact_score(
+        expected_answer=expected_answer,
+        current_text=current_text,
+    )
+
+
+def calculate_initial_fixed_score(
+    records: List[dict],
+    questions: Dict[int, dict],
+) -> Optional[float]:
+    scores = []
+
+    for record in records:
+        answer_role = str(record.get("answerRole") or "").upper()
+        question_id = record.get("recallQuestionId")
+
+        if answer_role != "FIXED" or question_id is None:
+            continue
+
+        question = questions.get(int(question_id), {})
+        question_type = str(question.get("questionType") or "").upper()
+        expected_answer = str(question.get("expectedAnswer") or "").strip()
+        current_text = record.get("transcriptText") or ""
+
+        score = None
+
+        if question_type == "PERSONAL":
+            score = calculate_personal_fact_score(
+                expected_answer=expected_answer,
+                current_text=current_text,
+            )
+
+        elif question_type == "ORIENTATION":
+            score = calculate_orientation_score(
+                expected_answer=expected_answer,
+                current_text=current_text,
+            )
+
+        if score is not None:
+            scores.append(score)
+
+    if not scores:
+        return None
+
+    return clamp_score(sum(scores) / len(scores))
+
+
+def combine_text_score(
+    initial_fixed_score: Optional[float],
+    recall_score: Optional[float],
+) -> float:
+    """
+    textScore는 우리 인지/회상 파트 전체 점수다.
+
+    전체 가중치 기준:
+    - 초기 고정 질문 30%
+    - 자연 회상 질문 40%
+
+    textScore 자체는 0~100 점수로 저장한다.
+    따라서 내부 비율은:
+    - 초기 고정 질문: 30 / 70
+    - 자연 회상 질문: 40 / 70
+    """
+
+    if initial_fixed_score is not None and recall_score is not None:
+        return clamp_score(
+            initial_fixed_score * (30 / 70)
+            + recall_score * (40 / 70)
+        )
+
+    if initial_fixed_score is not None:
+        return clamp_score(initial_fixed_score)
+
+    if recall_score is not None:
+        return clamp_score(recall_score)
+
+    return 0.0
+
+
+def calculate_final_risk_from_text_score(
+    speech_risk_score: float,
+    text_score: float,
+) -> dict:
+    speech_risk_score = clamp_score(speech_risk_score)
+    text_score = clamp_score(text_score)
+
+    text_risk_score = clamp_score(100.0 - text_score)
+
+    final_risk_score = (
+        speech_risk_score * 0.3
+        + text_risk_score * 0.7
+    )
+
+    final_risk_score = clamp_score(final_risk_score)
+
+    if final_risk_score < 30:
+        risk_level = "LOW"
+    elif final_risk_score < 60:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "HIGH"
+
+    return {
+        "textRiskScore": text_risk_score,
+        "finalRiskScore": final_risk_score,
+        "riskLevel": risk_level,
+    }
+
+
 def analyze_session_recall(
     user_id: int,
     session_id: int,
@@ -167,15 +408,14 @@ def analyze_session_recall(
         base_url=base_url,
     )
 
+    initial_fixed_score = calculate_initial_fixed_score(
+        records=records,
+        questions=questions,
+    )
+
     pairs = find_recall_pairs(records)
 
-    if not pairs:
-        print("분석 가능한 INITIAL/RECALL 답변 쌍이 없습니다.")
-        print("INITIAL과 RECALL은 같은 recallQuestionId를 사용해야 합니다.")
-        return
-
     final_recall_scores = []
-    text_scores = []
 
     for question_id, initial_record, recall_record in pairs:
         question = questions.get(question_id, {})
@@ -215,30 +455,29 @@ def analyze_session_recall(
             recall_scores["finalRecallScore"]
         )
 
-        text_scores.append(
-            recall_scores["similarityScore"]
+    recall_score = None
+
+    if final_recall_scores:
+        recall_score = round(
+            sum(final_recall_scores) / len(final_recall_scores),
+            2,
         )
 
-    recall_score = round(
-        sum(final_recall_scores) / len(final_recall_scores),
-        2,
-    )
-
-    text_score = round(
-        sum(text_scores) / len(text_scores),
-        2,
-    )
-
-    risk_scores = calculate_final_risk_score(
-        speech_risk_score=speech_risk_score,
+    text_score = combine_text_score(
+        initial_fixed_score=initial_fixed_score,
         recall_score=recall_score,
+    )
+
+    risk_scores = calculate_final_risk_from_text_score(
+        speech_risk_score=speech_risk_score,
+        text_score=text_score,
     )
 
     risk_response = send_risk_result(
         session_id=session_id,
         speech_risk_score=speech_risk_score,
         text_score=text_score,
-        recall_score=recall_score,
+        recall_score=recall_score if recall_score is not None else 0.0,
         final_risk_score=risk_scores["finalRiskScore"],
         risk_level=risk_scores["riskLevel"],
         base_url=base_url,
@@ -248,8 +487,9 @@ def analyze_session_recall(
     risk_response.raise_for_status()
 
     print("분석 완료")
-    print("textScore:", text_score)
+    print("initialFixedScore:", initial_fixed_score)
     print("recallScore:", recall_score)
+    print("textScore:", text_score)
     print("finalRiskScore:", risk_scores["finalRiskScore"])
     print("riskLevel:", risk_scores["riskLevel"])
 

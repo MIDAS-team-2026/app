@@ -33,6 +33,7 @@ public class RecallQuestionService {
             dto.setQuestionText(question.getQuestionText());
             dto.setQuestionType(question.getQuestionType());
             dto.setCategory(question.getCategory());
+            dto.setExpectedAnswer(question.getExpectedAnswer());
 
             // Keyword 엔티티 리스트에서 'keywordText'만 추출하여 순수 문자열 리스트로 변환
             List<String> keywordList = question.getKeywords().stream()
@@ -92,6 +93,7 @@ public class RecallQuestionService {
         response.setQuestionText(saved.getQuestionText());
         response.setQuestionType(saved.getQuestionType());
         response.setCategory(saved.getCategory());
+        response.setExpectedAnswer(saved.getExpectedAnswer());
 
         return response;
     }   
