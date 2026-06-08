@@ -97,6 +97,7 @@
     <string name="home_hello">안녕하세요 👋</string>
     <string name="home_user_suffix">님</string>
     <string name="home_streak">🔥 %1$d일 연속 점검 중!</string>
+    <string name="home_streak_motivation">💪 오늘도 점검을 시작해볼까요?</string>
     <string name="home_week_status">이번 주 점검 현황</string>
     <string name="home_today">오늘</string>
     <string name="home_week_score_label">이번 주 인지 점수</string>
