@@ -349,8 +349,9 @@ def trigger_batch_analysis(req: BatchAnalysisRequest, background_tasks: Backgrou
             # 2. 바뀐 함수 스펙에 맞춰 이름 지정(Keyword argument) 방식으로 정확하게 주입합니다.
             analyze_session_recall(
                 user_id=req.userId,
-                records=records,
-                speech_risk_score=speech_score
+                session_id=req.sessionId,
+                speech_risk_score=speech_score,
+                base_url=SPRING_BASE_URL
             )
         except Exception as e:
             logger.error("백그라운드 배치 분석 중 치명적 에러 발생: %s", e)

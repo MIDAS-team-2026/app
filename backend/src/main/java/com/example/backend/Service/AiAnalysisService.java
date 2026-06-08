@@ -162,7 +162,8 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(dto.getSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        RiskAnalysisResult result = new RiskAnalysisResult();
+        RiskAnalysisResult result = riskAnalysisRepository.findByChatSession_Id(dto.getSessionId())
+                .orElseGet(RiskAnalysisResult::new);
         result.setChatSession(session);
         result.setSpeechScore(dto.getSpeechScore());
         result.setTextScore(dto.getTextScore());

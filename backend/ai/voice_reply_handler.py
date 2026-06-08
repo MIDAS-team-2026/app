@@ -306,7 +306,7 @@ def process_voice_reply(
             except Exception as e:
                 logger.warning("실시간 회상 분석 건너뜀: %s", e)
 
-            return
+            # return
 
         # 2. 초기 고정 질문 5개 처리
         fixed_answer_count = _count_fixed_answers(session_records)
