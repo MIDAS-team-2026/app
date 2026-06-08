@@ -219,8 +219,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     /** 헤더에 표시할 종합 점수 */
     val displayScore: Int get() = selectedDayScore
-        ?.finalRiskScore?.let { (it * 100).roundToInt() }
-        ?: finalRiskScore?.let { (it * 100).roundToInt() }
+        ?.finalRiskScore?.roundToInt()
+        ?: finalRiskScore?.roundToInt()
         ?: 0
 
     /** 헤더 배지 — 위험 등급 */
@@ -303,7 +303,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.Default.RecordVoiceOver,
                     label     = "음성 점수",
-                    valueText = dSpeech?.let { "${(it * 100).roundToInt()}점" } ?: "-",
+                    valueText = dSpeech?.let { "${it.roundToInt()}점" } ?: "-",
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
@@ -317,7 +317,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.AutoMirrored.Filled.MenuBook,
                     label     = "텍스트 점수",
-                    valueText = dText?.let { "${(it * 100).roundToInt()}점" } ?: "-",
+                    valueText = dText?.let { "${it.roundToInt()}점" } ?: "-",
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 )
@@ -357,7 +357,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         }
                         DailyScore(
                             dayLabel = label,
-                            score    = d.finalRiskScore?.let { (it * 100).roundToInt() } ?: 0,
+                            score    = d.finalRiskScore?.roundToInt() ?: 0,
                             date     = d.date
                         )
                     }

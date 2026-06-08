@@ -22,6 +22,7 @@ STT는 Spring STTService가 업로드 시점에 처리하므로,
 
 import logging
 import os
+
 import requests
 
 from recall.conversation_recall_generator import (
@@ -256,6 +257,8 @@ def process_voice_reply(
     session_id: int,
     user_id: int,
     transcript_text: str = "",
+    speech_risk_score: float = 0.0,
+    run_realtime_analysis: bool = False,
 ):
     logger.info(
         "AI 답변 및 매핑 시작: recordId=%s sessionId=%s",
@@ -296,17 +299,18 @@ def process_voice_reply(
                 pending_recall_question_id,
             )
 
-            try:
-                analyze_session_recall(
-                    user_id=user_id,
-                    session_id=session_id,
-                    speech_risk_score=0.0,
-                    base_url=SPRING_BASE_URL,
-                )
-            except Exception as e:
-                logger.warning("실시간 회상 분석 건너뜀: %s", e)
+            if run_realtime_analysis:
+                try:
+                    analyze_session_recall(
+                        user_id=user_id,
+                        session_id=session_id,
+                        speech_risk_score=speech_risk_score,
+                        base_url=SPRING_BASE_URL,
+                    )
+                except Exception as e:
+                    logger.warning("실시간 회상 분석 건너뜀: %s", e)
 
-            # return
+            return
 
         # 2. 초기 고정 질문 5개 처리
         fixed_answer_count = _count_fixed_answers(session_records)
