@@ -16,7 +16,6 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -44,9 +43,6 @@ public class AiAnalysisService {
 
     private final NotificationService notificationService;
     private final RestTemplate restTemplate = new RestTemplate();
-
-    @Value("${ai.python.url:http://localhost:8000}")
-    private String pythonBaseUrl;
 
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
@@ -288,8 +284,8 @@ public class AiAnalysisService {
     }
 
     private String resolveRiskLevel(float score) {
-        if (score < 30.0f) return "LOW";
-        if (score < 60.0f) return "MEDIUM";
+        if (score < 30f) return "LOW";
+        if (score < 60f) return "MEDIUM";
         return "HIGH";
     }
 
@@ -349,7 +345,7 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        String pythonServerUrl = pythonBaseUrl + "/api/ai/batch-analysis";
+        String pythonServerUrl = "http://localhost:8000/api/ai/batch-analysis";
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("sessionId", sessionId);
