@@ -128,7 +128,11 @@ private fun WeekStatusCard(
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
-                text = stringResource(R.string.home_streak, streakDays),
+                text = if (streakDays > 0) {
+                    stringResource(R.string.home_streak, streakDays)
+                } else {
+                    stringResource(R.string.home_streak_motivation)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = BrandWhite
