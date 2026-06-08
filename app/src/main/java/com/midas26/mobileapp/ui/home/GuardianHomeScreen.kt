@@ -79,7 +79,7 @@ private fun GuardianHomeHeader(
     patients: List<LinkedUserInfo>,
     selectedPatient: LinkedUserInfo?,
     isLoading: Boolean,
-    todayScore: Int?,           // null = 로딩 중 또는 데이터 없음
+    todayScore: Int?,           // null이면 "-" 표시
     onPatientSelected: (LinkedUserInfo) -> Unit
 ) {
     Box(
@@ -115,7 +115,7 @@ private fun GuardianHomeHeader(
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(2.dp))
-                if (isLoading || (patients.isNotEmpty() && todayScore == null && selectedPatient != null)) {
+                if (isLoading) {
                     CircularProgressIndicator(
                         color = BrandWhite,
                         modifier = Modifier.size(36.dp),
