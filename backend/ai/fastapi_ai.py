@@ -24,7 +24,6 @@ from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
 from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
-from recall.recall_api_client import analyze_session_recall, get_session_records
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -161,6 +160,43 @@ def run_session_batch_analysis(session_id: int, user_id: int) -> None:
         speech_risk_score,
     )
 
+
+def run_upload_analysis(
+    record_id: int,
+    session_id: int,
+    user_id: int,
+    audio_path: str | None,
+    transcript_text: str,
+    duration_sec: float,
+) -> None:
+    """
+    음성 업로드 직후 실행되는 분석 흐름.
+    AI 답변/회상 라벨링을 먼저 끝내고, 음성 분석 후 실제 speechRiskScore로
+    세션 summary를 갱신한다.
+    """
+    logger.info("upload-analysis 시작 recordId=%s sessionId=%s", record_id, session_id)
+
+    process_voice_reply(
+        record_id,
+        session_id,
+        user_id,
+        transcript_text,
+        run_realtime_analysis=False,
+    )
+
+    mock_args = MainArgsMock(
+        record_id=record_id,
+        session_id=session_id,
+        audio_path=audio_path,
+        audio_url=audio_path,
+        transcript_text=transcript_text,
+        duration_sec=duration_sec,
+    )
+    run_record_mode(mock_args)
+
+    run_session_batch_analysis(session_id, user_id)
+    logger.info("upload-analysis 완료 recordId=%s sessionId=%s", record_id, session_id)
+
 # ==========================
 # API Endpoints
 # ==========================
@@ -176,32 +212,18 @@ def process(req: ProcessRequest, background_tasks: BackgroundTasks):
         req.sessionId
     )
 
-    # 1. AI 답변 생성
     background_tasks.add_task(
-        process_voice_reply,
+        run_upload_analysis,
         req.recordId,
         req.sessionId,
         req.userId,
-        req.transcriptText or ""
-    )
-
-    # 2. 음성/텍스트 분석
-    mock_args = MainArgsMock(
-        record_id=req.recordId,
-        session_id=req.sessionId,
-        audio_path=req.audioPath,
-        audio_url=req.audioPath,
-        transcript_text=req.transcriptText or "",
-        duration_sec=req.durationSec or 0.0
-    )
-
-    background_tasks.add_task(
-        run_record_mode,
-        mock_args
+        req.audioPath,
+        req.transcriptText or "",
+        req.durationSec or 0.0,
     )
 
     logger.info(
-        "AI 응답 + 분석 작업 등록 완료 recordId=%s",
+        "AI 응답 + 분석 + 세션 점수 갱신 작업 등록 완료 recordId=%s",
         req.recordId
     )
 
@@ -337,25 +359,10 @@ def analyze_recall(request: RecallAnalysisRequest):
 # Spring의 세션 종료 및 배치 분석 트리거 수신 엔드포인트
 @app.post("/api/ai/batch-analysis")
 def trigger_batch_analysis(req: BatchAnalysisRequest, background_tasks: BackgroundTasks):
-    speech_score = getattr(req, "speech_risk_score", getattr(req, "speechRiskScore", 0.0))
-    logger.info("배치 분석 트리거 수신: sessionId=%s, userId=%s, speechRiskScore=%s",
-                req.sessionId, req.userId, speech_score)
-
-    def background_analysis_job():
-        try:
-            # 1. sessionId를 이용해 현재 세션의 모든 대화 기록(records)을 먼저 가져옵니다.
-            records = get_session_records(req.sessionId)
-
-            # 2. 바뀐 함수 스펙에 맞춰 이름 지정(Keyword argument) 방식으로 정확하게 주입합니다.
-            analyze_session_recall(
-                user_id=req.userId,
-                session_id=req.sessionId,
-                speech_risk_score=speech_score,
-                base_url=SPRING_BASE_URL
-            )
-        except Exception as e:
-            logger.error("백그라운드 배치 분석 중 치명적 에러 발생: %s", e)
-
-    # 3. 래핑한 안전한 함수를 백그라운드 태스크로 넘깁니다.
-    background_tasks.add_task(background_analysis_job)
-    return {"status": "ok", "message": "Batch analysis task registered"}
+    logger.info(
+        "배치 분석 트리거 수신: sessionId=%s, userId=%s",
+        req.sessionId,
+        req.userId,
+    )
+    background_tasks.add_task(run_session_batch_analysis, req.sessionId, req.userId)
+    return {"status": "processing", "message": "Batch analysis started"}
