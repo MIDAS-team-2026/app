@@ -238,7 +238,7 @@ private fun UserLocationCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp)
-            .height(110.dp)
+            .heightIn(min = 110.dp)
             .clickable { onClick() }
             .border(1.5.dp, Color(0xFFB3D4F5), RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
@@ -246,8 +246,8 @@ private fun UserLocationCard(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 28.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 28.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -256,7 +256,10 @@ private fun UserLocationCard(
                         text = user.name,
                         fontSize = 25.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AppColor.textPrimary
+                        color = AppColor.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
@@ -267,6 +270,8 @@ private fun UserLocationCard(
                             text = relation,
                             fontWeight = FontWeight.SemiBold,
                             color = AppColor.guardianDark,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                         )
                     }
@@ -282,7 +287,8 @@ private fun UserLocationCard(
                         fontSize = 14.sp,
                         color = AppColor.textTertiary,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                 }
 
