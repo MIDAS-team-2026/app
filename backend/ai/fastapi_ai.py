@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+from groq import Groq
 
 import requests
 import torch
@@ -32,6 +33,7 @@ DEFAULT_STT_MODEL = "openai/whisper-small"
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
 
 app = FastAPI(title="MIDAS AI Server")
+groq_client = Groq()
 
 # ==========================
 # Pydantic Schemas
@@ -212,18 +214,51 @@ def transcribe(request: SttRequest):
         # 1. URL로부터 오디오 파일 다운로드
         audio_path = download_audio(request.audioUrl)
 
-        # 2. Whisper 파이프라인 가져오기 및 STT 수행
-        model_name, pipe = get_stt_pipeline()
+        # 2. Groq Whisper API로 STT 수행
+        with open(audio_path, "rb") as audio_file:
+            transcription = groq_client.audio.transcriptions.create(
+                file=(os.path.basename(audio_path), audio_file.read()),
+                model="whisper-large-v3",
+                language=request.language if request.language else "ko",
+                response_format="json"
+            )
 
-        # 언어 설정 세팅 및 실행
-        generate_kwargs = {"language": request.language} if request.language else {}
-        result = pipe(str(audio_path), generate_kwargs=generate_kwargs)
+        raw_text = transcription.text.strip()
 
-        # 3. 정상적인 SttResponse 포맷에 맞추어 딕셔너리 리턴
+        # 3. 만약 텍스트가 비어있다면 정제 패스
+        if not raw_text:
+            return SttResponse(transcriptText="", confidence=None, modelName="groq-whisper-large-v3")
+
+        # 4. Groq 무료 LLM(Llama 3)을 사용해 AI 텍스트 정제 수행
+        # (간투사 제거, 오타 교정, 핵심 정보 보존)
+        refine_prompt = f"""
+        당신은 텍스트 정제 전문 AI입니다. 
+        어르신의 음성을 STT로 변환한 날것의 문장이 주어집니다. 아래 규칙에 맞게 깔끔한 문장으로 교정해 주세요.
+
+        [규칙]
+        1. 의미 없는 말더듬이나 간투사('어...', '음...', '그...', '아니 그게')는 자연스럽게 삭제하세요.
+        2. STT 오인식으로 보이는 명백한 맞춤법 오타나 조사 오류를 문맥에 맞게 수정하세요. (예: "오늘 월루일이지?" -> "오늘 월요일이지?")
+        3. 어르신이 하신 말씀의 본래 의미나 핵심 데이터(날짜, 이름, 장소)는 절대로 왜곡하거나 생략하지 마세요.
+        4. 오직 정제된 최종 결과 문장만 출력하세요. 다른 설명이나 따옴표는 절대 붙이지 마세요.
+
+        입력된 날것의 문장: "{raw_text}"
+        정제된 문장:
+        """.strip()
+
+        # llama-3.3-70b-versatile 또는 llama3-8b-8192 모델 사용
+        llm_response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": refine_prompt}],
+            temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
+        )
+
+        clean_text = llm_response.choices[0].message.content.strip()
+
+        # 5. 스프링이 원하는 포맷에 맞춰 정제된 텍스트 리턴
         return SttResponse(
-            transcriptText=result.get("text", "").strip(),
+            transcriptText=clean_text,
             confidence=None,
-            modelName=model_name
+            modelName="groq-whisper-large-v3 + llama3"
         )
 
     except requests.RequestException as exc:
@@ -231,8 +266,7 @@ def transcribe(request: SttRequest):
         raise HTTPException(status_code=400, detail=f"audio download failed: {exc}")
 
     except Exception as exc:
-        # 🚨 예외 발생 시 로그를 상세히 찍고, 반드시 HTTPException을 raise하여 None 반환을 막습니다.
-        logger.exception("STT 변환 연산 중 에러 발생: %s", exc)
+        logger.exception("STT 및 정제 연산 중 에러 발생: %s", exc)
         raise HTTPException(status_code=500, detail=f"stt processing failed: {str(exc)}")
 
     finally:
