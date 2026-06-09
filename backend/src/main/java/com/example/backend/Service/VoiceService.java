@@ -28,7 +28,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class VoiceService {
-    private static final String ANSWER_ROLE_INITIAL = "INITIAL";
     private static final String ANSWER_ROLE_RECALL = "RECALL";
     private final S3Service s3Service;
     private final AudioRecordRepository audioRecordRepository;
@@ -64,14 +63,9 @@ public class VoiceService {
         record.setSpeaker(1); // 1: USER, 2: AI
         record.setTurnOrder(nextTurn);
         record.setRecordedAt(LocalDateTime.now());
-        record.setRecallQuestionId(recallQuestionId);
-        record.setAnswerRole(answerRole);
-        if (recallQuestionId != null && ANSWER_ROLE_RECALL.equalsIgnoreCase(answerRole)) {
-            audioRecordRepository
-                    .findFirstByUser_IdAndRecallQuestionIdAndAnswerRoleOrderByRecordedAtDesc(
-                            userId, recallQuestionId, ANSWER_ROLE_INITIAL)
-                    .ifPresent(record::setParentRecord);
-        }
+        record.setRecallQuestionId(null);
+        record.setAnswerRole(null);
+        record.setParentRecord(null);
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
         STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
