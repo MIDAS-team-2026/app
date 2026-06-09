@@ -5,6 +5,7 @@ import android.content.Intent
 import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
+import android.view.MotionEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.osmdroid.config.Configuration
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
@@ -48,6 +50,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+
+private const val GPS_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
 
 data class LinkedUser(
     val id: String,
@@ -102,6 +106,13 @@ fun LocationListScreen(
 ) {
     var refreshKey by remember { mutableStateOf(0) }
 
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(GPS_REFRESH_INTERVAL_MS)
+            refreshKey++
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -143,27 +154,36 @@ fun LocationListScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(14.dp),
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = Color(0xFFFFF9E0)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📡", fontSize = 26.sp)
+                        Text("📡", fontSize = 25.sp)
+
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "실시간 위치를 확인하세요",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFB8860B)
+                                color = Color(0xFFB8860B),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
                             Text(
                                 text = "위치는 5분마다 갱신됩니다",
-                                fontSize = 13.sp,
-                                color = Color(0xFFB8860B).copy(alpha = 0.7f)
+                                fontSize = 14.sp,
+                                color = Color(0xFFB8860B).copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -205,6 +225,7 @@ private fun UserLocationCard(
     LaunchedEffect(userId, refreshKey) {
         if (userId <= 0) {
             locationText = "위치 정보 없음"
+            timeAgoText = ""
             return@LaunchedEffect
         }
 
@@ -239,17 +260,17 @@ private fun UserLocationCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .heightIn(min = 110.dp)
+            .padding(horizontal = 24.dp, vertical = 6.dp)
+            .heightIn(min = 126.dp)
             .clickable { onClick() }
-            .border(1.5.dp, Color(0xFFB3D4F5), RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
+            .border(1.5.dp, Color(0xFFB3D4F5), RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
         color = Color.White
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp, vertical = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -263,7 +284,9 @@ private fun UserLocationCard(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = AppColor.guardianSurface,
@@ -282,13 +305,29 @@ private fun UserLocationCard(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.Top) {
                     Text("📍", fontSize = 15.sp)
+
                     Spacer(modifier = Modifier.width(5.dp))
+
                     Text(
                         text = locationText,
+                        fontSize = 14.sp,
+                        color = AppColor.textTertiary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 18.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (timeAgoText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "🕐 $timeAgoText 업데이트",
                         fontSize = 14.sp,
                         color = AppColor.textTertiary,
                         maxLines = 1,
@@ -296,16 +335,9 @@ private fun UserLocationCard(
                         modifier = Modifier.weight(1f, fill = false)
                     )
                 }
-
-                if (timeAgoText.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "🕐 $timeAgoText 업데이트",
-                        fontSize = 14.sp,
-                        color = AppColor.textTertiary
-                    )
-                }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             Icon(
                 imageVector = Icons.Default.ChevronRight,
@@ -335,6 +367,13 @@ fun LocationDetailScreen(
     var locationError by remember { mutableStateOf("") }
     var locationTimeAgo by remember { mutableStateOf("") }
     var refreshKey by remember { mutableStateOf(0) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(GPS_REFRESH_INTERVAL_MS)
+            refreshKey++
+        }
+    }
 
     LaunchedEffect(userId, refreshKey) {
         isLoadingLocation = true
@@ -675,10 +714,30 @@ private fun HighlightLocationMap(
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
                 isClickable = true
+                isFocusable = true
+                isFocusableInTouchMode = true
                 minZoomLevel = 4.0
                 maxZoomLevel = 20.0
                 controller.setZoom(17.0)
                 controller.setCenter(currentPoint)
+
+                setOnTouchListener { view, event ->
+                    when (event.actionMasked) {
+                        MotionEvent.ACTION_DOWN,
+                        MotionEvent.ACTION_MOVE,
+                        MotionEvent.ACTION_POINTER_DOWN,
+                        MotionEvent.ACTION_POINTER_UP -> {
+                            view.parent?.requestDisallowInterceptTouchEvent(true)
+                        }
+
+                        MotionEvent.ACTION_UP,
+                        MotionEvent.ACTION_CANCEL -> {
+                            view.parent?.requestDisallowInterceptTouchEvent(false)
+                        }
+                    }
+
+                    false
+                }
             }
         },
         update = { mapView ->
@@ -688,15 +747,10 @@ private fun HighlightLocationMap(
                 mapView.overlays.add(
                     Polyline().apply {
                         setPoints(routePoints)
-
                         outlinePaint.color = 0xFFC85E48.toInt()
                         outlinePaint.strokeWidth = 10f
-
-                        outlinePaint.strokeCap =
-                            android.graphics.Paint.Cap.ROUND
-
-                        outlinePaint.strokeJoin =
-                            android.graphics.Paint.Join.ROUND
+                        outlinePaint.strokeCap = android.graphics.Paint.Cap.ROUND
+                        outlinePaint.strokeJoin = android.graphics.Paint.Join.ROUND
                     }
                 )
             }
@@ -1023,13 +1077,24 @@ fun CallDialog(
 private fun formatTimeAgo(recordedAt: String): String {
     return try {
         val past = parseServerDate(recordedAt) ?: return "시간 알 수 없음"
-        val diffSec = (System.currentTimeMillis() - past.time) / 1000
+        val diffSec = ((System.currentTimeMillis() - past.time) / 1000).coerceAtLeast(0)
 
         when {
-            diffSec < 60 -> "${diffSec}초 전"
-            diffSec < 3600 -> "${diffSec / 60}분 전"
-            diffSec < 86400 -> "${diffSec / 3600}시간 전"
-            else -> "${diffSec / 86400}일 전"
+            diffSec < 3600 -> {
+                val rawMinutes = diffSec / 60
+                val roundedMinutes = maxOf(5, (rawMinutes / 5) * 5)
+                "${roundedMinutes}분 전"
+            }
+
+            diffSec < 86400 -> {
+                val hours = diffSec / 3600
+                "${hours}시간 전"
+            }
+
+            else -> {
+                val days = diffSec / 86400
+                "${days}일 전"
+            }
         }
     } catch (e: Exception) {
         "시간 알 수 없음"
