@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -55,10 +56,10 @@ fun SignupInfoScreen(
 ) {
     val context = LocalContext.current
 
-    var name by remember { mutableStateOf("") }
-    var birth by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(viewModel.pendingName) }
+    var birth by remember { mutableStateOf(viewModel.pendingBirth) }
+    var phone by remember { mutableStateOf(viewModel.pendingPhone) }
+    var password by remember { mutableStateOf(viewModel.pendingPassword) }
 
     var nameError by remember { mutableStateOf<String?>(null) }
     var birthError by remember { mutableStateOf<String?>(null) }
@@ -74,7 +75,7 @@ fun SignupInfoScreen(
             is AuthState.PhoneChecked -> {
                 // 환자: 중복 없음 확인 + 인증코드 발송 완료 → 인증 화면으로
                 viewModel.resetState()
-                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
+                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role, birth.trim())
                 onVerify(phone.trim())
             }
             is AuthState.Success -> {
@@ -108,8 +109,24 @@ fun SignupInfoScreen(
         nameError = if (name.trim().isEmpty()) { ok = false; errorRequired } else null
         birthError = when {
             birth.isEmpty() -> { ok = false; errorRequired }
-            birth.length != 8 || birth.toLongOrNull() == null -> { ok = false; errorBirthFormat }
-            else -> null
+            birth.length != 8 || !birth.all { it.isDigit() } -> { ok = false; errorBirthFormat }
+            else -> {
+                val y = birth.substring(0, 4).toInt()
+                val m = birth.substring(4, 6).toInt()
+                val d = birth.substring(6, 8).toInt()
+                val valid = y in 1900..2026
+                    && m in 1..12
+                    && d in 1..31
+                    && birth.toLong() <= 20260609L
+                    && runCatching {
+                        java.util.Calendar.getInstance().apply {
+                            isLenient = false
+                            set(y, m - 1, d)
+                            time
+                        }
+                    }.isSuccess
+                if (!valid) { ok = false; errorBirthFormat } else null
+            }
         }
         phoneError = when {
             phone.trim().isEmpty() -> { ok = false; errorRequired }
@@ -131,6 +148,7 @@ fun SignupInfoScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(scrollState)
+            .imePadding()
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -164,12 +182,19 @@ fun SignupInfoScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
+                    .padding(end = 6.dp)
                     .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .background(AppColor.divider, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.signup_step_2_of_2),
+            text = stringResource(R.string.signup_step_2_of_3),
             style = MaterialTheme.typography.labelMedium,
             color = AppColor.textTertiary
         )
@@ -185,7 +210,10 @@ fun SignupInfoScreen(
 
         AppOutlinedTextField(
             value = name,
-            onValueChange = { name = it; nameError = null; serverError = null },
+            onValueChange = { input ->
+                val maxLen = if (input.any { it in '가'..'힣' || it in '㄰'..'㆏' }) 7 else 15
+                if (input.length <= maxLen) { name = input; nameError = null; serverError = null }
+            },
             label = stringResource(R.string.hint_name),
             leadingIcon = Icons.Filled.Person,
             keyboardType = KeyboardType.Text,
