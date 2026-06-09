@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -44,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
@@ -51,6 +55,7 @@ import com.midas26.mobileapp.ui.theme.BrandWhite
 @Composable
 fun PhoneVerificationScreen(
     phone: String,
+    authViewModel: AuthViewModel,
     onBack: () -> Unit,
     onVerified: () -> Unit,
     viewModel: PhoneVerificationViewModel = viewModel()
@@ -58,20 +63,22 @@ fun PhoneVerificationScreen(
     val context = LocalContext.current
     var code by remember { mutableStateOf("") }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var codeSent by remember { mutableStateOf(authViewModel.pendingCodeSent && authViewModel.pendingCodeSentPhone == phone) }
     val state by viewModel.state.collectAsState()
     val isLoading = state is VerificationState.Sending || state is VerificationState.Verifying
 
-    // SignupInfoScreen에서 이미 발송했으므로 진입 시 재발송 안 함
-
     LaunchedEffect(state) {
         when (state) {
+            is VerificationState.CodeSent -> {
+                codeSent = true
+                authViewModel.markCodeSent(phone)
+            }
             is VerificationState.Verified -> {
                 viewModel.resetState()
                 onVerified()
             }
             is VerificationState.Error -> {
                 val msg = (state as VerificationState.Error).message
-                // 중복 번호 에러는 Toast 후 이전 화면으로 돌아가서 전화번호 수정
                 if (msg.contains("이미 가입")) {
                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                     viewModel.resetState()
@@ -149,55 +156,80 @@ fun PhoneVerificationScreen(
             color = AppColor.textTertiary,
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
         )
-        Spacer(modifier = Modifier.height(48.dp))
-
-        OtpInputRow(code = code, onCodeChange = { code = it; errorMsg = null })
-        Spacer(modifier = Modifier.height(8.dp))
-
-        if (errorMsg != null) {
-            Text(
-                text = errorMsg!!,
-                style = MaterialTheme.typography.bodySmall,
-                color = AppColor.errorPrimary,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
         Spacer(modifier = Modifier.height(24.dp))
 
-        AppPrimaryButton(
-            text = if (isLoading) "" else stringResource(R.string.btn_verify),
-            onClick = { if (code.length == 6) viewModel.verifyCode(phone, code) },
-            enabled = code.length == 6 && !isLoading
-        )
-        if (isLoading) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-            }
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.phone_verify_resend),
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppColor.textTertiary
+        if (!codeSent) {
+            // 전송 전: 인증코드 보내기 버튼
+            AppPrimaryButton(
+                text = if (state is VerificationState.Sending) "" else stringResource(R.string.btn_send_code),
+                onClick = {
+                    code = ""
+                    errorMsg = null
+                    viewModel.sendCode(phone, "SIGNUP")
+                },
+                enabled = state !is VerificationState.Sending
             )
-            TextButton(onClick = {
-                code = ""
-                errorMsg = null
-                viewModel.sendCode(phone, "SIGNUP")
-                Toast.makeText(context, context.getString(R.string.phone_verify_resent), Toast.LENGTH_SHORT).show()
-            }) {
+            if (state is VerificationState.Sending) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            }
+        } else {
+            // 전송 후: OTP 입력 + 인증 완료 버튼 + 재전송
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OtpInputRow(
+                code = code,
+                focusKey = codeSent,
+                onCodeChange = { code = it; errorMsg = null }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (errorMsg != null) {
                 Text(
-                    text = stringResource(R.string.btn_resend),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.greenSecondary,
-                    fontWeight = FontWeight.Bold
+                    text = errorMsg!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppColor.errorPrimary,
+                    modifier = Modifier.fillMaxWidth()
                 )
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+
+            AppPrimaryButton(
+                text = if (state is VerificationState.Verifying) "" else stringResource(R.string.btn_verify),
+                onClick = { if (code.length == 6) viewModel.verifyCode(phone, code) },
+                enabled = code.length == 6 && state !is VerificationState.Verifying
+            )
+            if (state is VerificationState.Verifying) {
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.phone_verify_resend),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppColor.textTertiary
+                )
+                TextButton(onClick = {
+                    code = ""
+                    errorMsg = null
+                    viewModel.sendCode(phone, "SIGNUP")
+                    Toast.makeText(context, context.getString(R.string.phone_verify_resent), Toast.LENGTH_SHORT).show()
+                }) {
+                    Text(
+                        text = stringResource(R.string.btn_resend),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppColor.greenSecondary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }
@@ -206,31 +238,35 @@ fun PhoneVerificationScreen(
 @Composable
 private fun OtpInputRow(
     code: String,
+    focusKey: Boolean,
     onCodeChange: (String) -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    LaunchedEffect(focusKey) {
+        if (focusKey) {
+            focusRequester.requestFocus()
+            keyboardController?.show()
+        }
     }
 
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center
     ) {
-        // 숨겨진 입력 필드 — 실제 키보드 입력 처리
         BasicTextField(
             value = code,
             onValueChange = { new ->
                 if (new.length <= 6 && new.all { it.isDigit() }) onCodeChange(new)
             },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            cursorBrush = SolidColor(Color.Transparent),
             modifier = Modifier
                 .size(1.dp)
                 .focusRequester(focusRequester)
         )
 
-        // 시각적 6칸 박스
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -253,7 +289,7 @@ private fun OtpInputRow(
                             },
                             shape = RoundedCornerShape(14.dp)
                         )
-                        .clickable { focusRequester.requestFocus() },
+                        .clickable { focusRequester.requestFocus(); keyboardController?.show() },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(

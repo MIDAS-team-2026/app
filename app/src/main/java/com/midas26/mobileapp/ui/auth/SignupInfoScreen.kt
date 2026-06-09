@@ -64,7 +64,9 @@ fun SignupInfoScreen(
     var nameError by remember { mutableStateOf<String?>(null) }
     var birthError by remember { mutableStateOf<String?>(null) }
     var phoneError by remember { mutableStateOf<String?>(null) }
+    var passwordConfirm by remember { mutableStateOf("") }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var passwordConfirmError by remember { mutableStateOf<String?>(null) }
     var serverError by remember { mutableStateOf<String?>(null) }
 
     val authState by viewModel.authState.collectAsState()
@@ -73,10 +75,7 @@ fun SignupInfoScreen(
     LaunchedEffect(authState) {
         when (authState) {
             is AuthState.PhoneChecked -> {
-                // 환자: 중복 없음 확인 + 인증코드 발송 완료 → 인증 화면으로
                 viewModel.resetState()
-                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role, birth.trim())
-                onVerify(phone.trim())
             }
             is AuthState.Success -> {
                 // 보호자: 회원가입 완료 → 인증 화면(완료 화면)으로
@@ -101,6 +100,7 @@ fun SignupInfoScreen(
     val errorRequired = stringResource(R.string.error_required)
     val errorPhoneInvalid = stringResource(R.string.error_phone_invalid)
     val errorPasswordShort = stringResource(R.string.error_password_short)
+    val errorPasswordMismatch = stringResource(R.string.error_password_mismatch)
     val errorBirthFormat = stringResource(R.string.error_birth_format)
     val passwordHelper = stringResource(R.string.password_helper)
 
@@ -136,6 +136,11 @@ fun SignupInfoScreen(
         passwordError = when {
             password.isEmpty() -> { ok = false; errorRequired }
             password.length < 8 -> { ok = false; errorPasswordShort }
+            else -> null
+        }
+        passwordConfirmError = when {
+            passwordConfirm.isEmpty() -> { ok = false; errorRequired }
+            passwordConfirm != password -> { ok = false; errorPasswordMismatch }
             else -> null
         }
         return ok
@@ -242,13 +247,22 @@ fun SignupInfoScreen(
         )
         AppOutlinedTextField(
             value = password,
-            onValueChange = { password = it; passwordError = null; serverError = null },
+            onValueChange = { password = it; passwordError = null; passwordConfirmError = null; serverError = null },
             label = stringResource(R.string.hint_password),
             leadingIcon = Icons.Filled.Lock,
             isPassword = true,
-            imeAction = ImeAction.Done,
+            imeAction = ImeAction.Next,
             helperText = passwordHelper,
             errorText = passwordError
+        )
+        AppOutlinedTextField(
+            value = passwordConfirm,
+            onValueChange = { passwordConfirm = it; passwordConfirmError = null },
+            label = stringResource(R.string.hint_password_confirm),
+            leadingIcon = Icons.Filled.Lock,
+            isPassword = true,
+            imeAction = ImeAction.Done,
+            errorText = passwordConfirmError
         )
 
         if (serverError != null) {
@@ -271,12 +285,11 @@ fun SignupInfoScreen(
                 text = stringResource(R.string.btn_complete),
                 onClick = {
                     if (validate()) {
+                        viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role, birth.trim())
                         if (role == PrefsManager.ROLE_GUARDIAN) {
-                            // 보호자: 즉시 회원가입 API 호출
                             viewModel.signup(phone.trim(), password, name.trim(), role)
                         } else {
-                            // 환자: 중복 체크 + 인증코드 발송 → PhoneChecked 상태 되면 인증 화면으로
-                            viewModel.checkPhoneAndSendCode(phone.trim())
+                            onVerify(phone.trim())
                         }
                     }
                 }
