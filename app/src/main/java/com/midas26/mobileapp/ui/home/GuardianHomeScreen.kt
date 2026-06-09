@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
@@ -192,7 +193,9 @@ private fun LinkedPatientDropdown(
 
     Box {
         Surface(
-            modifier = Modifier.clickable { expanded = !expanded },
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .clickable { expanded = !expanded },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite.copy(alpha = 0.22f)
         ) {
@@ -208,7 +211,16 @@ private fun LinkedPatientDropdown(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "${selectedPatient?.name ?: "사용자 선택"} 님 연결됨",
+                    text = selectedPatient?.name ?: "사용자 선택",
+                    fontSize = 18.sp,
+                    color = BrandWhite,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Text(
+                    text = " 님 연결됨",
                     fontSize = 18.sp,
                     color = BrandWhite,
                     fontWeight = FontWeight.SemiBold

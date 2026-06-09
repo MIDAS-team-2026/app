@@ -36,8 +36,9 @@
     <string name="hint_birth">생년월일 (YYYYMMDD)</string>
     <string name="hint_phone">전화번호</string>
     <string name="btn_complete">완료</string>
-    <string name="signup_step_1_of_2">1 / 2단계</string>
-    <string name="signup_step_2_of_2">2 / 2단계</string>
+    <string name="signup_step_1_of_3">1 / 3단계</string>
+    <string name="signup_step_2_of_3">2 / 3단계</string>
+    <string name="signup_step_3_of_3">3 / 3단계</string>
     <string name="password_helper">영문, 숫자 포함 8자 이상</string>
 
     <!-- 전화번호 인증 -->

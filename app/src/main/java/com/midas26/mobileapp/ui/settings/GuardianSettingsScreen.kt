@@ -59,6 +59,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -94,8 +95,11 @@ fun GuardianSettingsScreen(
 
     val patientsLabel = when {
         patients.isEmpty() -> "없음"
-        patients.size == 1 -> patients[0].name ?: "사용자"
-        else -> "${patients[0].name ?: "사용자"} +${patients.size - 1}명"
+        else -> patients[0].name ?: "사용자"
+    }
+    val patientsSuffix = when {
+        patients.size > 1 -> " +${patients.size - 1}"
+        else -> ""
     }
 
     var analysisAlertEnabled by remember { mutableStateOf(false) }
@@ -281,6 +285,7 @@ fun GuardianSettingsScreen(
             userName = userName,
             role = "보호자",
             patientsLabel = patientsLabel,
+            patientsSuffix = patientsSuffix,
             noResultCount = noResultCount,
             unviewedCount = unviewedCount,
             onBack = onBack,
@@ -428,6 +433,7 @@ private fun CollapsingGuardianSettingsHeader(
     userName: String,
     role: String,
     patientsLabel: String,
+    patientsSuffix: String = "",
     noResultCount: Int,
     unviewedCount: Int,
     onBack: () -> Unit,
@@ -572,6 +578,7 @@ private fun CollapsingGuardianSettingsHeader(
                 ) {
                     StatItem(
                         value = patientsLabel,
+                        valueSuffix = patientsSuffix,
                         label = "연결 사용자",
                         modifier = Modifier.weight(1f)
                     )
@@ -611,18 +618,36 @@ private fun CollapsingGuardianSettingsHeader(
 private fun StatItem(
     value: String,
     label: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    valueSuffix: String = ""
 ) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = BrandWhite
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = BrandWhite,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (valueSuffix.isNotEmpty()) {
+                Text(
+                    text = valueSuffix,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = BrandWhite,
+                    maxLines = 1
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(2.dp))
 

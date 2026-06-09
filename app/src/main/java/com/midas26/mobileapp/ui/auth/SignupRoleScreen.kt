@@ -72,7 +72,6 @@ fun SignupRoleScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 진행도 (1/2 단계: 좌측 채워짐) — 두께 4dp→6dp 로 확대
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -89,12 +88,19 @@ fun SignupRoleScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
+                    .padding(end = 6.dp)
+                    .background(AppColor.divider, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
                     .background(AppColor.divider, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.signup_step_1_of_2),
+            text = stringResource(R.string.signup_step_1_of_3),
             style = MaterialTheme.typography.labelMedium,
             color = AppColor.textTertiary
         )

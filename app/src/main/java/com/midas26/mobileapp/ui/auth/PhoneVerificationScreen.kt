@@ -100,7 +100,41 @@ fun PhoneVerificationScreen(
                 modifier = Modifier.size(28.dp)
             )
         }
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .padding(end = 6.dp)
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .padding(end = 6.dp)
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.signup_step_3_of_3),
+            style = MaterialTheme.typography.labelMedium,
+            color = AppColor.textTertiary
+        )
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
             text = stringResource(R.string.phone_verify_title),
