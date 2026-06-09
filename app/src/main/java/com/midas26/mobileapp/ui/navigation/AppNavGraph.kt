@@ -127,6 +127,7 @@ fun AppNavHost(
 
         Routes.Settings,
         Routes.AccessibilitySettings,
+        Routes.ProfileEdit,
         GuardianManagedUsersRoute ->
             if (isGuardian) GuardianHomeTab.Settings else UserHomeTab.Settings
 
@@ -437,10 +438,11 @@ fun AppNavHost(
                     val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
                     val patientScores by guardianViewModel.patientScores.collectAsState()
 
-                    androidx.compose.runtime.LaunchedEffect(guardianId) {
+                    LaunchedEffect(guardianId) {
                         guardianViewModel.loadPatients(guardianId)
                     }
-                    androidx.compose.runtime.LaunchedEffect(patients) {
+
+                    LaunchedEffect(patients) {
                         if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
                     }
 
@@ -491,7 +493,9 @@ fun AppNavHost(
                     val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
                     val patients by guardianViewModel.patients.collectAsState()
                     val linkedUsers = patients.map { it.toLinkedUser() }
-                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
+                    val user = linkedUsers.find { it.id == userId }
+                        ?: linkedUsers.firstOrNull()
+                        ?: return@composable
 
                     LocationDetailScreen(
                         user = user,
@@ -515,7 +519,9 @@ fun AppNavHost(
                     val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
                     val patients by guardianViewModel.patients.collectAsState()
                     val linkedUsers = patients.map { it.toLinkedUser() }
-                    val user = linkedUsers.find { it.id == userId } ?: linkedUsers.firstOrNull() ?: return@composable
+                    val user = linkedUsers.find { it.id == userId }
+                        ?: linkedUsers.firstOrNull()
+                        ?: return@composable
 
                     LocationRouteScreen(
                         user = user,
@@ -537,6 +543,7 @@ fun AppNavHost(
                         val noResultCount = patientStatuses.values.count {
                             it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NO_RESULT
                         }
+
                         val unviewedCount = patientStatuses.values.count {
                             it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NEW_RESULT
                         }
@@ -601,7 +608,9 @@ fun AppNavHost(
                         patients = patients,
                         isLoading = isLoadingPatients,
                         viewModel = guardianViewModel,
-                        onBack = { navController.popBackStack() }
+                        onBack = {
+                            navController.popBackStack()
+                        }
                     )
                 }
 
@@ -644,7 +653,9 @@ fun AppNavHost(
 
                     WithdrawVerifyScreen(
                         phone = phone,
-                        onBack = { navController.popBackStack() },
+                        onBack = {
+                            navController.popBackStack()
+                        },
                         onWithdrawn = {
                             navController.navigate(Routes.Login) {
                                 popUpTo(0) { inclusive = true }
@@ -728,8 +739,7 @@ fun AppNavHost(
                     val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
                     val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
 
-                    // 환자 목록이 준비되면 상태 조회 시작
-                    androidx.compose.runtime.LaunchedEffect(patients) {
+                    LaunchedEffect(patients) {
                         if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
                     }
 
