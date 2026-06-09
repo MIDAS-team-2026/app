@@ -46,7 +46,6 @@ import com.midas26.mobileapp.ui.theme.AppColor
 @Composable
 fun UserHomeScreen(
     userName: String = "홍길동",
-    weeklyScore: Int = 75,
     streakDays: Int = 4,
     weeklyChecks: List<Boolean> = List(7) { false },
     weeklyDayLabels: List<String> = listOf("일", "월", "화", "수", "목", "금", "토"),
@@ -129,7 +128,11 @@ private fun WeekStatusCard(
     ) {
         Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 16.dp)) {
             Text(
-                text = stringResource(R.string.home_streak, streakDays),
+                text = if (streakDays > 0) {
+                    stringResource(R.string.home_streak, streakDays)
+                } else {
+                    stringResource(R.string.home_streak_motivation)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = BrandWhite
@@ -173,76 +176,6 @@ private fun DayStatusDot(dayLabel: String, checked: Boolean, isToday: Boolean) {
                 if (checked) {
                     Text(text = "✓", color = BrandWhite, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ScoreCard(score: Int) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = BrandWhite,
-        shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                modifier = Modifier.size(72.dp),
-                shape = CircleShape,
-                color = AppColor.greenSurface
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = score.toString(),
-                            fontSize = 28.sp,
-                            color = AppColor.accentDark,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = stringResource(R.string.home_score_unit),
-                            fontSize = 14.sp,
-                            color = AppColor.greenSecondary
-                        )
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.size(16.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.home_week_score_label),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = AppColor.textPrimary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        shape = RoundedCornerShape(11.dp),
-                        color = AppColor.greenSurface
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_score_normal),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppColor.accentDark,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.home_score_diff),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = AppColor.textTertiary
-                )
             }
         }
     }

@@ -31,7 +31,9 @@ interface VoiceChatApiService {
     suspend fun uploadVoice(
         @Query("userId")    userId:    Int,
         @Query("sessionId") sessionId: Long,
-        @Part file: MultipartBody.Part
+        @Part file: MultipartBody.Part,
+        @Query("recallQuestionId") recallQuestionId: Long? = null,
+        @Query("answerRole") answerRole: String? = null
     ): Response<ApiResponse<VoiceUploadResponse>>
 
     /**
@@ -42,6 +44,11 @@ interface VoiceChatApiService {
     suspend fun pollReply(
         @Path("recordId") recordId: Long
     ): Response<ApiResponse<AiReplyResponse>>
+
+    @GET("api/voice/session/{sessionId}/records")
+    suspend fun getSessionRecords(
+        @Path("sessionId") sessionId: Long
+    ): Response<List<SessionRecordResponse>>
 
     /**
      * 세션 종료 + AI 분석 트리거.
@@ -63,4 +70,13 @@ data class VoiceUploadResponse(
 data class AiReplyResponse(
     val recordId: Long,
     val replyText: String?   // null = 아직 생성 중
+)
+
+data class SessionRecordResponse(
+    val recordId: Long,
+    val transcriptText: String?,
+    val audioFilePath: String?,
+    val answerRole: String?,
+    val recallQuestionId: Long?,
+    val parentRecordId: Long?
 )

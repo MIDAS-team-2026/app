@@ -60,6 +60,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     private var sessionId: Long    = -1L
     private var sessionEnded       = false
     private var voiceUploaded      = false
+    private var pendingRecallQuestionId: Long? = null
 
     fun hasUploadedVoice(): Boolean = voiceUploaded
 
@@ -147,7 +148,16 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                 runCatching {
                     val body = file.asRequestBody("audio/wav".toMediaType())
                     val part = MultipartBody.Part.createFormData("file", file.name, body)
-                    api.uploadVoice(userId, sessionId, part)
+                    val recallQuestionId = pendingRecallQuestionId
+                    val answerRole = if (recallQuestionId != null) "RECALL" else "INITIAL"
+
+                    api.uploadVoice(
+                        userId = userId,
+                        sessionId = sessionId,
+                        file = part,
+                        recallQuestionId = recallQuestionId,
+                        answerRole = answerRole
+                    )
                 }.onSuccess { resp ->
                     resp.body()?.data?.audioRecordId?.let {
                         recordId = it
@@ -176,11 +186,37 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                 .getOrNull()?.body()?.data?.replyText
 
             if (!replyText.isNullOrBlank()) {
+                refreshPendingRecallQuestion(recordId)
                 dispatchAiReply(replyText)
                 return
             }
         }
         dispatchAiReply("답변을 받아오지 못했어요. 잠시 후 다시 시도해주세요.")
+    }
+
+    private suspend fun refreshPendingRecallQuestion(recordId: Long) {
+        repeat(6) { attempt ->
+            val records = runCatching { api.getSessionRecords(sessionId) }
+                .getOrNull()
+                ?.body()
+                .orEmpty()
+
+            val current = records.firstOrNull { it.recordId == recordId }
+            val role = current?.answerRole?.uppercase()
+            val questionId = current?.recallQuestionId
+
+            if (role == "INITIAL" && questionId != null) {
+                pendingRecallQuestionId = questionId
+                return
+            }
+
+            if (role == "RECALL") {
+                pendingRecallQuestionId = null
+                return
+            }
+
+            if (attempt < 5) delay(500)
+        }
     }
 
     // ── AI 응답 수신 ──────────────────────────────────────────────────────────

@@ -187,6 +187,10 @@ public class AiAnalysisService {
     public int getStreakDays(Integer userId) {
         int streak = 0;
         LocalDate date = LocalDate.now();
+        if (!hasResultOn(userId, date)) {
+            // 오늘 점검을 아직 안 했어도 어제까지 이어진 연속 기록은 유지해서 보여준다
+            date = date.minusDays(1);
+        }
         while (true) {
             LocalDateTime start = date.atStartOfDay();
             LocalDateTime end   = start.plusDays(1);
@@ -197,6 +201,14 @@ public class AiAnalysisService {
             date = date.minusDays(1);
         }
         return streak;
+    }
+
+    private boolean hasResultOn(Integer userId, LocalDate date) {
+        LocalDateTime start = date.atStartOfDay();
+        LocalDateTime end = start.plusDays(1);
+        return !riskAnalysisRepository
+                .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end)
+                .isEmpty();
     }
 
     @Transactional(readOnly = true)

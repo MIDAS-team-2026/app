@@ -31,7 +31,7 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
     private val _patientStatuses = MutableStateFlow<Map<Int, PatientAnalysisStatus>>(emptyMap())
     val patientStatuses: StateFlow<Map<Int, PatientAnalysisStatus>> = _patientStatuses
 
-    /** 환자별 최신 finalRiskScore 0~100 (null = 데이터 없음) */
+    /** 환자별 오늘 인지 건강 점수 0~100 (null = 데이터 없음, 높을수록 양호) */
     private val _patientScores = MutableStateFlow<Map<Int, Int?>>(emptyMap())
     val patientScores: StateFlow<Map<Int, Int?>> = _patientScores
 
@@ -82,7 +82,8 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     if (data == null) {
                         PatientAnalysisStatus.NO_RESULT
                     } else {
-                        score = data.finalRiskScore?.let { (it * 100).toInt() }
+                        score = data.finalRiskScore
+                            ?.let { (100f - it).coerceIn(0f, 100f).toInt() }
                         if (prefs.hasViewedPatientResultToday(id)) PatientAnalysisStatus.VIEWED_TODAY
                         else PatientAnalysisStatus.NEW_RESULT
                     }
