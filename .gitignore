@@ -2,6 +2,7 @@
 .gradle
 /local.properties
 /.idea
+app/.idea/
 .DS_Store
 /build
 /captures
@@ -40,3 +41,6 @@ __pycache__/
 
 .venv/
 venv/
+
+# Local server logs
+backend/*.log
