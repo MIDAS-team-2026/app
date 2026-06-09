@@ -31,12 +31,19 @@ class AuthViewModel : ViewModel() {
     var pendingPassword: String = ""; private set
     var pendingName: String = ""; private set
     var pendingRole: String = ""; private set
+    var pendingBirth: String = ""; private set
+    var pendingCodeSent: Boolean = false; private set
+    var pendingCodeSentPhone: String = ""; private set
 
-    fun savePendingSignupData(phone: String, password: String, name: String, role: String) {
+    fun markCodeSent(phone: String) { pendingCodeSent = true; pendingCodeSentPhone = phone }
+    fun clearCodeSent() { pendingCodeSent = false; pendingCodeSentPhone = "" }
+
+    fun savePendingSignupData(phone: String, password: String, name: String, role: String, birth: String = "") {
         pendingPhone = phone
         pendingPassword = password
         pendingName = name
         pendingRole = role
+        pendingBirth = birth
     }
 
     fun signupFromPending() {

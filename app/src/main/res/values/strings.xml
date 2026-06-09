@@ -35,15 +35,19 @@
     <string name="hint_name">이름</string>
     <string name="hint_birth">생년월일 (YYYYMMDD)</string>
     <string name="hint_phone">전화번호</string>
+    <string name="hint_password_confirm">비밀번호 확인</string>
     <string name="btn_complete">완료</string>
-    <string name="signup_step_1_of_2">1 / 2단계</string>
-    <string name="signup_step_2_of_2">2 / 2단계</string>
+    <string name="signup_step_1_of_3">1 / 3단계</string>
+    <string name="signup_step_2_of_3">2 / 3단계</string>
+    <string name="signup_step_3_of_3">3 / 3단계</string>
     <string name="password_helper">영문, 숫자 포함 8자 이상</string>
 
     <!-- 전화번호 인증 -->
     <string name="phone_verify_title">전화번호 인증</string>
-    <string name="phone_verify_subtitle">%1$s 으로\n6자리 인증 코드를 보냈어요</string>
+    <string name="phone_verify_subtitle">%1$s 으로\n인증 코드를 전송할게요</string>
     <string name="phone_verify_hint">인증 코드 6자리 입력</string>
+    <string name="btn_send_code">인증코드 보내기</string>
+    <string name="phone_verify_sent">인증 코드를 전송했어요</string>
     <string name="btn_verify">인증 완료</string>
     <string name="phone_verify_resend">코드를 못 받으셨나요?</string>
     <string name="btn_resend">재전송하기</string>
@@ -54,6 +58,7 @@
     <string name="error_email_invalid">올바른 이메일 형식이 아니에요</string>
     <string name="error_password_short">비밀번호는 8자 이상이어야 해요</string>
     <string name="error_required">필수 입력 항목이에요</string>
+    <string name="error_password_mismatch">비밀번호가 일치하지 않아요</string>
     <string name="error_birth_format">YYYYMMDD 형식으로 입력해주세요</string>
 
     <!-- 권한 요청 -->

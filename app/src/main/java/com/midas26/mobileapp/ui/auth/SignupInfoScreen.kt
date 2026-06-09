@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -55,15 +56,17 @@ fun SignupInfoScreen(
 ) {
     val context = LocalContext.current
 
-    var name by remember { mutableStateOf("") }
-    var birth by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(viewModel.pendingName) }
+    var birth by remember { mutableStateOf(viewModel.pendingBirth) }
+    var phone by remember { mutableStateOf(viewModel.pendingPhone) }
+    var password by remember { mutableStateOf(viewModel.pendingPassword) }
 
     var nameError by remember { mutableStateOf<String?>(null) }
     var birthError by remember { mutableStateOf<String?>(null) }
     var phoneError by remember { mutableStateOf<String?>(null) }
+    var passwordConfirm by remember { mutableStateOf("") }
     var passwordError by remember { mutableStateOf<String?>(null) }
+    var passwordConfirmError by remember { mutableStateOf<String?>(null) }
     var serverError by remember { mutableStateOf<String?>(null) }
 
     val authState by viewModel.authState.collectAsState()
@@ -72,10 +75,7 @@ fun SignupInfoScreen(
     LaunchedEffect(authState) {
         when (authState) {
             is AuthState.PhoneChecked -> {
-                // 환자: 중복 없음 확인 + 인증코드 발송 완료 → 인증 화면으로
                 viewModel.resetState()
-                viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role)
-                onVerify(phone.trim())
             }
             is AuthState.Success -> {
                 // 보호자: 회원가입 완료 → 인증 화면(완료 화면)으로
@@ -100,6 +100,7 @@ fun SignupInfoScreen(
     val errorRequired = stringResource(R.string.error_required)
     val errorPhoneInvalid = stringResource(R.string.error_phone_invalid)
     val errorPasswordShort = stringResource(R.string.error_password_short)
+    val errorPasswordMismatch = stringResource(R.string.error_password_mismatch)
     val errorBirthFormat = stringResource(R.string.error_birth_format)
     val passwordHelper = stringResource(R.string.password_helper)
 
@@ -108,8 +109,24 @@ fun SignupInfoScreen(
         nameError = if (name.trim().isEmpty()) { ok = false; errorRequired } else null
         birthError = when {
             birth.isEmpty() -> { ok = false; errorRequired }
-            birth.length != 8 || birth.toLongOrNull() == null -> { ok = false; errorBirthFormat }
-            else -> null
+            birth.length != 8 || !birth.all { it.isDigit() } -> { ok = false; errorBirthFormat }
+            else -> {
+                val y = birth.substring(0, 4).toInt()
+                val m = birth.substring(4, 6).toInt()
+                val d = birth.substring(6, 8).toInt()
+                val valid = y in 1900..2026
+                    && m in 1..12
+                    && d in 1..31
+                    && birth.toLong() <= 20260609L
+                    && runCatching {
+                        java.util.Calendar.getInstance().apply {
+                            isLenient = false
+                            set(y, m - 1, d)
+                            time
+                        }
+                    }.isSuccess
+                if (!valid) { ok = false; errorBirthFormat } else null
+            }
         }
         phoneError = when {
             phone.trim().isEmpty() -> { ok = false; errorRequired }
@@ -119,6 +136,11 @@ fun SignupInfoScreen(
         passwordError = when {
             password.isEmpty() -> { ok = false; errorRequired }
             password.length < 8 -> { ok = false; errorPasswordShort }
+            else -> null
+        }
+        passwordConfirmError = when {
+            passwordConfirm.isEmpty() -> { ok = false; errorRequired }
+            passwordConfirm != password -> { ok = false; errorPasswordMismatch }
             else -> null
         }
         return ok
@@ -131,6 +153,7 @@ fun SignupInfoScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
             .verticalScroll(scrollState)
+            .imePadding()
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -164,12 +187,19 @@ fun SignupInfoScreen(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
+                    .padding(end = 6.dp)
                     .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .background(AppColor.divider, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.signup_step_2_of_2),
+            text = stringResource(R.string.signup_step_2_of_3),
             style = MaterialTheme.typography.labelMedium,
             color = AppColor.textTertiary
         )
@@ -185,7 +215,10 @@ fun SignupInfoScreen(
 
         AppOutlinedTextField(
             value = name,
-            onValueChange = { name = it; nameError = null; serverError = null },
+            onValueChange = { input ->
+                val maxLen = if (input.any { it in '가'..'힣' || it in '㄰'..'㆏' }) 7 else 15
+                if (input.length <= maxLen) { name = input; nameError = null; serverError = null }
+            },
             label = stringResource(R.string.hint_name),
             leadingIcon = Icons.Filled.Person,
             keyboardType = KeyboardType.Text,
@@ -214,13 +247,22 @@ fun SignupInfoScreen(
         )
         AppOutlinedTextField(
             value = password,
-            onValueChange = { password = it; passwordError = null; serverError = null },
+            onValueChange = { password = it; passwordError = null; passwordConfirmError = null; serverError = null },
             label = stringResource(R.string.hint_password),
             leadingIcon = Icons.Filled.Lock,
             isPassword = true,
-            imeAction = ImeAction.Done,
+            imeAction = ImeAction.Next,
             helperText = passwordHelper,
             errorText = passwordError
+        )
+        AppOutlinedTextField(
+            value = passwordConfirm,
+            onValueChange = { passwordConfirm = it; passwordConfirmError = null },
+            label = stringResource(R.string.hint_password_confirm),
+            leadingIcon = Icons.Filled.Lock,
+            isPassword = true,
+            imeAction = ImeAction.Done,
+            errorText = passwordConfirmError
         )
 
         if (serverError != null) {
@@ -243,12 +285,11 @@ fun SignupInfoScreen(
                 text = stringResource(R.string.btn_complete),
                 onClick = {
                     if (validate()) {
+                        viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role, birth.trim())
                         if (role == PrefsManager.ROLE_GUARDIAN) {
-                            // 보호자: 즉시 회원가입 API 호출
                             viewModel.signup(phone.trim(), password, name.trim(), role)
                         } else {
-                            // 환자: 중복 체크 + 인증코드 발송 → PhoneChecked 상태 되면 인증 화면으로
-                            viewModel.checkPhoneAndSendCode(phone.trim())
+                            onVerify(phone.trim())
                         }
                     }
                 }

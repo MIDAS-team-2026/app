@@ -132,14 +132,14 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                 // 2. 이름 검증
                 val serverName = patient.name?.trim() ?: ""
                 if (!serverName.equals(inputName.trim(), ignoreCase = true)) {
-                    onError("이름이 일치하지 않습니다."); return@launch
+                    onError("이름 또는 전화번호가 올바르지 않습니다."); return@launch
                 }
 
                 // 3. 전화번호 검증 (하이픈 제거 후 비교)
                 val serverPhone = patient.phone?.replace("-", "") ?: ""
                 val inputPhoneClean = inputPhone.replace("-", "")
                 if (serverPhone != inputPhoneClean) {
-                    onError("전화번호가 일치하지 않습니다."); return@launch
+                    onError("이름 또는 전화번호가 올바르지 않습니다."); return@launch
                 }
 
                 // 4. 연동 API 호출

@@ -345,8 +345,10 @@ fun AppNavHost(
 
                     PhoneVerificationScreen(
                         phone = phone,
+                        authViewModel = authViewModel,
                         onBack = { navController.popBackStack() },
                         onVerified = {
+                            authViewModel.clearCodeSent()
                             navController.navigate(Routes.privacy(signupRole)) {
                                 popUpTo(Routes.SignupRole) { inclusive = true }
                             }

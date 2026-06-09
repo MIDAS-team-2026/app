@@ -4,13 +4,12 @@ import android.app.Application
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,8 +20,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import kotlin.math.roundToInt
 
 /** 분석 항목 한 줄 (4개 카드 공용). */
@@ -33,15 +33,13 @@ data class AnalysisItem(
     val trendText: String,
     val trend: Trend
 ) {
-    enum class Trend { Up, Down, Steady }
+    enum class Trend { Steady }
 }
 
 /** 한 일자의 인지 건강 점수. 앱 표시 점수는 높을수록 양호하다. */
 data class DailyScore(val dayLabel: String, val score: Int, val date: String? = null)
 
 /** 그래프 탭. */
-enum class TrendRange { DAY, WEEK, MONTH }
-
 
 class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -174,11 +172,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     /** 최근 7일 요일 라벨 (index 0 = 6일 전, index 6 = 오늘) */
     val weeklyDayLabels: List<String>
         get() {
-            val today = LocalDate.now()
             val dayNames = listOf("일", "월", "화", "수", "목", "금", "토")
             return (6 downTo 0).map { daysAgo ->
-                val date = today.minusDays(daysAgo.toLong())
-                dayNames[date.dayOfWeek.value % 7]
+                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -daysAgo) }
+                dayNames[cal.get(Calendar.DAY_OF_WEEK) - 1]
             }
         }
 
@@ -196,26 +193,20 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     // ── 헤더 ──────────────────────────────────────────────────────────────────
 
-    val todayDateLabel: String
-        get() {
-            val raw = analyzedAt ?: return "분석 결과"
-            return try {
-                val date = LocalDate.parse(raw.substring(0, 10))
-                val today = LocalDate.now()
-                val prefix = if (date.year != today.year) "${date.year}년 " else ""
-                "${prefix}${date.monthValue}월 ${date.dayOfMonth}일 분석 결과"
-            } catch (e: Exception) {
-                "분석 결과"
-            }
-        }
-
     /** 오늘 데이터를 보고 있는지 여부 (선택 날짜가 없거나 오늘이면 true) */
     val isViewingToday: Boolean get() {
         val selDate = selectedDayScore?.date ?: return true
-        return try {
-            LocalDate.parse(selDate.substring(0, 10)) == LocalDate.now()
-        } catch (e: Exception) { true }
+        return parseDate(selDate.substring(0, 10))?.isSameDay(todayCal()) ?: true
     }
+
+    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private fun parseDate(s: String): Calendar? = runCatching {
+        Calendar.getInstance().also { it.time = dateFmt.parse(s)!! }
+    }.getOrNull()
+    private fun todayCal(): Calendar = Calendar.getInstance()
+    private fun Calendar.isSameDay(other: Calendar) =
+        get(Calendar.YEAR) == other.get(Calendar.YEAR) &&
+        get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
 
     private fun riskToHealthScore(score: Float?): Float? =
         score?.let { (100f - it).coerceIn(0f, 100f) }
@@ -266,27 +257,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             if (isViewingToday && hasTodayData) return "오늘의 분석 결과"
             val raw = selectedDayScore?.date ?: analyzedAt ?: return "분석 결과"
             return try {
-                val date = LocalDate.parse(raw.substring(0, 10))
-                val today = LocalDate.now()
-                val prefix = if (date.year != today.year) "${date.year}년 " else ""
-                "${prefix}${date.monthValue}월 ${date.dayOfMonth}일 분석 결과"
-            } catch (e: Exception) { "분석 결과" }
+                val date = parseDate(raw.substring(0, 10)) ?: return "분석 결과"
+                val today = todayCal()
+                val prefix = if (date.get(Calendar.YEAR) != today.get(Calendar.YEAR)) "${date.get(Calendar.YEAR)}년 " else ""
+                "${prefix}${date.get(Calendar.MONTH) + 1}월 ${date.get(Calendar.DAY_OF_MONTH)}일 분석 결과"
+            } catch (_: Exception) { "분석 결과" }
         }
 
-    /** 어제 대비 점수 변화 문구 — 주간 그래프 데이터 기반. */
-    val yesterdayCompareText: String
-        get() {
-            if (!isViewingToday) return ""
-            val points = graphPoints.filter { it.score > 0 }
-            val today = points.lastOrNull()?.score ?: return ""
-            val yesterday = points.getOrNull(points.size - 2)?.score ?: return ""
-            val delta = today - yesterday
-            return when {
-                delta > 0 -> "어제보다 ${delta}점 올랐어요"
-                delta < 0 -> "어제보다 ${-delta}점 내렸어요"
-                else      -> "어제와 같은 점수예요"
-            }
-        }
 
     // ── 4 카드 ─────────────────────────────────────────────────────────────────
 
@@ -331,13 +308,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     // ── 주간 그래프 ───────────────────────────────────────────────────────────
 
-    var graphRange by mutableStateOf(TrendRange.WEEK)
-        private set
-
     var graphPoints by mutableStateOf<List<DailyScore>>(emptyList())
         private set
 
-    var streakDays by mutableStateOf(0)
+    var streakDays by mutableIntStateOf(0)
         private set
 
     // 포인트 탭 시 선택된 날짜 상세
@@ -346,7 +320,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     var isDayLoading by mutableStateOf(false)
         private set
 
-    private val dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+    private val dateFmtVm = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private fun parseDateVm(s: String): Calendar? = runCatching {
+        Calendar.getInstance().also { it.time = dateFmtVm.parse(s)!! }
+    }.getOrNull()
 
     private suspend fun doLoadWeeklyScores() {
         val userId = resolveUserId()
@@ -354,12 +331,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         runCatching { api.getWeeklyScores(userId) }
             .onSuccess { resp ->
                 resp.body()?.data?.let { list ->
+                    val dayNames = listOf("일", "월", "화", "수", "목", "금", "토")
                     graphPoints = list.map { d ->
-                        val date = d.date?.let { LocalDate.parse(it) }
-                        val label = when (date?.dayOfWeek?.value) {
-                            1 -> "월"; 2 -> "화"; 3 -> "수"; 4 -> "목"
-                            5 -> "금"; 6 -> "토"; 7 -> "일"; else -> ""
-                        }
+                        val cal = d.date?.let { parseDateVm(it.take(10)) }
+                        val label = cal?.let { dayNames[it.get(Calendar.DAY_OF_WEEK) - 1] } ?: ""
                         DailyScore(
                             dayLabel = label,
                             score    = displayHealthScore(d.finalRiskScore),
@@ -428,16 +403,17 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     private fun formatDragLabel(dateStr: String): String {
         return try {
-            val d = LocalDate.parse(dateStr.take(10))
-            val today = LocalDate.now()
+            val d = parseDateVm(dateStr.take(10)) ?: return "분석 결과"
+            val today = Calendar.getInstance()
+            val y = d.get(Calendar.YEAR); val m = d.get(Calendar.MONTH) + 1; val day = d.get(Calendar.DAY_OF_MONTH)
             when {
-                d == today -> "오늘의 분석 결과"
-                d.year != today.year -> "${d.year}년 ${d.monthValue}월 ${d.dayOfMonth}일 분석 결과"
-                else -> "${d.monthValue}월 ${d.dayOfMonth}일 분석 결과"
+                d.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
+                d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
+                y != today.get(Calendar.YEAR) -> "${y}년 ${m}월 ${day}일 분석 결과"
+                else -> "${m}월 ${day}일 분석 결과"
             }
-        } catch (e: Exception) { "분석 결과" }
+        } catch (_: Exception) { "분석 결과" }
     }
 
-    fun selectRange(range: TrendRange) { graphRange = range }
 
 }
