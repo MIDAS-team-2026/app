@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
@@ -96,12 +97,23 @@ private fun UserHomeHeader(
                 .padding(horizontal = 24.dp)
                 .padding(top = 24.dp, bottom = 20.dp)
         ) {
-            Text(
-                text = "$userName ${stringResource(R.string.home_user_suffix)}",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Bold,
-                color = BrandWhite
-            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = userName,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandWhite,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Text(
+                    text = " ${stringResource(R.string.home_user_suffix)}",
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = BrandWhite
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             WeekStatusCard(
                 streakDays      = streakDays,
