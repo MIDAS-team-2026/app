@@ -25,6 +25,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -144,6 +145,7 @@ private fun AnalysisUserCard(
         ?.let { PrefsManager.from(context).getPatientRelation(it) }
         ?.ifEmpty { "사용자" }
         ?: "사용자"
+    val pillFontSize = with(LocalDensity.current) { 14.dp.toSp() }
 
     Surface(
         modifier = Modifier
@@ -176,15 +178,17 @@ private fun AnalysisUserCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = AppColor.guardianSurface
+                        shape = RoundedCornerShape(999.dp),
+                        color = AppColor.guardianSurface,
+                        modifier = Modifier.wrapContentHeight()
                     ) {
                         Text(
                             text = relation,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold,
+                            fontSize = pillFontSize,
+                            lineHeight = pillFontSize,
+                            fontWeight = FontWeight.Medium,
                             color = AppColor.guardianDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
                 }

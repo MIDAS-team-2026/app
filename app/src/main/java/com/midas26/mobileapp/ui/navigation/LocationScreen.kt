@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -196,6 +197,7 @@ private fun UserLocationCard(
     val relation =
         if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" }
         else "사용자"
+    val pillFontSize = with(LocalDensity.current) { 14.dp.toSp() }
 
     var locationText by remember { mutableStateOf("위치 불러오는 중...") }
     var timeAgoText by remember { mutableStateOf("") }
@@ -263,16 +265,19 @@ private fun UserLocationCard(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = AppColor.guardianSurface
+                        shape = RoundedCornerShape(999.dp),
+                        color = AppColor.guardianSurface,
+                        modifier = Modifier.wrapContentHeight()
                     ) {
                         Text(
                             text = relation,
-                            fontWeight = FontWeight.SemiBold,
+                            fontSize = pillFontSize,
+                            lineHeight = pillFontSize,
+                            fontWeight = FontWeight.Medium,
                             color = AppColor.guardianDark,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
                         )
                     }
                 }

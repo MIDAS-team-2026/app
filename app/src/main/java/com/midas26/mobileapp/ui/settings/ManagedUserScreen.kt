@@ -21,16 +21,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,8 +53,18 @@ fun ManagedUserScreen(
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
 
+    // 관계를 즉시 반영하기 위해 로컬 상태로 관리
+    val relationMap = remember(patients) {
+        mutableStateMapOf<Int, String>().also { map ->
+            patients.forEach { p ->
+                p.userId?.let { id -> map[id] = prefs.getPatientRelation(id) }
+            }
+        }
+    }
+
     var showAddDialog by remember { mutableStateOf(false) }
     var showUnlinkDialog by remember { mutableStateOf<LinkedUserInfo?>(null) }
+    var showDetailDialog by remember { mutableStateOf<LinkedUserInfo?>(null) }
     var addError by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -84,11 +97,12 @@ fun ManagedUserScreen(
                 }
                 else -> {
                     patients.forEach { patient ->
-                        val relation = patient.userId?.let { prefs.getPatientRelation(it) } ?: ""
+                        val relation = patient.userId?.let { relationMap[it] } ?: ""
                         ManagedUserItem(
                             patient = patient,
                             relation = relation,
-                            onUnlink = { showUnlinkDialog = patient }
+                            onUnlink = { showUnlinkDialog = patient },
+                            onClick = { showDetailDialog = patient }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                     }
@@ -101,6 +115,22 @@ fun ManagedUserScreen(
 
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // 상세 정보 다이얼로그
+    showDetailDialog?.let { patient ->
+        PatientDetailDialog(
+            patient = patient,
+            initialRelation = patient.userId?.let { relationMap[it] } ?: "",
+            onDismiss = { showDetailDialog = null },
+            onSave = { newRelation ->
+                patient.userId?.let { id ->
+                    prefs.savePatientRelation(id, newRelation.trim())
+                    relationMap[id] = newRelation.trim()
+                }
+                showDetailDialog = null
+            }
+        )
     }
 
     // 사용자 추가 다이얼로그
@@ -195,14 +225,16 @@ private fun ManagedUserTopBar(title: String, onBack: () -> Unit) {
 private fun ManagedUserItem(
     patient: LinkedUserInfo,
     relation: String,
-    onUnlink: () -> Unit
+    onUnlink: () -> Unit,
+    onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = BrandWhite,
         shadowElevation = AppColor.cardShadowElevation,
-        border = AppColor.cardBorder
+        border = AppColor.cardBorder,
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 22.dp),
@@ -247,7 +279,7 @@ private fun ManagedUserItem(
             ) {
                 TextButton(onClick = onUnlink) {
                     Text(
-                        text = "해제",
+                        text = "연결 해제",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = AppColor.errorPrimary
@@ -256,6 +288,81 @@ private fun ManagedUserItem(
             }
         }
     }
+}
+
+@Composable
+private fun PatientDetailDialog(
+    patient: LinkedUserInfo,
+    initialRelation: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var relation by remember { mutableStateOf(initialRelation) }
+
+    val disabledColors = OutlinedTextFieldDefaults.colors(
+        disabledTextColor = AppColor.textPrimary,
+        disabledBorderColor = AppColor.divider,
+        disabledLabelColor = AppColor.textTertiary,
+        disabledContainerColor = Color.Transparent
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("사용자 상세 정보", fontWeight = FontWeight.Bold, color = AppColor.textPrimary)
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = patient.name ?: "",
+                    onValueChange = {},
+                    label = { Text("이름") },
+                    enabled = false,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = disabledColors
+                )
+                OutlinedTextField(
+                    value = patient.phone ?: "",
+                    onValueChange = {},
+                    label = { Text("전화번호") },
+                    enabled = false,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = disabledColors
+                )
+                OutlinedTextField(
+                    value = patient.patientCode ?: "",
+                    onValueChange = {},
+                    label = { Text("사용자 코드") },
+                    enabled = false,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = disabledColors
+                )
+                OutlinedTextField(
+                    value = relation,
+                    onValueChange = { relation = it },
+                    label = { Text("관계 (수정 가능)") },
+                    placeholder = { Text("예: 부, 모, 조부") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(relation) }) {
+                Text("저장", color = AppColor.guardianPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("취소", color = AppColor.textTertiary)
+            }
+        },
+        containerColor = BrandWhite,
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @Composable

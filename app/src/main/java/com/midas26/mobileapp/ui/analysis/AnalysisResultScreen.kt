@@ -264,6 +264,7 @@ private fun UserAnalysisResultContent(
                     text = viewModel.displayDateLabel,
                     style = MaterialTheme.typography.bodyLarge,
                     color = BrandWhite.copy(alpha = 0.92f),
+                    fontWeight = if (isDragging) FontWeight.ExtraBold else FontWeight.Normal,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(start = 24.dp, bottom = (28 + 16 + 56 * fontScale).dp)
@@ -575,7 +576,7 @@ private fun WeeklyLineChart(
             )
 
             for (i in points.indices) {
-                val fraction = (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f)
+                val fraction = if (i == highlightIndex) (1f - abs(i - animatedHighlight)).coerceIn(0f, 1f) else 0f
 
                 val dotColor = if (hasData[i]) {
                     if (fraction > 0.5f) colorGreenSecondary else colorAccentDark
