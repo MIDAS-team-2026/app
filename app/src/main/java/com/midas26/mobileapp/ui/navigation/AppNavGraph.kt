@@ -414,7 +414,6 @@ fun AppNavHost(
                 composable(Routes.UserHome) {
                     UserHomeScreen(
                         userName = PrefsManager.from(context).getUserName(),
-                        weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                         streakDays = analysisViewModel.streakDays,
                         weeklyChecks = analysisViewModel.weeklyChecks,
                         weeklyDayLabels = analysisViewModel.weeklyDayLabels,

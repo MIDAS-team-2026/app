@@ -36,7 +36,7 @@ data class AnalysisItem(
     enum class Trend { Up, Down, Steady }
 }
 
-/** 한 일자의 인지 점수. */
+/** 한 일자의 인지 건강 점수. 앱 표시 점수는 높을수록 양호하다. */
 data class DailyScore(val dayLabel: String, val score: Int, val date: String? = null)
 
 /** 그래프 탭. */
@@ -217,11 +217,16 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         } catch (e: Exception) { true }
     }
 
-    /** 헤더에 표시할 종합 점수 */
+    private fun riskToHealthScore(score: Float?): Float? =
+        score?.let { (100f - it).coerceIn(0f, 100f) }
+
+    private fun displayHealthScore(score: Float?): Int =
+        riskToHealthScore(score)?.roundToInt() ?: 0
+
+    /** 헤더에 표시할 종합 점수. 서버 finalRiskScore는 위험도라 앱에서는 건강 점수로 변환한다. */
     val displayScore: Int get() = selectedDayScore
-        ?.finalRiskScore?.let { it.roundToInt() }
-        ?: finalRiskScore?.let { it.roundToInt() }
-        ?: 0
+        ?.finalRiskScore?.let { displayHealthScore(it) }
+        ?: displayHealthScore(finalRiskScore)
 
     /** 헤더 배지 — 위험 등급 */
     val displayRiskLevel: String get() = selectedDayScore?.riskLevel ?: riskLevel ?: "─"
@@ -289,7 +294,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         get() {
             val sel = selectedDayScore
             val dRisk    = sel?.riskLevel    ?: riskLevel
-            val dSpeech  = sel?.speechScore  ?: speechScore
+            val dSpeech  = riskToHealthScore(sel?.speechScore ?: speechScore)
             val dRecall  = sel?.recallScore  ?: recallScore
             val dText    = sel?.textScore    ?: textScore
             return listOf(
@@ -357,7 +362,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                         }
                         DailyScore(
                             dayLabel = label,
-                            score    = d.finalRiskScore?.let { it.roundToInt() } ?: 0,
+                            score    = displayHealthScore(d.finalRiskScore),
                             date     = d.date
                         )
                     }
