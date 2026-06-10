@@ -74,6 +74,16 @@ SAFE_OPENING_QUESTIONS = [
 ]
 
 
+AFTER_RECALL_OPENING_QUESTIONS = [
+    "이어서 오늘 드신 것 중에 생각나는 음식이 있으세요?",
+    "이번에는 오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
+    "이어서 오늘 만났거나 연락한 사람이 있으세요?",
+    "이번에는 최근에 본 방송이나 들은 노래 이야기도 해볼까요?",
+    "이어서 오늘 밖이나 창밖에서 본 것이 있으세요?",
+    "이번에는 손에 잡았던 물건이나 하셨던 일이 있으세요?",
+]
+
+
 SAFE_STAGE_FALLBACK_QUESTIONS = {
     "DEEPEN": [
         "조금 더 말해주시면, 그때는 어디에 계셨어요?",
@@ -98,6 +108,12 @@ TOPIC_CHANGE_ACKNOWLEDGEMENTS = [
     "아하, 그렇군요.",
     "그러셨군요.",
     "음, 그렇군요.",
+]
+
+
+RECALL_TRANSITION_ACKNOWLEDGEMENTS = [
+    "아하, 그렇군요.",
+    "그러셨군요.",
 ]
 
 
@@ -390,6 +406,36 @@ def _with_topic_change_acknowledgement(
     return f"{acknowledgement} {question}"
 
 
+def _get_latest_record(session_records: list[dict] | None) -> dict | None:
+    records = [record for record in session_records or [] if record.get("recordId")]
+
+    if not records:
+        return None
+
+    return max(
+        records,
+        key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
+    )
+
+
+def _is_after_recall_answer(session_records: list[dict] | None) -> bool:
+    latest_record = _get_latest_record(session_records)
+
+    if not latest_record:
+        return False
+
+    return str(latest_record.get("answerRole") or "").upper() == "RECALL"
+
+
+def _with_recall_transition_acknowledgement(
+    question: str,
+    session_records: list[dict] | None,
+) -> str:
+    index = len(session_records or []) % len(RECALL_TRANSITION_ACKNOWLEDGEMENTS)
+    acknowledgement = RECALL_TRANSITION_ACKNOWLEDGEMENTS[index]
+    return f"{acknowledgement} {question}"
+
+
 def _get_next_normal_question(
     candidate_count: int,
     session_records: list[dict] | None = None,
@@ -403,14 +449,26 @@ def _get_next_normal_question(
     cycle_texts = _get_cycle_transcripts(session_records)
 
     if candidate_count <= 0:
+        after_recall_answer = _is_after_recall_answer(session_records)
+        opening_candidates = (
+            AFTER_RECALL_OPENING_QUESTIONS
+            if after_recall_answer
+            else _get_topic_openers()
+        )
         opener_question = _pick_non_repeated_question(
-            candidates=_get_topic_openers(),
+            candidates=opening_candidates,
             used_questions=used_questions,
             previous_questions=recent_context,
             start_index=cycle_index,
         )
 
         if opener_question:
+            if after_recall_answer:
+                return _with_recall_transition_acknowledgement(
+                    opener_question,
+                    session_records,
+                )
+
             return opener_question
 
     stage = "DEEPEN" if candidate_count == 1 else "ANCHOR"

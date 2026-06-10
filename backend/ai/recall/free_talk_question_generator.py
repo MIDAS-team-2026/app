@@ -229,6 +229,46 @@ def _shares_topic_group(text: str, previous_text: str) -> bool:
     return False
 
 
+def _meaningful_words(text: str) -> set[str]:
+    normalized = normalize_question_for_similarity(text)
+    return {
+        word
+        for word in normalized.split()
+        if len(word) >= 2 and word not in QUESTION_STOPWORDS
+    }
+
+
+def is_question_grounded_in_history(
+    question: str,
+    conversation_history: List[str],
+) -> bool:
+    question = clean_text(question)
+    history = [clean_text(text) for text in conversation_history if clean_text(text)]
+
+    if not question or not history:
+        return True
+
+    joined_history = " ".join(history)
+
+    if _shares_topic_group(question, joined_history):
+        return True
+
+    question_words = _meaningful_words(question)
+    history_words = _meaningful_words(joined_history)
+
+    if question_words & history_words:
+        return True
+
+    anchored_followup_phrases = [
+        "그때",
+        "그 이야기",
+        "방금",
+        "조금 더",
+    ]
+
+    return any(phrase in question for phrase in anchored_followup_phrases)
+
+
 def _format_history(conversation_history: List[str]) -> str:
     lines = []
 
@@ -315,6 +355,9 @@ def is_weak_free_talk_answer(text: str) -> bool:
         "딱히",
         "그냥",
         "기억 안",
+        "라니까",
+        "말했",
+        "했잖",
     ]
 
     return any(phrase in text for phrase in weak_phrases)
@@ -510,6 +553,17 @@ def generate_safe_followup_question(
             question,
             conversation_history,
         )
+
+        if (
+            stage in {"DEEPEN", "ANCHOR"}
+            and not should_change_topic
+            and not is_question_grounded_in_history(question, conversation_history)
+        ):
+            return {
+                "nextQuestion": fallback_question,
+                "shouldChangeTopic": False,
+                "reason": "ungrounded_question",
+            }
 
         if is_safe_followup_question(question):
             return {
