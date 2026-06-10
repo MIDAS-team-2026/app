@@ -13,6 +13,10 @@ import logging
 import os
 import requests
 
+from recall.free_talk_question_generator import (
+    generate_safe_followup_question,
+    is_similar_to_previous_question,
+)
 from recall.conversation_recall_generator import generate_and_save_recall_question
 from recall.recall_api_client import analyze_session_recall
 
@@ -54,19 +58,46 @@ FIXED_QUESTIONS = [
 ]
 
 
-NORMAL_FOLLOW_UP_QUESTIONS = [
-    "오늘은 어떤 하루 보내셨어요?",
-    "오늘 식사는 어떻게 하셨어요?",
-    "오늘 어디 다녀오신 곳 있으세요?",
-    "오늘 누구와 이야기 나누셨어요?",
-    "요즘 기억에 남는 일이 있으세요?",
-    "오늘 기분은 어떠셨어요?",
-    "오늘 가장 편안했던 순간이 있으셨어요?",
-    "요즘 자주 떠오르는 사람이 있으세요?",
-    "최근에 드시고 싶었던 음식이 있으세요?",
-    "오늘 집에서 주로 무엇을 하셨어요?",
-    "요즘 즐겨 보시는 방송이나 노래가 있으세요?",
-    "오늘 밖이나 창밖에서 기억나는 풍경이 있으세요?",
+SAFE_OPENING_QUESTIONS = [
+    "요즘 제일 보고 싶은 사람은 누구세요?",
+    "오늘 드신 것 중에 기억나는 음식이 있으세요?",
+    "오늘 집 밖에 다녀오신 곳이 있으세요?",
+    "오늘 집에서는 주로 어떻게 시간을 보내셨어요?",
+    "최근에 본 방송이나 들은 노래 중 기억나는 게 있으세요?",
+    "요즘 동네에서 자주 보이는 풍경이 있으세요?",
+    "최근에 손에 자주 잡는 물건이 있으세요?",
+    "요즘 날씨를 보면 떠오르는 일이 있으세요?",
+    "예전에 자주 하시던 일 중에 요즘 생각나는 게 있으세요?",
+    "최근에 시장이나 마트 이야기가 떠오른 적 있으세요?",
+    "집 안에서 가장 오래 머무는 자리가 어디세요?",
+    "요즘 하루 중 기다려지는 시간이 있으세요?",
+]
+
+
+SAFE_STAGE_FALLBACK_QUESTIONS = {
+    "DEEPEN": [
+        "조금 더 말해주시면, 그때는 어디에 계셨어요?",
+        "그때 혼자 계셨어요, 아니면 누군가와 같이 계셨어요?",
+        "그때 모습 중에 제일 먼저 떠오르는 게 있으세요?",
+        "그때가 하루 중 언제쯤이었는지 기억나세요?",
+        "그때 주변에 보였던 것이 하나라도 떠오르세요?",
+        "그 이야기를 하다 보니 또 생각나는 게 있으세요?",
+    ],
+    "ANCHOR": [
+        "나중에 다시 떠올릴 만한 장면이 하나 있으세요?",
+        "그때 함께 있던 사람이나 장소가 기억나세요?",
+        "그때 가장 먼저 생각나는 모습이 있으세요?",
+        "방금 이야기한 걸 한 가지 장면으로 말하면 어떤 모습일까요?",
+        "그때 계셨던 곳 주변에 뭐가 있었나요?",
+        "나중에 다시 이야기한다면 어떤 말로 떠올리면 좋을까요?",
+    ],
+}
+
+
+TOPIC_CHANGE_ACKNOWLEDGEMENTS = [
+    "아하, 그렇군요.",
+    "그러셨군요.",
+    "음, 그렇군요.",
 ]
 
 
@@ -265,13 +296,213 @@ def _count_completed_recall_answers(session_records: list[dict] | None) -> int:
     )
 
 
+def _normalize_text(text: str) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _get_recent_ai_replies(session_records: list[dict] | None) -> set[str]:
+    replies = set()
+
+    for record in session_records or []:
+        reply_text = _normalize_text(record.get("aiReplyText") or "")
+
+        if reply_text:
+            replies.add(reply_text)
+
+    return replies
+
+
+def _get_recent_ai_reply_list(session_records: list[dict] | None) -> list[str]:
+    replies = []
+
+    for record in session_records or []:
+        reply_text = _normalize_text(record.get("aiReplyText") or "")
+
+        if reply_text:
+            replies.append(reply_text)
+
+    return replies
+
+
+def _get_recent_transcript_list(
+    session_records: list[dict] | None,
+    limit: int = 8,
+) -> list[str]:
+    transcripts = []
+
+    for record in session_records or []:
+        transcript_text = _normalize_text(record.get("transcriptText") or "")
+
+        if transcript_text:
+            transcripts.append(transcript_text)
+
+    return transcripts[-limit:]
+
+
+def _get_cycle_transcripts(session_records: list[dict] | None) -> list[str]:
+    if not session_records:
+        return []
+
+    return _extract_recall_candidate_transcripts(session_records)
+
+
+def _get_topic_openers() -> list[str]:
+    return SAFE_OPENING_QUESTIONS
+
+
+def _pick_non_repeated_question(
+    candidates: list[str],
+    used_questions: set[str],
+    previous_questions: list[str] | None,
+    start_index: int,
+) -> str | None:
+    if not candidates:
+        return None
+
+    previous_questions = previous_questions or []
+
+    for offset in range(len(candidates)):
+        question = candidates[(start_index + offset) % len(candidates)]
+
+        if _normalize_text(question) in used_questions:
+            continue
+
+        if is_similar_to_previous_question(question, previous_questions):
+            continue
+
+        return question
+
+    for offset in range(len(candidates)):
+        question = candidates[(start_index + offset) % len(candidates)]
+
+        if _normalize_text(question) not in used_questions:
+            return question
+
+    return None
+
+
+def _with_topic_change_acknowledgement(
+    question: str,
+    session_records: list[dict] | None,
+) -> str:
+    index = len(session_records or []) % len(TOPIC_CHANGE_ACKNOWLEDGEMENTS)
+    acknowledgement = TOPIC_CHANGE_ACKNOWLEDGEMENTS[index]
+    return f"{acknowledgement} {question}"
+
+
 def _get_next_normal_question(
     candidate_count: int,
     session_records: list[dict] | None = None,
+    latest_text: str = "",
 ) -> str:
     cycle_index = _count_completed_recall_answers(session_records)
-    question_index = (cycle_index * 3 + candidate_count) % len(NORMAL_FOLLOW_UP_QUESTIONS)
-    return NORMAL_FOLLOW_UP_QUESTIONS[question_index]
+    question_index = cycle_index + candidate_count
+    used_questions = _get_recent_ai_replies(session_records)
+    previous_questions = _get_recent_ai_reply_list(session_records)
+    recent_context = previous_questions + _get_recent_transcript_list(session_records)
+    cycle_texts = _get_cycle_transcripts(session_records)
+
+    if candidate_count <= 0:
+        opener_question = _pick_non_repeated_question(
+            candidates=_get_topic_openers(),
+            used_questions=used_questions,
+            previous_questions=recent_context,
+            start_index=cycle_index,
+        )
+
+        if opener_question:
+            return opener_question
+
+    stage = "DEEPEN" if candidate_count == 1 else "ANCHOR"
+    fallback_question = _pick_non_repeated_question(
+        candidates=SAFE_STAGE_FALLBACK_QUESTIONS[stage],
+        used_questions=used_questions,
+        previous_questions=recent_context,
+        start_index=question_index,
+    )
+
+    if fallback_question:
+        generated_question = generate_safe_followup_question(
+            conversation_history=cycle_texts + [latest_text],
+            stage=stage,
+            fallback_question=fallback_question,
+            previous_questions=recent_context,
+        )
+
+        if generated_question.get("shouldChangeTopic"):
+            opener_question = _pick_non_repeated_question(
+                candidates=_get_topic_openers(),
+                used_questions=used_questions,
+                previous_questions=recent_context,
+                start_index=cycle_index + 1,
+            )
+
+            if opener_question:
+                return _with_topic_change_acknowledgement(
+                    opener_question,
+                    session_records,
+                )
+
+        return generated_question["nextQuestion"]
+
+    opener_question = _pick_non_repeated_question(
+        candidates=_get_topic_openers(),
+        used_questions=used_questions,
+        previous_questions=recent_context,
+        start_index=question_index,
+    )
+
+    if opener_question:
+        return opener_question
+
+    return _get_topic_openers()[question_index % len(_get_topic_openers())]
+
+
+def _get_current_transcript(
+    session_records: list[dict],
+    current_record_id: int,
+    fallback_text: str = "",
+) -> str:
+    for record in session_records:
+        if record.get("recordId") == current_record_id:
+            return record.get("transcriptText") or fallback_text
+
+    return fallback_text
+
+
+def _with_current_answer_role(
+    session_records: list[dict],
+    current_record_id: int,
+    answer_role: str,
+    recall_question_id: int | None = None,
+) -> list[dict]:
+    updated_records = []
+    found_current_record = False
+
+    for record in session_records:
+        updated_record = dict(record)
+
+        if updated_record.get("recordId") == current_record_id:
+            updated_record["answerRole"] = answer_role
+            found_current_record = True
+
+            if recall_question_id is not None:
+                updated_record["recallQuestionId"] = recall_question_id
+
+        updated_records.append(updated_record)
+
+    if not found_current_record:
+        updated_records.append(
+            {
+                "recordId": current_record_id,
+                "transcriptText": "",
+                "answerRole": answer_role,
+                "recallQuestionId": recall_question_id,
+                "parentRecordId": None,
+            }
+        )
+
+    return updated_records
 
 
 def _find_pending_recall_question_id(
@@ -389,9 +620,24 @@ def process_voice_reply(
                 except Exception as e:
                     logger.warning("실시간 회상 분석 건너뜀: %s", e)
 
+            records_after_recall = _with_current_answer_role(
+                session_records=session_records,
+                current_record_id=record_id,
+                answer_role="RECALL",
+                recall_question_id=pending_recall_question_id,
+            )
+
             _save_ai_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(0, session_records),
+                reply_text=_get_next_normal_question(
+                    0,
+                    records_after_recall,
+                    latest_text=_get_current_transcript(
+                        records_after_recall,
+                        record_id,
+                        transcript_text,
+                    ),
+                ),
             )
             return
 
@@ -430,7 +676,7 @@ def process_voice_reply(
 
             _save_ai_reply(
                 record_id=record_id,
-                reply_text="오늘은 어떤 하루 보내셨어요?",
+                reply_text=_get_next_normal_question(0, session_records),
             )
             return
 
@@ -445,7 +691,15 @@ def process_voice_reply(
         if len(transcripts) < 3:
             _save_ai_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(len(transcripts), updated_records),
+                reply_text=_get_next_normal_question(
+                    len(transcripts),
+                    updated_records,
+                    latest_text=_get_current_transcript(
+                        updated_records,
+                        record_id,
+                        transcript_text,
+                    ),
+                ),
             )
             logger.info("자유대화 후보 부족: count=%s. 일반 질문 제공.", len(transcripts))
             return
@@ -463,7 +717,15 @@ def process_voice_reply(
         if result.get("status") != "CREATED" or not reply_text:
             _save_ai_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(len(transcripts), updated_records),
+                reply_text=_get_next_normal_question(
+                    len(transcripts),
+                    updated_records,
+                    latest_text=_get_current_transcript(
+                        updated_records,
+                        record_id,
+                        transcript_text,
+                    ),
+                ),
             )
             logger.info("회상 질문 생성 실패 또는 SKIPPED. 일반 질문으로 대체: %s", result.get("reason"))
             return
