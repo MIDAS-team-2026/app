@@ -33,6 +33,9 @@ private/
 # Claude Code 내부 데이터 (worktree, 세션 등)
 .claude/
 
+# Understand-Anything 분석 데이터 (로컬 전용)
+.understand-anything/
+
 # Python 캐시
 __pycache__/
 *.pyc
