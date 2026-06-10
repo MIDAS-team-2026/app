@@ -14,6 +14,8 @@ BASE_URL = "http://localhost:8080"
 
 PLACEHOLDER_EXPECTED_ANSWERS = {
     "USER_NAME",
+    "SPOUSE_NAME",
+    "HOMETOWN",
     "BIRTH_DATE",
     "FAMILY_NAME",
     "TODAY_WEEKDAY",
@@ -330,6 +332,18 @@ def calculate_initial_fixed_score(
     return clamp_score(sum(scores) / len(scores))
 
 
+def get_recall_scoring_text(
+    question: dict,
+    initial_record: dict,
+) -> str:
+    expected_answer = clean_text(question.get("expectedAnswer") or "")
+
+    if expected_answer and expected_answer not in PLACEHOLDER_EXPECTED_ANSWERS:
+        return expected_answer
+
+    return initial_record.get("transcriptText") or ""
+
+
 def combine_text_score(
     initial_fixed_score: Optional[float],
     recall_score: Optional[float],
@@ -420,7 +434,10 @@ def analyze_session_recall(
     for question_id, initial_record, recall_record in pairs:
         question = questions.get(question_id, {})
 
-        past_text = initial_record.get("transcriptText") or ""
+        past_text = get_recall_scoring_text(
+            question=question,
+            initial_record=initial_record,
+        )
         current_text = recall_record.get("transcriptText") or ""
 
         keywords = question.get("keywords") or []

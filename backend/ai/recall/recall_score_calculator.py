@@ -7,6 +7,79 @@ from sentence_transformers import SentenceTransformer, util
 embedding_model = SentenceTransformer("jhgan/ko-sroberta-multitask")
 
 
+KEYWORD_STOPWORDS = {
+    "오늘",
+    "어제",
+    "그냥",
+    "정도",
+    "있어요",
+    "했어요",
+    "합니다",
+    "그리고",
+    "그래서",
+    "저는",
+    "제가",
+}
+
+
+KOREAN_PARTICLE_SUFFIXES = [
+    "에서는",
+    "에게는",
+    "으로는",
+    "하고는",
+    "이랑",
+    "랑",
+    "에서",
+    "에게",
+    "으로",
+    "로",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "에",
+    "와",
+    "과",
+    "도",
+    "만",
+]
+
+
+KOREAN_VERB_SUFFIXES = [
+    "었습니다",
+    "았습니다",
+    "습니다",
+    "했어요",
+    "했어",
+    "었어요",
+    "았어요",
+    "었어",
+    "았어",
+    "었다",
+    "았다",
+    "어요",
+    "아요",
+    "해요",
+    "음",
+    "요",
+]
+
+
+SHORT_ACTION_KEYWORDS = {
+    "먹",
+    "마시",
+    "가",
+    "갔",
+    "오",
+    "왔",
+    "봄",
+    "봐",
+    "했",
+}
+
+
 def clean_text(text: str) -> str:
     text = str(text)
     text = re.sub(r"[^가-힣a-zA-Z0-9\s]", "", text)
@@ -16,6 +89,77 @@ def clean_text(text: str) -> str:
 
 def clamp_score(score: float) -> float:
     return round(max(0.0, min(float(score), 100.0)), 2)
+
+
+def normalize_keyword_token(token: str) -> str:
+    token = clean_text(token)
+
+    for suffix in KOREAN_PARTICLE_SUFFIXES:
+        if len(token) > len(suffix) + 1 and token.endswith(suffix):
+            token = token[: -len(suffix)]
+            break
+
+    for suffix in KOREAN_VERB_SUFFIXES:
+        if len(token) > len(suffix) and token.endswith(suffix):
+            token = token[: -len(suffix)]
+            break
+
+    return token
+
+
+def extract_keywords_from_text(
+    text: str,
+    max_keywords: int = 5,
+) -> List[str]:
+    text = clean_text(text)
+
+    if not text:
+        return []
+
+    keywords = []
+    seen = set()
+
+    for token in text.split():
+        keyword = normalize_keyword_token(token)
+
+        if len(keyword) < 2 and keyword not in SHORT_ACTION_KEYWORDS:
+            continue
+
+        if keyword in KEYWORD_STOPWORDS:
+            continue
+
+        if keyword in seen:
+            continue
+
+        seen.add(keyword)
+        keywords.append(keyword)
+
+        if len(keywords) >= max_keywords:
+            break
+
+    return keywords
+
+
+def is_keyword_matched(
+    keyword: str,
+    current_text: str,
+) -> bool:
+    keyword = clean_text(keyword)
+    current_text = clean_text(current_text)
+
+    if not keyword or not current_text:
+        return False
+
+    if keyword in current_text:
+        return True
+
+    normalized_keyword = normalize_keyword_token(keyword)
+    normalized_current_tokens = [
+        normalize_keyword_token(token)
+        for token in current_text.split()
+    ]
+
+    return normalized_keyword in normalized_current_tokens
 
 
 def get_recall_weights(question_type: str) -> Tuple[float, float]:
@@ -85,7 +229,7 @@ def calculate_keyword_score(
     matched = 0
 
     for keyword in cleaned_keywords:
-        if keyword in current_text:
+        if is_keyword_matched(keyword, current_text):
             matched += 1
 
     return clamp_score((matched / len(cleaned_keywords)) * 100)
@@ -97,6 +241,9 @@ def calculate_final_recall_score(
     keywords: Optional[List[str]] = None,
     question_type: str = "DEFAULT",
 ) -> dict:
+    if not keywords:
+        keywords = extract_keywords_from_text(past_text)
+
     similarity_score = calculate_similarity_score(
         past_text=past_text,
         current_text=current_text,
@@ -128,6 +275,7 @@ def calculate_final_recall_score(
         "similarityScore": clamp_score(similarity_score),
         "keywordScore": clamp_score(keyword_score),
         "finalRecallScore": final_recall_score,
+        "usedKeywords": keywords or [],
 
         # 민정님 커밋 기준:
         # textScore는 회상 파트의 의미 유사도 점수(similarityScore)로 저장한다.

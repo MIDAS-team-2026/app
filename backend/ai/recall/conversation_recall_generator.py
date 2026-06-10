@@ -32,6 +32,52 @@ FORBIDDEN_RECALL_KEYWORDS = [
 ]
 
 
+WEAK_MEMORY_PHRASES = [
+    "응",
+    "네",
+    "아니",
+    "몰라",
+    "모르겠",
+    "기억 안",
+    "기억이 안",
+    "그냥",
+    "없어",
+    "없어요",
+]
+
+
+MEMORY_DETAIL_HINTS = [
+    "먹",
+    "마시",
+    "갔",
+    "다녀",
+    "왔",
+    "만났",
+    "봤",
+    "보았",
+    "했",
+    "전화",
+    "통화",
+    "이야기",
+    "산책",
+    "운동",
+    "병원",
+    "마트",
+    "시장",
+    "공원",
+    "집",
+    "손주",
+    "아들",
+    "딸",
+    "친구",
+    "가족",
+    "점심",
+    "저녁",
+    "아침",
+    "음식",
+]
+
+
 def _get_client() -> OpenAI:
     global _client
 
@@ -94,6 +140,61 @@ def is_valid_conversation_text(text: str) -> bool:
     return True
 
 
+def evaluate_memory_candidate(text: str) -> Dict[str, object]:
+    text = clean_text(text)
+
+    reasons = []
+    score = 0
+
+    if not is_valid_conversation_text(text):
+        return {
+            "isValid": False,
+            "score": 0,
+            "reasons": ["too_short_or_meaningless"],
+        }
+
+    if is_forbidden_recall_content(text):
+        return {
+            "isValid": False,
+            "score": 0,
+            "reasons": ["forbidden_fixed_question_content"],
+        }
+
+    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+        reasons.append("weak_or_uncertain_expression")
+        score -= 20
+
+    if len(text) >= 8:
+        score += 20
+        reasons.append("enough_length")
+
+    if len(text) >= 14:
+        score += 15
+        reasons.append("specific_length")
+
+    detail_hits = [
+        hint
+        for hint in MEMORY_DETAIL_HINTS
+        if hint in text
+    ]
+
+    if detail_hits:
+        score += min(45, len(detail_hits) * 15)
+        reasons.append("has_daily_detail")
+
+    if re.search(r"\d", text):
+        score += 10
+        reasons.append("has_number_detail")
+
+    score = max(0, min(score, 100))
+
+    return {
+        "isValid": score >= 30,
+        "score": score,
+        "reasons": reasons,
+    }
+
+
 def filter_valid_conversation_history(
     conversation_history: List[str],
 ) -> List[str]:
@@ -102,7 +203,9 @@ def filter_valid_conversation_history(
     for text in conversation_history:
         cleaned = clean_text(text)
 
-        if is_valid_conversation_text(cleaned) and not is_forbidden_recall_content(cleaned):
+        evaluation = evaluate_memory_candidate(cleaned)
+
+        if evaluation["isValid"]:
             valid_history.append(cleaned)
 
     return valid_history
@@ -297,6 +400,18 @@ question: 자연스러운 회상 질문
     if not question:
         question = content
 
+    memory_evaluation = evaluate_memory_candidate(memory_point)
+
+    if not memory_evaluation["isValid"]:
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문으로 저장하기에는 memoryPoint가 너무 짧거나 구체성이 부족합니다.",
+            "memoryPoint": memory_point,
+            "question": question,
+            "memoryQualityScore": memory_evaluation["score"],
+            "memoryQualityReasons": memory_evaluation["reasons"],
+        }
+
     if is_forbidden_recall_content(memory_point) or is_forbidden_recall_content(question):
         return {
             "status": "SKIPPED",
@@ -322,6 +437,8 @@ question: 자연스러운 회상 질문
         "reason": "",
         "memoryPoint": memory_point,
         "question": question,
+        "memoryQualityScore": memory_evaluation["score"],
+        "memoryQualityReasons": memory_evaluation["reasons"],
     }
 
 
