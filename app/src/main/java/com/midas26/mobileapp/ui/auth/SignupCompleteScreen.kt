@@ -87,6 +87,7 @@ fun SignupCompleteScreen(
     }
 
     val isLoading = authState is AuthState.Loading
+    val isGuardian = viewModel.pendingRole == PrefsManager.ROLE_GUARDIAN
 
     Box(
         modifier = Modifier
@@ -148,8 +149,8 @@ fun SignupCompleteScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 코드 박스
-            Surface(
+            // 코드 박스 — 사용자 전용
+            if (!isGuardian) Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 color = BrandWhite.copy(alpha = 0.16f)
@@ -255,8 +256,8 @@ fun SignupCompleteScreen(
             }
         }
 
-        // 하단 "홈으로 시작하기" 버튼 — 코드가 발급된 후에만 활성화
-        val homeButtonEnabled = userCode.isNotEmpty()
+        // 하단 "홈으로 시작하기" 버튼 — 보호자는 바로 활성화, 사용자는 코드 발급 후 활성화
+        val homeButtonEnabled = isGuardian || userCode.isNotEmpty()
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
