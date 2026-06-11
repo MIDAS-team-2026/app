@@ -623,6 +623,19 @@ FOOD_NEGATED_QUESTIONS = {
     ],
 }
 
+FOOD_APPETITE_QUESTIONS = {
+    "DEEPEN": [
+        "그러셨군요. 그래도 오늘 조금이라도 챙겨 드신 것이 있으세요?",
+        "입맛이 없으셨군요. 그럴 때는 어떤 음식이 조금 편하세요?",
+        "오늘은 물이나 간식처럼 가볍게 드신 것이 있으세요?",
+    ],
+    "ANCHOR": [
+        "오늘 입맛이 없었던 걸 떠올리면 먼저 생각나는 시간이 있으세요?",
+        "오늘 식사와 관련해서 기억나는 점이 있으세요?",
+        "나중에 오늘 식사 이야기를 한다면 어떤 말이 먼저 떠오를까요?",
+    ],
+}
+
 
 def _detect_topic_in_text(text: str) -> str | None:
     health_text = text.replace("약속", "")
@@ -861,7 +874,9 @@ def _get_topic_aware_fallback_candidates(
         candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
 
     if topic == "FOOD":
-        if _contains_any(latest_text, ("안 먹", "못 먹", "아직 안")):
+        if _contains_any(latest_text, ("입맛", "밥맛")):
+            candidates = FOOD_APPETITE_QUESTIONS.get(stage, candidates)
+        elif _contains_any(latest_text, ("안 먹", "못 먹", "아직 안")):
             candidates = FOOD_NEGATED_QUESTIONS.get(stage, candidates)
         elif _contains_any(latest_text, ("먹고 싶", "먹고싶")):
             candidates = FOOD_WISH_QUESTIONS.get(stage, candidates)
