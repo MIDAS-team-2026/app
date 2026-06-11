@@ -390,14 +390,8 @@ fun AppNavHost(
 
                     PrivacyScreen(
                         onAgreeAndStart = {
-                            if (privacyRole == PrefsManager.ROLE_GUARDIAN) {
-                                navController.navigate(Routes.GuardianHome) {
-                                    popUpTo(Routes.Login) { inclusive = true }
-                                }
-                            } else {
-                                navController.navigate(Routes.SignupComplete) {
-                                    popUpTo(Routes.Login) { inclusive = true }
-                                }
+                            navController.navigate(Routes.SignupComplete) {
+                                popUpTo(Routes.Login) { inclusive = true }
                             }
                         }
                     )

@@ -77,17 +77,6 @@ fun SignupInfoScreen(
             is AuthState.PhoneChecked -> {
                 viewModel.resetState()
             }
-            is AuthState.Success -> {
-                // 보호자: 회원가입 완료 → 인증 화면(완료 화면)으로
-                val user = (authState as AuthState.Success).user
-                val prefs = PrefsManager.from(context)
-                prefs.saveToken(user.token.orEmpty())
-                prefs.saveUserName(user.name.orEmpty())
-                prefs.saveUserPhone(phone)
-                prefs.saveUserRole(role)
-                viewModel.resetState()
-                onVerify(phone)
-            }
             is AuthState.Error -> {
                 val msg = (authState as AuthState.Error).message
                 if (msg.contains("전화번호") || msg.contains("가입")) phoneError = msg
@@ -286,11 +275,7 @@ fun SignupInfoScreen(
                 onClick = {
                     if (validate()) {
                         viewModel.savePendingSignupData(phone.trim(), password, name.trim(), role, birth.trim())
-                        if (role == PrefsManager.ROLE_GUARDIAN) {
-                            viewModel.signup(phone.trim(), password, name.trim(), role)
-                        } else {
-                            onVerify(phone.trim())
-                        }
+                        onVerify(phone.trim())
                     }
                 }
             )
