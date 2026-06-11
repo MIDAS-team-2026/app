@@ -15,7 +15,7 @@ import java.util.Date;
 public class JwtTokenProvider {
 
     private final String secretKey = "your-very-secret-key-should-be-very-long-and-secure";
-    private final long validityInMilliseconds = 3600000; // 1시간
+    private final long validityInMilliseconds = 1728000000L; // 20일
 
     private Key getSigningKey() {
         return Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
