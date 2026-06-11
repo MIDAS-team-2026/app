@@ -25,6 +25,8 @@ class PrefsManager(context: Context) {
 
     fun isLoggedIn(): Boolean = prefs.getString(KEY_TOKEN, null) != null
 
+    fun getToken(): String? = prefs.getString(KEY_TOKEN, null)
+
     fun saveToken(token: String) {
         prefs.edit().putString(KEY_TOKEN, token).apply()
     }
