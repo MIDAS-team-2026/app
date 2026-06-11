@@ -515,7 +515,20 @@ def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+QUALITATIVE_ABSENCE_PHRASES = (
+    "맛이 없",
+    "맛없",
+    "재미없",
+    "재미 없",
+    "기운이 없",
+    "입맛이 없",
+)
+
+
 def _is_low_info_response(text: str) -> bool:
+    if _contains_any(text, QUALITATIVE_ABSENCE_PHRASES):
+        return False
+
     return _contains_any(
         text,
         (
@@ -597,12 +610,63 @@ FOOD_WISH_QUESTIONS = {
     ],
 }
 
+FOOD_NEGATED_QUESTIONS = {
+    "DEEPEN": [
+        "그러셨군요. 그럼 오늘 드신 것이나 마신 것 중에 기억나는 게 있으세요?",
+        "식사는 못 하셨군요. 대신 오늘 챙겨 드신 것이나 마신 게 있으세요?",
+        "그럼 오늘 식사 대신 드신 간식이나 물이 있으세요?",
+    ],
+    "ANCHOR": [
+        "오늘 먹는 일과 관련해서 기억나는 점이 있으세요?",
+        "오늘 식사 이야기를 떠올리면 먼저 생각나는 게 있으세요?",
+        "오늘 드시거나 마신 것 중 나중에 기억할 만한 게 있으세요?",
+    ],
+}
+
+FOOD_APPETITE_QUESTIONS = {
+    "DEEPEN": [
+        "그러셨군요. 그래도 오늘 조금이라도 챙겨 드신 것이 있으세요?",
+        "입맛이 없으셨군요. 그럴 때는 어떤 음식이 조금 편하세요?",
+        "오늘은 물이나 간식처럼 가볍게 드신 것이 있으세요?",
+    ],
+    "ANCHOR": [
+        "오늘 입맛이 없었던 걸 떠올리면 먼저 생각나는 시간이 있으세요?",
+        "오늘 식사와 관련해서 기억나는 점이 있으세요?",
+        "나중에 오늘 식사 이야기를 한다면 어떤 말이 먼저 떠오를까요?",
+    ],
+}
+
 
 def _detect_topic_in_text(text: str) -> str | None:
     health_text = text.replace("약속", "")
 
     if _is_low_info_response(health_text):
         return "LOW_INFO"
+
+    if _contains_any(
+        health_text,
+        (
+            "약",
+            "병원",
+            "진료",
+            "의사",
+            "간호",
+            "아프",
+            "아팠",
+            "다쳤",
+            "몸",
+            "허리",
+            "검사",
+            "팔",
+            "다리",
+            "무릎",
+            "어깨",
+            "배",
+            "머리",
+            "눈이 아",
+        ),
+    ):
+        return "HEALTH"
 
     if _contains_any(
         text,
@@ -628,7 +692,11 @@ def _detect_topic_in_text(text: str) -> str | None:
             "춥",
             "비가",
             "비는",
-            "눈",
+            "눈이 와",
+            "눈이 왔",
+            "눈 왔",
+            "눈 오는",
+            "눈이 많이",
             "바람",
             "햇빛",
         ),
@@ -640,9 +708,12 @@ def _detect_topic_in_text(text: str) -> str | None:
         (
             "샀",
             "사왔",
-            "장",
+            "장 봤",
+            "장봤",
+            "장 보",
+            "장보",
+            "장보러",
             "물건",
-            "사과",
         ),
     ):
         return "SHOPPING"
@@ -691,6 +762,19 @@ def _detect_topic_in_text(text: str) -> str | None:
         (
             "아들",
             "딸",
+            "동생",
+            "형",
+            "누나",
+            "언니",
+            "오빠",
+            "엄마",
+            "아빠",
+            "어머니",
+            "아버지",
+            "남편",
+            "아내",
+            "조카",
+            "사촌",
             "손주",
             "배우자",
             "가족",
@@ -734,9 +818,6 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
-            "봤",
-            "보았",
-            "들었",
         ),
     ):
         return "MEDIA"
@@ -768,24 +849,24 @@ def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str 
 
     if (
         latest_topic == "FOOD"
-        and context_topic == "HEALTH"
+        and previous_context_topic == "HEALTH"
         and not _contains_any(latest_text, EXPLICIT_FOOD_KEYWORDS)
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "PLACE"
-        and context_topic == "HEALTH"
+        and previous_context_topic == "HEALTH"
         and not _contains_any(latest_text, EXPLICIT_PLACE_KEYWORDS)
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "PLACE"
-        and context_topic == "WEATHER"
+        and previous_context_topic == "WEATHER"
         and _contains_any(latest_text, ("안 나갔", "밖에 안", "집에 있었"))
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "MEDIA"
@@ -822,7 +903,11 @@ def _get_topic_aware_fallback_candidates(
         candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
 
     if topic == "FOOD":
-        if _contains_any(latest_text, ("먹고 싶", "먹고싶", "안 먹", "못 먹")):
+        if _contains_any(latest_text, ("입맛", "밥맛")):
+            candidates = FOOD_APPETITE_QUESTIONS.get(stage, candidates)
+        elif _contains_any(latest_text, ("안 먹", "못 먹", "아직 안")):
+            candidates = FOOD_NEGATED_QUESTIONS.get(stage, candidates)
+        elif _contains_any(latest_text, ("먹고 싶", "먹고싶")):
             candidates = FOOD_WISH_QUESTIONS.get(stage, candidates)
 
         if "혼자" in latest_text:
@@ -896,6 +981,20 @@ def _get_topic_aware_fallback_candidates(
 
     if topic == "MEDIA":
         context = " ".join([latest_text, *cycle_texts])
+
+        if not _contains_any(context, ("노래", "가수", "들었")):
+            candidates = [
+                question
+                for question in candidates
+                if "노래" not in question and "들을 때" not in question
+            ]
+
+        if _contains_any(latest_text, ("재미없", "재미 없", "별로")):
+            candidates = [
+                question
+                for question in candidates
+                if "사람" not in question
+            ]
 
         if _contains_any(context, ("노래", "가수", "들었")):
             candidates = [
