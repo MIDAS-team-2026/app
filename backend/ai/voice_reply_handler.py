@@ -776,9 +776,6 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
-            "봤",
-            "보았",
-            "들었",
         ),
     ):
         return "MEDIA"
