@@ -515,7 +515,20 @@ def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+QUALITATIVE_ABSENCE_PHRASES = (
+    "맛이 없",
+    "맛없",
+    "재미없",
+    "재미 없",
+    "기운이 없",
+    "입맛이 없",
+)
+
+
 def _is_low_info_response(text: str) -> bool:
+    if _contains_any(text, QUALITATIVE_ABSENCE_PHRASES):
+        return False
+
     return _contains_any(
         text,
         (
@@ -909,6 +922,20 @@ def _get_topic_aware_fallback_candidates(
 
     if topic == "MEDIA":
         context = " ".join([latest_text, *cycle_texts])
+
+        if not _contains_any(context, ("노래", "가수", "들었")):
+            candidates = [
+                question
+                for question in candidates
+                if "노래" not in question and "들을 때" not in question
+            ]
+
+        if _contains_any(latest_text, ("재미없", "재미 없", "별로")):
+            candidates = [
+                question
+                for question in candidates
+                if "사람" not in question
+            ]
 
         if _contains_any(context, ("노래", "가수", "들었")):
             candidates = [
