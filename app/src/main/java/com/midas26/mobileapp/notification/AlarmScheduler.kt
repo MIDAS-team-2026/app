@@ -24,10 +24,9 @@ object AlarmScheduler {
             }
         }
 
-        alarmManager.setInexactRepeating(
+        alarmManager.setExactAndAllowWhileIdle(
             AlarmManager.RTC_WAKEUP,
             calendar.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
             buildPendingIntent(context)
         )
     }
