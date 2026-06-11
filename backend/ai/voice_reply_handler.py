@@ -644,6 +644,31 @@ def _detect_topic_in_text(text: str) -> str | None:
         return "LOW_INFO"
 
     if _contains_any(
+        health_text,
+        (
+            "약",
+            "병원",
+            "진료",
+            "의사",
+            "간호",
+            "아프",
+            "아팠",
+            "다쳤",
+            "몸",
+            "허리",
+            "검사",
+            "팔",
+            "다리",
+            "무릎",
+            "어깨",
+            "배",
+            "머리",
+            "눈이 아",
+        ),
+    ):
+        return "HEALTH"
+
+    if _contains_any(
         text,
         (
             "별로",
