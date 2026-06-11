@@ -20,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +83,30 @@ fun AppRoot(ttsManager: TtsManager? = null) {
 
     val navController = rememberNavController()
     var splashVisible by remember { mutableStateOf(true) }
+    var forceLogout by remember { mutableStateOf(false) }
+
+    // onUnauthorized는 OkHttp 스레드에서 호출되므로 main thread로 전환
+    DisposableEffect(Unit) {
+        RetrofitClient.init(
+            tokenProvider = { prefs.getToken() },
+            onUnauthorized = {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    prefs.clearToken()
+                    forceLogout = true
+                }
+            }
+        )
+        onDispose { }
+    }
+
+    LaunchedEffect(forceLogout) {
+        if (forceLogout) {
+            navController.navigate(Routes.Login) {
+                popUpTo(0) { inclusive = true }
+            }
+            forceLogout = false
+        }
+    }
 
     // 앱 시작 시 한 번만 계산 — NavHost가 처음부터 올바른 화면에서 시작
     val startDestination = remember {

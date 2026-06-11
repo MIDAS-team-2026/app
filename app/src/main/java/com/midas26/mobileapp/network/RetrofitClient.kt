@@ -10,9 +10,11 @@ object RetrofitClient {
     private const val BASE_URL = "http://mogumogu.p-e.kr:8080/"
 
     private var tokenProvider: (() -> String?)? = null
+    private var onUnauthorized: (() -> Unit)? = null
 
-    fun init(tokenProvider: () -> String?) {
+    fun init(tokenProvider: () -> String?, onUnauthorized: (() -> Unit)? = null) {
         this.tokenProvider = tokenProvider
+        this.onUnauthorized = onUnauthorized
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
@@ -28,7 +30,11 @@ object RetrofitClient {
         } else {
             chain.request()
         }
-        chain.proceed(request)
+        val response = chain.proceed(request)
+        if (response.code == 401) {
+            onUnauthorized?.invoke()
+        }
+        response
     }
 
     private val client = OkHttpClient.Builder()
