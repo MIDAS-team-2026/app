@@ -13,6 +13,71 @@ BASE_URL = "http://localhost:8080"
 _client: OpenAI | None = None
 
 
+FORBIDDEN_RECALL_KEYWORDS = [
+    "성함",
+    "이름",
+    "생년월일",
+    "생년 월일",
+    "배우자",
+    "고향",
+    "요일",
+    "날짜",
+    "몇 년도",
+    "몇년도",
+    "몇 월",
+    "몇월",
+    "며칠",
+    "오늘 날짜",
+    "오늘은 무슨 요일",
+]
+
+
+WEAK_MEMORY_PHRASES = [
+    "응",
+    "네",
+    "아니",
+    "몰라",
+    "모르겠",
+    "기억 안",
+    "기억이 안",
+    "그냥",
+    "없어",
+    "없어요",
+]
+
+
+MEMORY_DETAIL_HINTS = [
+    "먹",
+    "마시",
+    "갔",
+    "다녀",
+    "왔",
+    "만났",
+    "봤",
+    "보았",
+    "했",
+    "전화",
+    "통화",
+    "이야기",
+    "산책",
+    "운동",
+    "병원",
+    "마트",
+    "시장",
+    "공원",
+    "집",
+    "손주",
+    "아들",
+    "딸",
+    "친구",
+    "가족",
+    "점심",
+    "저녁",
+    "아침",
+    "음식",
+]
+
+
 def _get_client() -> OpenAI:
     global _client
 
@@ -34,6 +99,15 @@ def clean_text(text: str) -> str:
     text = str(text).strip()
     text = re.sub(r"\s+", " ", text)
     return text
+
+
+def is_forbidden_recall_content(text: str) -> bool:
+    text = clean_text(text)
+
+    if not text:
+        return True
+
+    return any(keyword in text for keyword in FORBIDDEN_RECALL_KEYWORDS)
 
 
 def is_valid_conversation_text(text: str) -> bool:
@@ -66,6 +140,61 @@ def is_valid_conversation_text(text: str) -> bool:
     return True
 
 
+def evaluate_memory_candidate(text: str) -> Dict[str, object]:
+    text = clean_text(text)
+
+    reasons = []
+    score = 0
+
+    if not is_valid_conversation_text(text):
+        return {
+            "isValid": False,
+            "score": 0,
+            "reasons": ["too_short_or_meaningless"],
+        }
+
+    if is_forbidden_recall_content(text):
+        return {
+            "isValid": False,
+            "score": 0,
+            "reasons": ["forbidden_fixed_question_content"],
+        }
+
+    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+        reasons.append("weak_or_uncertain_expression")
+        score -= 20
+
+    if len(text) >= 8:
+        score += 20
+        reasons.append("enough_length")
+
+    if len(text) >= 14:
+        score += 15
+        reasons.append("specific_length")
+
+    detail_hits = [
+        hint
+        for hint in MEMORY_DETAIL_HINTS
+        if hint in text
+    ]
+
+    if detail_hits:
+        score += min(45, len(detail_hits) * 15)
+        reasons.append("has_daily_detail")
+
+    if re.search(r"\d", text):
+        score += 10
+        reasons.append("has_number_detail")
+
+    score = max(0, min(score, 100))
+
+    return {
+        "isValid": score >= 30,
+        "score": score,
+        "reasons": reasons,
+    }
+
+
 def filter_valid_conversation_history(
     conversation_history: List[str],
 ) -> List[str]:
@@ -74,7 +203,9 @@ def filter_valid_conversation_history(
     for text in conversation_history:
         cleaned = clean_text(text)
 
-        if is_valid_conversation_text(cleaned):
+        evaluation = evaluate_memory_candidate(cleaned)
+
+        if evaluation["isValid"]:
             valid_history.append(cleaned)
 
     return valid_history
@@ -132,7 +263,6 @@ def fetch_existing_recall_questions(
         f"{base_url}/api/recall/questions/{user_id}",
         timeout=10,
     )
-
     response.raise_for_status()
 
     questions = response.json()
@@ -143,6 +273,10 @@ def fetch_existing_recall_questions(
     for item in questions:
         question_text = str(item.get("questionText", "")).strip()
         expected_answer = str(item.get("expectedAnswer", "")).strip()
+        category = str(item.get("category", "")).strip()
+
+        if category == "INITIAL_FIXED":
+            continue
 
         if question_text:
             previous_questions.append(question_text)
@@ -170,7 +304,7 @@ def generate_recall_question_from_conversation(
     if not conversation_text:
         return {
             "status": "SKIPPED",
-            "reason": "회상 질문을 만들 만큼 의미 있는 대화 내용이 부족합니다.",
+            "reason": "회상 질문을 만들 만큼 의미 있는 자유대화 내용이 부족합니다.",
             "memoryPoint": "",
             "question": "",
         }
@@ -179,23 +313,25 @@ def generate_recall_question_from_conversation(
     used_memory_points_text = build_used_memory_points_text(used_memory_points)
 
     prompt = f"""
-당신은 노인과 따뜻하게 대화를 나누는 한국어 AI 말동무입니다.
+당신은 노인과 자연스럽게 대화를 이어가는 한국어 AI 말동무입니다.
 
 이 앱의 목적:
-- 사용자가 검사받는 느낌을 받지 않도록 자연스럽게 대화합니다.
-- 사용자의 과거 대화 내용을 바탕으로 나중에 다시 물어볼 회상 질문을 만듭니다.
-- 회상 질문은 인지 기능 점검에 활용되지만, 사용자는 일상 대화처럼 느껴야 합니다.
+- 사용자가 검사받는 느낌을 받지 않도록 일상 대화처럼 이어갑니다.
+- 사용자의 자유 대화 내용에서 나중에 다시 물어볼 회상 질문을 만듭니다.
+- 회상 질문은 인지 기능 점검에 활용되지만, 사용자는 일반 대화처럼 느껴야 합니다.
 
 해야 할 일:
-1. 아래 최근 대화 내용에서 나중에 다시 물어볼 만한 기억 포인트를 1개 고릅니다.
+1. 아래 최근 자유 대화 내용에서 나중에 다시 물어볼 만한 기억 포인트를 1개 고릅니다.
 2. 이미 물어본 질문과 겹치지 않는 새로운 회상 질문을 1개 만듭니다.
-3. 이미 한 질문과 같은 내용은 반드시 피합니다.
-4. 질문은 공감 표현을 포함해 자연스럽고 부드럽게 작성합니다.
+3. 이미 사용한 기억 포인트와 같은 내용은 피합니다.
+4. 질문은 자연스럽고 짧게 작성합니다.
 5. 전체 질문은 1문장 또는 짧은 2문장으로 작성합니다.
 6. 정답을 질문에 직접 포함하지 않습니다.
-7. 치매, 검사, 기억력 테스트, 진단 같은 표현은 사용하지 않습니다.
+7. 치매, 검사, 기억력 테스트, 진단, 정답, 오답 같은 표현은 사용하지 않습니다.
+8. 성함, 배우자, 고향, 요일, 날짜, 생년월일, 년도, 월, 일 관련 질문은 절대 만들지 않습니다.
+9. 회상 질문은 반드시 사용자가 자유롭게 말한 일상 내용에서만 만듭니다.
 
-최근 대화 내용:
+최근 자유 대화 내용:
 {conversation_text}
 
 이미 물어본 회상 질문:
@@ -204,20 +340,33 @@ def generate_recall_question_from_conversation(
 이미 사용한 기억 포인트:
 {used_memory_points_text}
 
+절대 생성하면 안 되는 질문:
+- 성함이 어떻게 되시나요?
+- 생년월일이 어떻게 되시나요?
+- 배우자분 성함이 어떻게 되시나요?
+- 고향이 어디신가요?
+- 오늘은 무슨 요일인가요?
+- 오늘 날짜가 어떻게 되나요?
+- 지금 몇 년도인가요?
+- 지금 몇 월인가요?
+- 오늘이 며칠인가요?
+
 좋은 질문 예시:
-- 아이고, 맛있는 걸 드셨군요. 그때 드셨던 음식 중에 기억나는 게 있으세요?
-- 그렇군요, 바쁜 하루를 보내셨네요. 오늘 다녀오신 곳이 기억나시나요?
-- 오, 반가운 분과 이야기하셨군요. 누구와 통화하셨는지 기억나세요?
+- 그러고 보니 아까 음식 이야기를 해주셨잖아요. 어떤 음식을 드셨는지 기억나세요?
+- 아까 다녀오신 곳 이야기를 해주셨는데, 어디에 다녀오셨는지 기억나세요?
+- 조금 전에 통화 이야기를 해주셨는데, 누구와 통화하셨는지 기억나세요?
 
 나쁜 질문 예시:
 - 아까 김치찌개 먹었다고 했죠?
 - 아들이랑 통화한 거 맞나요?
 - 마트에 다녀왔다고 말했는데 기억하세요?
 - 기억력 확인을 위해 질문드릴게요.
+- 오늘은 무슨 요일인가요?
+- 생년월일이 어떻게 되시나요?
 
 출력 형식:
 memoryPoint: 대화에서 뽑은 기억 포인트
-question: 공감 표현이 포함된 자연스러운 회상 질문
+question: 자연스러운 회상 질문
 """.strip()
 
     response = _get_client().chat.completions.create(
@@ -225,14 +374,14 @@ question: 공감 표현이 포함된 자연스러운 회상 질문
         messages=[
             {
                 "role": "system",
-                "content": "당신은 한국어 자연 회상 질문을 생성하는 AI입니다.",
+                "content": "당신은 한국어 자연 회상 질문을 생성하는 AI입니다. 초기 고정 질문이나 지남력 질문은 절대 만들지 않습니다.",
             },
             {
                 "role": "user",
                 "content": prompt,
             },
         ],
-        temperature=0.6,
+        temperature=0.45,
     )
 
     content = response.choices[0].message.content.strip()
@@ -251,6 +400,26 @@ question: 공감 표현이 포함된 자연스러운 회상 질문
     if not question:
         question = content
 
+    memory_evaluation = evaluate_memory_candidate(memory_point)
+
+    if not memory_evaluation["isValid"]:
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문으로 저장하기에는 memoryPoint가 너무 짧거나 구체성이 부족합니다.",
+            "memoryPoint": memory_point,
+            "question": question,
+            "memoryQualityScore": memory_evaluation["score"],
+            "memoryQualityReasons": memory_evaluation["reasons"],
+        }
+
+    if is_forbidden_recall_content(memory_point) or is_forbidden_recall_content(question):
+        return {
+            "status": "SKIPPED",
+            "reason": "초기 고정 질문 또는 지남력 질문과 유사한 내용이 생성되어 저장하지 않았습니다.",
+            "memoryPoint": memory_point,
+            "question": question,
+        }
+
     if previous_questions:
         normalized_question = clean_text(question)
 
@@ -268,6 +437,8 @@ question: 공감 표현이 포함된 자연스러운 회상 질문
         "reason": "",
         "memoryPoint": memory_point,
         "question": question,
+        "memoryQualityScore": memory_evaluation["score"],
+        "memoryQualityReasons": memory_evaluation["reasons"],
     }
 
 
@@ -290,7 +461,6 @@ def save_recall_question_to_spring(
         json=body,
         timeout=10,
     )
-
     response.raise_for_status()
     return response.json()
 
@@ -344,7 +514,7 @@ if __name__ == "__main__":
     ]
 
     sample_previous_questions = [
-        "오, 반가운 분과 이야기하셨군요. 누구와 통화하셨는지 기억나세요?"
+        "조금 전에 통화 이야기를 해주셨는데, 누구와 통화하셨는지 기억나세요?"
     ]
 
     sample_used_memory_points = [
