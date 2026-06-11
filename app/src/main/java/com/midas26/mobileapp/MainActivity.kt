@@ -43,7 +43,6 @@ import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
 import com.midas26.mobileapp.ui.theme.LocalTapToReplay
 import com.midas26.mobileapp.ui.theme.LocalTtsManager
-import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.util.TtsManager
 
@@ -54,7 +53,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = PrefsManager.from(this)
-        RetrofitClient.init { prefs.getToken() }
         ttsManager = TtsManager(this).apply { setSpeed(prefs.getTtsSpeed()) }
         enableEdgeToEdge()
         setContent {
