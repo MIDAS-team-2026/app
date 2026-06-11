@@ -668,7 +668,6 @@ def _detect_topic_in_text(text: str) -> str | None:
             "사왔",
             "장",
             "물건",
-            "사과",
         ),
     ):
         return "SHOPPING"
