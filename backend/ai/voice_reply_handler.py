@@ -610,6 +610,19 @@ FOOD_WISH_QUESTIONS = {
     ],
 }
 
+FOOD_NEGATED_QUESTIONS = {
+    "DEEPEN": [
+        "그러셨군요. 그럼 오늘 드신 것이나 마신 것 중에 기억나는 게 있으세요?",
+        "식사는 못 하셨군요. 대신 오늘 챙겨 드신 것이나 마신 게 있으세요?",
+        "그럼 오늘 식사 대신 드신 간식이나 물이 있으세요?",
+    ],
+    "ANCHOR": [
+        "오늘 먹는 일과 관련해서 기억나는 점이 있으세요?",
+        "오늘 식사 이야기를 떠올리면 먼저 생각나는 게 있으세요?",
+        "오늘 드시거나 마신 것 중 나중에 기억할 만한 게 있으세요?",
+    ],
+}
+
 
 def _detect_topic_in_text(text: str) -> str | None:
     health_text = text.replace("약속", "")
@@ -794,24 +807,24 @@ def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str 
 
     if (
         latest_topic == "FOOD"
-        and context_topic == "HEALTH"
+        and previous_context_topic == "HEALTH"
         and not _contains_any(latest_text, EXPLICIT_FOOD_KEYWORDS)
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "PLACE"
-        and context_topic == "HEALTH"
+        and previous_context_topic == "HEALTH"
         and not _contains_any(latest_text, EXPLICIT_PLACE_KEYWORDS)
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "PLACE"
-        and context_topic == "WEATHER"
+        and previous_context_topic == "WEATHER"
         and _contains_any(latest_text, ("안 나갔", "밖에 안", "집에 있었"))
     ):
-        return context_topic
+        return previous_context_topic
 
     if (
         latest_topic == "MEDIA"
@@ -848,7 +861,9 @@ def _get_topic_aware_fallback_candidates(
         candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
 
     if topic == "FOOD":
-        if _contains_any(latest_text, ("먹고 싶", "먹고싶", "안 먹", "못 먹")):
+        if _contains_any(latest_text, ("안 먹", "못 먹", "아직 안")):
+            candidates = FOOD_NEGATED_QUESTIONS.get(stage, candidates)
+        elif _contains_any(latest_text, ("먹고 싶", "먹고싶")):
             candidates = FOOD_WISH_QUESTIONS.get(stage, candidates)
 
         if "혼자" in latest_text:
