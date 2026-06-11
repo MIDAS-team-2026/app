@@ -112,6 +112,8 @@ fun SettingsScreen(
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showLocationPermissionDialog by remember { mutableStateOf(false) }
+    var locationPermissionPermanentlyDenied by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
 
@@ -138,8 +140,13 @@ fun SettingsScreen(
             prefs.setLocationSharingEnabled(true)
             startLocationService(context)
         } else {
-            locationSharingEnabled = false
-            Toast.makeText(context, "항상 허용 위치 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
+            val canAskAgain = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                (context as? androidx.activity.ComponentActivity)
+                    ?.shouldShowRequestPermissionRationale(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                    ?: false
+            } else false
+            locationPermissionPermanentlyDenied = !canAskAgain
+            showLocationPermissionDialog = true
         }
     }
 
@@ -170,6 +177,51 @@ fun SettingsScreen(
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }
+        )
+    }
+
+    if (showLocationPermissionDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showLocationPermissionDialog = false
+                locationSharingEnabled = false
+            },
+            title = { Text("위치 권한 필요") },
+            text = {
+                Text(
+                    if (locationPermissionPermanentlyDenied)
+                        "위치 권한이 거부되었습니다.\n설정 앱에서 '항상 허용'으로 변경해 주세요."
+                    else
+                        "보호자에게 위치를 공유하려면\n'항상 허용' 위치 권한이 필요합니다."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showLocationPermissionDialog = false
+                    if (locationPermissionPermanentlyDenied) {
+                        val intent = android.content.Intent(
+                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            android.net.Uri.fromParts("package", context.packageName, null)
+                        )
+                        context.startActivity(intent)
+                        locationSharingEnabled = false
+                    } else {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                        }
+                    }
+                }) {
+                    Text(if (locationPermissionPermanentlyDenied) "설정으로 이동" else "다시 요청")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showLocationPermissionDialog = false
+                    locationSharingEnabled = false
+                }) {
+                    Text("취소")
+                }
+            }
         )
     }
 
