@@ -250,6 +250,18 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 보신 내용 중에 기억나는 부분이 있으세요?",
         ],
     },
+    "ACTIVITY": {
+        "DEEPEN": [
+            "그 일은 언제쯤 하셨어요?",
+            "하실 때 기분은 어떠셨어요?",
+            "그때 가장 먼저 기억나는 장면이 있으세요?",
+        ],
+        "ANCHOR": [
+            "오늘 하신 일 중 나중에 기억할 만한 장면이 있으세요?",
+            "그 일을 떠올리면 제일 먼저 생각나는 게 있으세요?",
+            "다시 이야기한다면 어떤 말로 떠올리면 좋을까요?",
+        ],
+    },
 }
 
 
@@ -765,6 +777,24 @@ def _detect_topic_in_text(text: str) -> str | None:
         ),
     ):
         return "FOOD"
+
+    if _contains_any(
+        text,
+        (
+            "산책",
+            "운동",
+            "청소",
+            "빨래",
+            "설거지",
+            "요리",
+            "씻",
+            "목욕",
+            "정리",
+            "누워",
+            "쉬었",
+        ),
+    ):
+        return "ACTIVITY"
 
     if _contains_any(
         text,
