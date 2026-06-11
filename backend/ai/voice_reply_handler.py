@@ -103,6 +103,124 @@ SAFE_STAGE_FALLBACK_QUESTIONS = {
     ],
 }
 
+TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
+    "LOW_INFO": {
+        "DEEPEN": [
+            "아하, 그러셨군요. 그럼 오늘 드신 것 중에 기억나는 음식이 있으세요?",
+            "그러셨군요. 오늘 집에서 하신 일 중에 하나만 떠오르세요?",
+            "음, 그렇군요. 오늘 보신 것 중에 기억나는 장면이 있으세요?",
+        ],
+        "ANCHOR": [
+            "오늘 하루에서 가장 먼저 떠오르는 일이 있으세요?",
+            "오늘 기억나는 사람이나 장소가 하나 있으세요?",
+            "방금 이야기 말고 오늘 있었던 일 중에 생각나는 게 있으세요?",
+        ],
+    },
+    "NEGATIVE": {
+        "DEEPEN": [
+            "그러셨군요. 무엇 때문에 기분이 조금 가라앉으셨어요?",
+            "그럴 때는 어디에 계시는 게 조금 편하세요?",
+            "오늘 조금이라도 마음이 편했던 순간이 있으세요?",
+        ],
+        "ANCHOR": [
+            "그때 기분을 떠올리면 가장 먼저 생각나는 장면이 있으세요?",
+            "오늘 마음이 무거웠던 일 중에 기억나는 게 있으세요?",
+            "그 이야기를 나중에 떠올리면 어떤 말이 먼저 생각날까요?",
+        ],
+    },
+    "WEATHER": {
+        "DEEPEN": [
+            "더울 때는 집 안에서 어떻게 지내셨어요?",
+            "오늘 날씨 때문에 불편했던 점이 있으셨어요?",
+            "그때 창밖이나 주변에서 보인 게 있으세요?",
+        ],
+        "ANCHOR": [
+            "오늘 날씨를 떠올리면 가장 먼저 생각나는 장면이 있으세요?",
+            "더웠던 오늘 중에 기억나는 시간이 있으세요?",
+            "오늘 밖이나 창밖에서 본 것이 기억나세요?",
+        ],
+    },
+    "SHOPPING": {
+        "DEEPEN": [
+            "사신 것 중에 가장 기억나는 물건이 있으세요?",
+            "그 물건은 어디에서 고르셨어요?",
+            "사신 건 지금 어디에 두셨는지 기억나세요?",
+        ],
+        "ANCHOR": [
+            "오늘 사신 것 중에 나중에 기억할 만한 게 있으세요?",
+            "장 보던 일을 떠올리면 제일 먼저 생각나는 게 무엇인가요?",
+            "그때 고른 물건 중에 기억나는 게 있으세요?",
+        ],
+    },
+    "HEALTH": {
+        "DEEPEN": [
+            "약은 언제쯤 드셨어요?",
+            "약 드신 뒤에는 몸이 좀 어떠셨어요?",
+            "병원에는 혼자 다녀오셨어요, 아니면 누군가와 함께 가셨어요?",
+            "그때 몸 상태는 어떠셨어요?",
+            "어느 쪽이 제일 불편하셨어요?",
+            "지금은 조금 괜찮으세요?",
+            "병원에서 기다리거나 진료받을 때 기억나는 게 있으세요?",
+        ],
+        "ANCHOR": [
+            "오늘 몸이나 병원 이야기 중에 기억나는 점이 있으세요?",
+            "약이나 병원 이야기를 떠올리면 제일 먼저 생각나는 게 있으세요?",
+            "그때 있었던 일 중에 기억나는 장면이 있으세요?",
+        ],
+    },
+    "FOOD": {
+        "DEEPEN": [
+            "그때 누구와 같이 드셨어요?",
+            "그 음식은 어디에서 드셨어요?",
+            "드셨을 때 맛은 어떠셨어요?",
+        ],
+        "ANCHOR": [
+            "그 음식에서 가장 기억나는 점이 있으세요?",
+            "그때 드신 음식의 맛이나 모습 중에 먼저 떠오르는 게 있으세요?",
+            "그 음식을 떠올리면 제일 먼저 생각나는 게 무엇인가요?",
+        ],
+    },
+    "PERSON": {
+        "DEEPEN": [
+            "그분과는 최근에 어떤 이야기를 나누셨어요?",
+            "그분이 생각날 때 가장 먼저 떠오르는 모습이 있으세요?",
+            "그분과 함께했던 일 중에 기억나는 장면이 있으세요?",
+        ],
+        "ANCHOR": [
+            "그분을 떠올리면 제일 먼저 생각나는 모습이 있으세요?",
+            "그분과의 이야기 중에 지금도 기억나는 게 있으세요?",
+            "그분과 다시 이야기한다면 어떤 말이 먼저 떠오르세요?",
+        ],
+    },
+    "PLACE": {
+        "DEEPEN": [
+            "그곳에는 혼자 가셨어요, 아니면 누군가와 함께 가셨어요?",
+            "그곳에서 가장 먼저 보였던 것이 있으세요?",
+            "그곳에 계셨을 때 주변 분위기는 어떠셨어요?",
+        ],
+        "ANCHOR": [
+            "그곳에서 기억나는 장면이 있으세요?",
+            "그 장소를 떠올리면 제일 먼저 생각나는 게 있으세요?",
+            "그때 주변에서 본 것이 기억나세요?",
+        ],
+    },
+    "MEDIA": {
+        "DEEPEN": [
+            "그 노래에서 가장 기억나는 부분이 있으세요?",
+            "그 노래를 들을 때 기분은 어떠셨어요?",
+            "그 방송에서 기억나는 내용이 있으세요?",
+            "보실 때 어떤 장면이나 노래가 가장 기억나세요?",
+            "그 방송에서 가장 먼저 떠오르는 사람이 있으세요?",
+            "그걸 보실 때 기분은 어떠셨어요?",
+        ],
+        "ANCHOR": [
+            "나중에 다시 떠올릴 만한 장면이나 노래가 있으세요?",
+            "그 방송을 떠올리면 제일 먼저 생각나는 게 무엇인가요?",
+            "그때 보신 내용 중에 기억나는 부분이 있으세요?",
+        ],
+    },
+}
+
 
 TOPIC_CHANGE_ACKNOWLEDGEMENTS = [
     "아하, 그렇군요.",
@@ -362,6 +480,375 @@ def _get_cycle_transcripts(session_records: list[dict] | None) -> list[str]:
     return _extract_recall_candidate_transcripts(session_records)
 
 
+def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+EXPLICIT_FOOD_KEYWORDS = (
+    "식사",
+    "음식",
+    "밥",
+    "반찬",
+    "국",
+    "찌개",
+    "김치",
+    "볶음밥",
+    "피자",
+    "간식",
+)
+
+EXPLICIT_PLACE_KEYWORDS = (
+    "집",
+    "병원",
+    "마트",
+    "시장",
+    "공원",
+    "동네",
+    "밖",
+    "창밖",
+)
+
+
+FOOD_WISH_QUESTIONS = {
+    "DEEPEN": [
+        "어떤 음식이 가장 먼저 떠오르세요?",
+        "그 음식이 생각난 이유가 있으세요?",
+        "나중에 드신다면 누구와 같이 드시고 싶으세요?",
+    ],
+    "ANCHOR": [
+        "먹고 싶었던 음식 중에 나중에 기억할 만한 게 있으세요?",
+        "그 음식을 떠올리면 제일 먼저 생각나는 모습이 있으세요?",
+        "그 음식 이야기를 다시 한다면 어떤 말이 먼저 떠오를까요?",
+    ],
+}
+
+
+def _detect_topic_in_text(text: str) -> str | None:
+    health_text = text.replace("약속", "")
+
+    if _contains_any(
+        health_text,
+        (
+            "몰라",
+            "모르",
+            "기억 안",
+            "생각 안",
+            "없어",
+            "없네",
+        ),
+    ):
+        return "LOW_INFO"
+
+    if _contains_any(
+        text,
+        (
+            "별로",
+            "싫",
+            "힘들",
+            "우울",
+            "속상",
+            "걱정",
+            "불편",
+            "무거웠",
+        ),
+    ):
+        return "NEGATIVE"
+
+    if _contains_any(
+        text,
+        (
+            "날씨",
+            "덥",
+            "더웠",
+            "춥",
+            "비가",
+            "비는",
+            "눈",
+            "바람",
+            "햇빛",
+        ),
+    ):
+        return "WEATHER"
+
+    if _contains_any(
+        text,
+        (
+            "샀",
+            "사왔",
+            "장",
+            "물건",
+            "사과",
+        ),
+    ):
+        return "SHOPPING"
+
+    if _contains_any(
+        health_text,
+        (
+            "약",
+            "병원",
+            "진료",
+            "의사",
+            "간호",
+            "아프",
+            "다쳤",
+            "몸",
+            "검사",
+        ),
+    ):
+        return "HEALTH"
+
+    if _contains_any(
+        text,
+        (
+            "먹",
+            "마시",
+            "식사",
+            "음식",
+            "밥",
+            "반찬",
+            "국",
+            "찌개",
+            "김치",
+            "볶음밥",
+            "피자",
+            "간식",
+            "맛",
+        ),
+    ):
+        return "FOOD"
+
+    if _contains_any(
+        text,
+        (
+            "아들",
+            "딸",
+            "손주",
+            "배우자",
+            "가족",
+            "친구",
+            "사람",
+            "연락",
+            "통화",
+            "만났",
+        ),
+    ):
+        return "PERSON"
+
+    if _contains_any(
+        text,
+        (
+            "집",
+            "병원",
+            "마트",
+            "시장",
+            "공원",
+            "동네",
+            "밖",
+            "창밖",
+            "어디",
+            "다녀",
+            "갔",
+            "갔다",
+        ),
+    ):
+        return "PLACE"
+
+    if _contains_any(
+        text,
+        (
+            "텔레비전",
+            "방송",
+            "프로그램",
+            "노래",
+            "가수",
+            "미스터트롯",
+            "드라마",
+            "뉴스",
+            "봤",
+            "보았",
+            "들었",
+        ),
+    ):
+        return "MEDIA"
+
+    return None
+
+
+def _detect_recent_context_topic(cycle_texts: list[str]) -> str | None:
+    for text in reversed(cycle_texts):
+        topic = _detect_topic_in_text(text)
+
+        if topic is not None:
+            return topic
+
+    return None
+
+
+def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str | None:
+    # 최신 답변의 주제를 우선한다. 이전 답변까지 먼저 섞으면
+    # 사용자가 새 주제로 넘어갔는데도 이전 주제 질문이 계속 나올 수 있다.
+    latest_topic = _detect_topic_in_text(latest_text)
+    context_topic = _detect_recent_context_topic(cycle_texts)
+    previous_cycle_texts = list(cycle_texts)
+
+    if previous_cycle_texts and previous_cycle_texts[-1].strip() == latest_text.strip():
+        previous_cycle_texts = previous_cycle_texts[:-1]
+
+    previous_context_topic = _detect_recent_context_topic(previous_cycle_texts)
+
+    if (
+        latest_topic == "FOOD"
+        and context_topic == "HEALTH"
+        and not _contains_any(latest_text, EXPLICIT_FOOD_KEYWORDS)
+    ):
+        return context_topic
+
+    if (
+        latest_topic == "PLACE"
+        and context_topic == "HEALTH"
+        and not _contains_any(latest_text, EXPLICIT_PLACE_KEYWORDS)
+    ):
+        return context_topic
+
+    if (
+        latest_topic == "PLACE"
+        and context_topic == "WEATHER"
+        and _contains_any(latest_text, ("안 나갔", "밖에 안", "집에 있었"))
+    ):
+        return context_topic
+
+    if (
+        latest_topic == "MEDIA"
+        and previous_context_topic == "PLACE"
+        and not _contains_any(
+            latest_text,
+            ("텔레비전", "티비", "방송", "프로그램", "노래", "가수", "드라마", "뉴스"),
+        )
+    ):
+        return previous_context_topic
+
+    if latest_topic is not None:
+        return latest_topic
+
+    if context_topic is not None:
+        return context_topic
+
+    return None
+
+
+def _get_topic_aware_fallback_candidates(
+    stage: str,
+    latest_text: str,
+    cycle_texts: list[str],
+) -> list[str]:
+    topic = _detect_conversation_topic(latest_text, cycle_texts)
+
+    if topic is None:
+        return []
+
+    candidates = TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS.get(topic, {}).get(stage, [])
+
+    if topic == "FOOD":
+        if _contains_any(latest_text, ("먹고 싶", "먹고싶", "안 먹", "못 먹")):
+            candidates = FOOD_WISH_QUESTIONS.get(stage, candidates)
+
+        if "혼자" in latest_text:
+            candidates = [
+                question
+                for question in candidates
+                if "누구와 같이" not in question
+            ]
+
+        if _contains_any(latest_text, ("맛있", "맛은", "맛이", "시원")):
+            candidates = [
+                question
+                for question in candidates
+                if "맛" not in question
+            ]
+
+        if "에서" in latest_text or "집" in latest_text:
+            candidates = [
+                question
+                for question in candidates
+                if "어디에서" not in question
+            ]
+
+    if topic == "HEALTH":
+        context = " ".join([latest_text, *cycle_texts])
+
+        if "약" not in context:
+            candidates = [
+                question
+                for question in candidates
+                if "약" not in question
+            ]
+
+        if "병원" not in context:
+            candidates = [
+                question
+                for question in candidates
+                if "병원" not in question
+            ]
+
+        if "혼자" in latest_text:
+            candidates = [
+                question
+                for question in candidates
+                if "혼자" not in question
+            ]
+
+        if _contains_any(latest_text, ("아침", "점심", "저녁", "오전", "오후")):
+            candidates = [
+                question
+                for question in candidates
+                if "언제" not in question
+            ]
+
+    if topic == "WEATHER":
+        context = " ".join([latest_text, *cycle_texts])
+
+        if not _contains_any(context, ("덥", "더웠", "햇빛")):
+            candidates = [
+                question
+                for question in candidates
+                if "더울" not in question and "더웠" not in question
+            ]
+
+    if topic == "MEDIA":
+        context = " ".join([latest_text, *cycle_texts])
+
+        if _contains_any(context, ("노래", "가수", "들었")):
+            candidates = [
+                question
+                for question in candidates
+                if "보실 때" not in question and "방송에서" not in question
+            ]
+
+        if "드라마" in context:
+            candidates = [
+                question
+                for question in candidates
+                if "노래" not in question
+            ]
+
+        if "뉴스" in context:
+            candidates = [
+                question
+                for question in candidates
+                if "사람" not in question and "노래" not in question
+            ]
+
+        if _contains_any(latest_text, ("좋았", "재밌", "즐거")):
+            candidates = [
+                question
+                for question in candidates
+                if "기분" not in question
+            ]
+
+    return candidates
+
+
 def _get_topic_openers() -> list[str]:
     return SAFE_OPENING_QUESTIONS
 
@@ -471,9 +958,15 @@ def _get_next_normal_question(
 
             return opener_question
 
-    stage = "DEEPEN" if candidate_count == 1 else "ANCHOR"
+    stage = "DEEPEN" if candidate_count <= 2 else "ANCHOR"
+    topic_aware_candidates = _get_topic_aware_fallback_candidates(
+        stage,
+        latest_text,
+        cycle_texts,
+    )
+    fallback_candidates = topic_aware_candidates or SAFE_STAGE_FALLBACK_QUESTIONS[stage]
     fallback_question = _pick_non_repeated_question(
-        candidates=SAFE_STAGE_FALLBACK_QUESTIONS[stage],
+        candidates=fallback_candidates,
         used_questions=used_questions,
         previous_questions=recent_context,
         start_index=question_index,
