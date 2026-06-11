@@ -5,10 +5,13 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionRepository;
 import com.example.backend.Model.Repository.UserRepository;
 import com.example.backend.Util.DefaultRecallQuestions;
+import com.example.backend.Util.JwtTokenProvider;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +24,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final RecallQuestionRepository recallQuestionRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
     // 회원가입
     @Transactional
@@ -114,7 +118,7 @@ public class UserService {
         protector.getPatients().add(patient);
     }
 
-    // 환자 코드로 환자 조회 (교차검증용 — 이름·전화번호만 반환)
+    // 환자 코드로 환자 조회
     public User findByPatientCode(String patientCode) {
         return userRepository.findByPatientCode(patientCode)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
@@ -163,5 +167,62 @@ public class UserService {
         }
 
         return protector.getPatients();
+    }
+
+    // 민감정보 접근 권한 검사
+    // 허용 조건:
+    // 1. 요청자가 targetUserId 본인인 경우
+    // 2. 요청자가 보호자이고, targetUserId 환자와 연결되어 있는 경우
+    @Transactional
+    public User validatePatientAccess(String authorizationHeader, Integer targetUserId) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "로그인이 필요합니다."
+            );
+        }
+
+        String token = authorizationHeader.substring(7);
+
+        if (!jwtTokenProvider.validateToken(token)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "유효하지 않은 토큰입니다."
+            );
+        }
+
+        String requesterPhone = jwtTokenProvider.getPhoneFromToken(token);
+
+        User requester = userRepository.findByPhone(requesterPhone)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "토큰 사용자 정보를 찾을 수 없습니다."
+                ));
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "대상 사용자를 찾을 수 없습니다."
+                ));
+
+        // 본인 정보 접근 허용
+        if (requester.getId().equals(targetUser.getId())) {
+            return requester;
+        }
+
+        // 연결된 보호자 접근 허용
+        if ("PROTECTOR".equalsIgnoreCase(requester.getRole())) {
+            boolean linkedPatient = requester.getPatients().stream()
+                    .anyMatch(patient -> patient.getId().equals(targetUserId));
+
+            if (linkedPatient) {
+                return requester;
+            }
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "해당 사용자 정보에 접근할 권한이 없습니다."
+        );
     }
 }

@@ -5,6 +5,7 @@ import com.example.backend.Model.DTO.location.LocationDTO;
 import com.example.backend.Model.DTO.location.LocationResponseDTO;
 import com.example.backend.Model.DTO.location.SafeZoneDTO;
 import com.example.backend.Service.LocationService;
+import com.example.backend.Service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -20,10 +21,16 @@ import java.util.List;
 public class LocationController {
 
     private final LocationService locationService;
+    private final UserService userService;
 
     // 위치 정보 저장
     @PostMapping
-    public ResponseEntity<ApiResponse<Void>> saveLocation(@RequestBody LocationDTO locationDTO) {
+    public ResponseEntity<ApiResponse<Void>> saveLocation(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody LocationDTO locationDTO) {
+
+        userService.validatePatientAccess(authorizationHeader, locationDTO.getUserId());
+
         try {
             locationService.saveLocation(locationDTO);
             return ResponseEntity.ok(ApiResponse.success());
@@ -35,7 +42,12 @@ public class LocationController {
 
     // 안심구역 설정
     @PostMapping("/safezone")
-    public ResponseEntity<ApiResponse<Void>> setSafeZone(@RequestBody SafeZoneDTO safeZoneDTO) {
+    public ResponseEntity<ApiResponse<Void>> setSafeZone(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody SafeZoneDTO safeZoneDTO) {
+
+        userService.validatePatientAccess(authorizationHeader, safeZoneDTO.getUserId());
+
         try {
             locationService.updateSafeZone(safeZoneDTO);
             return ResponseEntity.ok(ApiResponse.success());
@@ -47,7 +59,12 @@ public class LocationController {
 
     // 안심 정보 확인
     @GetMapping("/check-safezone/{userId}")
-    public ResponseEntity<ApiResponse<Boolean>> checkSafeZone(@PathVariable Integer userId) {
+    public ResponseEntity<ApiResponse<Boolean>> checkSafeZone(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Integer userId) {
+
+        userService.validatePatientAccess(authorizationHeader, userId);
+
         try {
             boolean isWithin = locationService.isWithinSafeZone(userId);
             return ResponseEntity.ok(ApiResponse.success(isWithin));
@@ -57,8 +74,14 @@ public class LocationController {
         }
     }
 
+    // 현재 위치 조회
     @GetMapping("/current/{userId}")
-    public ResponseEntity<ApiResponse<LocationResponseDTO>> getCurrentLocation(@PathVariable Integer userId) {
+    public ResponseEntity<ApiResponse<LocationResponseDTO>> getCurrentLocation(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Integer userId) {
+
+        userService.validatePatientAccess(authorizationHeader, userId);
+
         LocationResponseDTO location = locationService.getCurrentLocation(userId);
 
         if (location != null) {
@@ -71,10 +94,13 @@ public class LocationController {
     // 일일 이동 동선 조회
     @GetMapping("/route/{userId}")
     public ResponseEntity<ApiResponse<List<LocationResponseDTO>>> getDailyRoute(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @PathVariable Integer userId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
 
-        //(?date=2026-05-09 형식으로 파라미터 전달)
+        userService.validatePatientAccess(authorizationHeader, userId);
+
+        // (?date=2026-05-09 형식으로 파라미터 전달)
         List<LocationResponseDTO> route = locationService.getDailyRoute(userId, date);
         return ResponseEntity.ok(ApiResponse.success(route));
     }
