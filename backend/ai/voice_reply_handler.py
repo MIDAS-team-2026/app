@@ -77,11 +77,42 @@ SAFE_OPENING_QUESTIONS = [
 AFTER_RECALL_OPENING_QUESTIONS = [
     "이어서 오늘 드신 것 중에 생각나는 음식이 있으세요?",
     "이번에는 오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
-    "이어서 오늘 만났거나 연락한 사람이 있으세요?",
     "이번에는 최근에 본 방송이나 들은 노래 이야기도 해볼까요?",
     "이어서 오늘 밖이나 창밖에서 본 것이 있으세요?",
     "이번에는 손에 잡았던 물건이나 하셨던 일이 있으세요?",
+    "오늘 하루 중 편하게 이야기하고 싶은 일이 있으세요?",
 ]
+
+AFTER_LOW_INFO_RECALL_OPENING_QUESTIONS = [
+    "괜찮습니다. 오늘 집에서 하신 일 중에 편하게 떠오르는 게 있으세요?",
+    "괜찮습니다. 이번에는 오늘 보신 방송이나 들은 소리 이야기를 해볼까요?",
+    "괜찮습니다. 그러면 오늘 드신 것 중에 기억나는 음식이 있으세요?",
+]
+
+AFTER_NEGATIVE_RECALL_OPENING_QUESTIONS = [
+    "그러셨군요. 그럼 오늘 조금이라도 편했던 순간이 있으세요?",
+    "그랬군요. 지금은 편하게 이야기할 수 있는 다른 일이 있으세요?",
+    "알겠습니다. 오늘 집에서 마음이 조금 편했던 시간이 있으세요?",
+]
+
+AFTER_SHORT_RECALL_OPENING_QUESTIONS = [
+    "그렇군요. 그럼 오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
+    "알겠습니다. 이번에는 오늘 보신 것 중에 기억나는 게 있으세요?",
+    "그러셨군요. 오늘 드신 것 중에 생각나는 음식이 있으세요?",
+]
+
+REPEATED_LOW_INFO_QUESTIONS = {
+    "DEEPEN": [
+        "괜찮습니다. 그럼 다른 이야기로 해볼까요? 오늘 편하게 떠오르는 일이 있으세요?",
+        "괜찮습니다. 그럼 오늘 집에서 하신 일이나 보신 것 중 편한 것부터 말씀해주실래요?",
+        "알겠습니다. 그럼 오늘 하루 중 가장 편했던 순간이 있으세요?",
+    ],
+    "ANCHOR": [
+        "괜찮습니다. 오늘 떠올리기 쉬운 일 하나만 말씀해주실래요?",
+        "괜찮습니다. 오늘 기억나는 음식이나 방송 중 편한 것부터 이야기해볼까요?",
+        "알겠습니다. 지금 편하게 생각나는 일이 하나 있으세요?",
+    ],
+}
 
 
 SAFE_STAGE_FALLBACK_QUESTIONS = {
@@ -112,7 +143,7 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
         ],
         "ANCHOR": [
             "오늘 하루에서 가장 먼저 떠오르는 일이 있으세요?",
-            "오늘 기억나는 사람이나 장소가 하나 있으세요?",
+            "오늘 집에서 하신 일 중에 기억나는 게 하나 있으세요?",
             "방금 이야기 말고 오늘 있었던 일 중에 생각나는 게 있으세요?",
         ],
     },
@@ -484,6 +515,50 @@ def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
 
 
+def _is_low_info_response(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "몰라",
+            "모르",
+            "기억 안",
+            "생각 안",
+            "없어",
+            "없다",
+            "없었",
+            "없네",
+            "없다니까",
+        ),
+    )
+
+
+def _is_negative_response(text: str) -> bool:
+    return _contains_any(
+        text,
+        (
+            "별로",
+            "싫",
+            "힘들",
+            "우울",
+            "속상",
+            "걱정",
+            "불편",
+            "무거웠",
+            "화가",
+            "화났",
+            "짜증",
+        ),
+    )
+
+
+def _is_short_response(text: str) -> bool:
+    return len(_normalize_text(text)) <= 4
+
+
+def _count_recent_low_info_responses(texts: list[str], limit: int = 3) -> int:
+    return sum(1 for text in texts[-limit:] if _is_low_info_response(text))
+
+
 EXPLICIT_FOOD_KEYWORDS = (
     "식사",
     "음식",
@@ -526,17 +601,7 @@ FOOD_WISH_QUESTIONS = {
 def _detect_topic_in_text(text: str) -> str | None:
     health_text = text.replace("약속", "")
 
-    if _contains_any(
-        health_text,
-        (
-            "몰라",
-            "모르",
-            "기억 안",
-            "생각 안",
-            "없어",
-            "없네",
-        ),
-    ):
+    if _is_low_info_response(health_text):
         return "LOW_INFO"
 
     if _contains_any(
@@ -591,8 +656,11 @@ def _detect_topic_in_text(text: str) -> str | None:
             "의사",
             "간호",
             "아프",
+            "아팠",
             "다쳤",
             "몸",
+            "허리",
+            "불편",
             "검사",
         ),
     ):
@@ -658,6 +726,7 @@ def _detect_topic_in_text(text: str) -> str | None:
         text,
         (
             "텔레비전",
+            "티비",
             "방송",
             "프로그램",
             "노래",
@@ -749,6 +818,9 @@ def _get_topic_aware_fallback_candidates(
 
     candidates = TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS.get(topic, {}).get(stage, [])
 
+    if topic == "LOW_INFO" and _count_recent_low_info_responses(cycle_texts) >= 2:
+        candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
+
     if topic == "FOOD":
         if _contains_any(latest_text, ("먹고 싶", "먹고싶", "안 먹", "못 먹")):
             candidates = FOOD_WISH_QUESTIONS.get(stage, candidates)
@@ -803,6 +875,13 @@ def _get_topic_aware_fallback_candidates(
                 question
                 for question in candidates
                 if "언제" not in question
+            ]
+
+        if _contains_any(context, ("허리", "팔", "다리", "무릎", "어깨", "배", "머리")):
+            candidates = [
+                question
+                for question in candidates
+                if "어느 쪽" not in question
             ]
 
     if topic == "WEATHER":
@@ -918,9 +997,25 @@ def _with_recall_transition_acknowledgement(
     question: str,
     session_records: list[dict] | None,
 ) -> str:
+    if _contains_any(question, ("괜찮습니다.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.")):
+        return question
+
     index = len(session_records or []) % len(RECALL_TRANSITION_ACKNOWLEDGEMENTS)
     acknowledgement = RECALL_TRANSITION_ACKNOWLEDGEMENTS[index]
     return f"{acknowledgement} {question}"
+
+
+def _get_after_recall_opening_candidates(recall_answer_text: str) -> list[str]:
+    if _is_low_info_response(recall_answer_text):
+        return AFTER_LOW_INFO_RECALL_OPENING_QUESTIONS
+
+    if _is_negative_response(recall_answer_text):
+        return AFTER_NEGATIVE_RECALL_OPENING_QUESTIONS
+
+    if _is_short_response(recall_answer_text):
+        return AFTER_SHORT_RECALL_OPENING_QUESTIONS
+
+    return AFTER_RECALL_OPENING_QUESTIONS
 
 
 def _get_next_normal_question(
@@ -937,8 +1032,12 @@ def _get_next_normal_question(
 
     if candidate_count <= 0:
         after_recall_answer = _is_after_recall_answer(session_records)
+        latest_record = _get_latest_record(session_records)
+        latest_transcript = str(
+            (latest_record or {}).get("transcriptText") or latest_text or ""
+        )
         opening_candidates = (
-            AFTER_RECALL_OPENING_QUESTIONS
+            _get_after_recall_opening_candidates(latest_transcript)
             if after_recall_answer
             else _get_topic_openers()
         )
@@ -964,6 +1063,19 @@ def _get_next_normal_question(
         latest_text,
         cycle_texts,
     )
+
+    if (
+        _is_low_info_response(latest_text)
+        and _count_recent_low_info_responses(
+            _get_recent_transcript_list(session_records),
+        )
+        >= 2
+    ):
+        topic_aware_candidates = REPEATED_LOW_INFO_QUESTIONS.get(
+            stage,
+            topic_aware_candidates,
+        )
+
     fallback_candidates = topic_aware_candidates or SAFE_STAGE_FALLBACK_QUESTIONS[stage]
     fallback_question = _pick_non_repeated_question(
         candidates=fallback_candidates,
