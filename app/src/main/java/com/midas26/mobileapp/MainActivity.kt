@@ -54,7 +54,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = PrefsManager.from(this)
-        RetrofitClient.init { prefs.getToken() }
         ttsManager = TtsManager(this).apply { setSpeed(prefs.getTtsSpeed()) }
         enableEdgeToEdge()
         setContent {
