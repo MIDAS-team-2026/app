@@ -42,7 +42,10 @@ WEAK_MEMORY_PHRASES = [
     "기억이 안",
     "그냥",
     "없어",
+    "없다",
+    "없었",
     "없어요",
+    "없다니까",
 ]
 
 
@@ -56,16 +59,33 @@ MEMORY_DETAIL_HINTS = [
     "봤",
     "보았",
     "했",
+    "샀",
+    "사왔",
+    "넣었",
     "전화",
     "통화",
     "이야기",
     "산책",
     "운동",
     "병원",
+    "아팠",
     "마트",
     "시장",
     "공원",
     "집",
+    "티비",
+    "텔레비전",
+    "뉴스",
+    "노래",
+    "드라마",
+    "사과",
+    "우유",
+    "생선",
+    "냉장고",
+    "약",
+    "허리",
+    "몸",
+    "불편",
     "손주",
     "아들",
     "딸",
@@ -75,6 +95,80 @@ MEMORY_DETAIL_HINTS = [
     "저녁",
     "아침",
     "음식",
+]
+
+MEMORY_ACTION_HINTS = [
+    "먹었",
+    "마셨",
+    "갔",
+    "갔다",
+    "다녀왔",
+    "봤",
+    "보고",
+    "보았",
+    "들었",
+    "샀",
+    "넣었",
+    "만났",
+    "통화",
+    "전화",
+    "이야기",
+    "있었",
+    "앉았",
+    "누워",
+]
+
+
+MEMORY_CONCRETE_HINTS = [
+    "김치",
+    "볶음밥",
+    "피자",
+    "라면",
+    "국",
+    "밥",
+    "사과",
+    "우유",
+    "생선",
+    "약",
+    "허리",
+    "몸",
+    "티비",
+    "텔레비전",
+    "뉴스",
+    "노래",
+    "드라마",
+    "병원",
+    "마트",
+    "시장",
+    "공원",
+    "집",
+    "냉장고",
+    "소파",
+    "아들",
+    "딸",
+    "손주",
+    "친구",
+]
+
+
+FUTURE_OR_WISH_PHRASES = [
+    "먹고 싶",
+    "먹고싶",
+    "보고 싶",
+    "보고싶",
+    "하고 싶",
+    "하고싶",
+]
+
+INCOMPLETE_OR_NEGATED_ACTION_PHRASES = [
+    "안 먹",
+    "못 먹",
+    "아직 안",
+    "아직은 안",
+    "연락은 못",
+    "연락을 못",
+    "안 나갔",
+    "못 나갔",
 ]
 
 
@@ -195,6 +289,84 @@ def evaluate_memory_candidate(text: str) -> Dict[str, object]:
     }
 
 
+def score_recall_memory_candidate(text: str) -> Dict[str, object]:
+    text = clean_text(text)
+    evaluation = evaluate_memory_candidate(text)
+
+    if not evaluation["isValid"]:
+        return {
+            **evaluation,
+            "recallScore": 0,
+        }
+
+    recall_score = int(evaluation["score"])
+    reasons = list(evaluation["reasons"])
+
+    action_hits = [hint for hint in MEMORY_ACTION_HINTS if hint in text]
+    concrete_hits = [hint for hint in MEMORY_CONCRETE_HINTS if hint in text]
+
+    if action_hits:
+        recall_score += min(30, len(action_hits) * 10)
+        reasons.append("has_past_action")
+
+    if concrete_hits:
+        recall_score += min(30, len(concrete_hits) * 10)
+        reasons.append("has_concrete_object")
+
+    if any(phrase in text for phrase in FUTURE_OR_WISH_PHRASES):
+        recall_score -= 25
+        reasons.append("future_or_wish_expression")
+
+    if any(phrase in text for phrase in INCOMPLETE_OR_NEGATED_ACTION_PHRASES):
+        recall_score -= 50
+        reasons.append("incomplete_or_negated_action")
+
+    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+        recall_score -= 35
+        reasons.append("low_info_expression")
+
+    recall_score = max(0, min(recall_score, 100))
+
+    return {
+        **evaluation,
+        "isValid": recall_score >= 40,
+        "recallScore": recall_score,
+        "reasons": reasons,
+    }
+
+
+def select_recall_memory_candidates(
+    conversation_history: List[str],
+    max_candidates: int = 3,
+) -> List[str]:
+    scored_candidates = []
+
+    for index, text in enumerate(conversation_history):
+        cleaned = clean_text(text)
+        evaluation = score_recall_memory_candidate(cleaned)
+
+        if evaluation["isValid"]:
+            scored_candidates.append(
+                {
+                    "index": index,
+                    "text": cleaned,
+                    "score": evaluation["recallScore"],
+                    "reasons": evaluation["reasons"],
+                }
+            )
+
+    scored_candidates = [
+        item
+        for item in scored_candidates
+        if item["score"] >= 50 or "has_concrete_object" in item["reasons"]
+    ]
+
+    scored_candidates.sort(key=lambda item: item["score"], reverse=True)
+    selected = sorted(scored_candidates[:max_candidates], key=lambda item: item["index"])
+
+    return [item["text"] for item in selected]
+
+
 def filter_valid_conversation_history(
     conversation_history: List[str],
 ) -> List[str]:
@@ -295,7 +467,7 @@ def generate_recall_question_from_conversation(
     previous_questions: Optional[List[str]] = None,
     used_memory_points: Optional[List[str]] = None,
 ) -> Dict[str, str]:
-    valid_conversation_history = filter_valid_conversation_history(
+    valid_conversation_history = select_recall_memory_candidates(
         conversation_history
     )
 
@@ -400,7 +572,7 @@ question: 자연스러운 회상 질문
     if not question:
         question = content
 
-    memory_evaluation = evaluate_memory_candidate(memory_point)
+    memory_evaluation = score_recall_memory_candidate(memory_point)
 
     if not memory_evaluation["isValid"]:
         return {
@@ -408,7 +580,7 @@ question: 자연스러운 회상 질문
             "reason": "회상 질문으로 저장하기에는 memoryPoint가 너무 짧거나 구체성이 부족합니다.",
             "memoryPoint": memory_point,
             "question": question,
-            "memoryQualityScore": memory_evaluation["score"],
+            "memoryQualityScore": memory_evaluation["recallScore"],
             "memoryQualityReasons": memory_evaluation["reasons"],
         }
 
@@ -437,7 +609,7 @@ question: 자연스러운 회상 질문
         "reason": "",
         "memoryPoint": memory_point,
         "question": question,
-        "memoryQualityScore": memory_evaluation["score"],
+        "memoryQualityScore": memory_evaluation["recallScore"],
         "memoryQualityReasons": memory_evaluation["reasons"],
     }
 
