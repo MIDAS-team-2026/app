@@ -1,0 +1,45 @@
+# Raw and processed datasets
+data/raw/*
+data/processed/*
+outputs/*
+
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!outputs/.gitkeep
+!data/sample/*.csv
+
+# AI-Hub original and derived files
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.json
+
+# Large or sensitive CSV files
+elderly_*.csv
+dysarthria_*.csv
+*_feature_result.csv
+*_features.csv
+
+# Model files
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.pth
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Local environment
+.env
+.venv/
+venv/
+
+# OS files
+.DS_Store
+Thumbs.db

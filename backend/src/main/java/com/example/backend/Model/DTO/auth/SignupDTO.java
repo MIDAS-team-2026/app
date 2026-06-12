@@ -1,0 +1,15 @@
+package com.example.backend.Model.DTO.auth;
+
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+public class SignupDTO {
+    private String phone;
+    private String password;
+    private String name;
+    private String role;
+    private Integer ageGroup;
+    private Integer gender;
+}

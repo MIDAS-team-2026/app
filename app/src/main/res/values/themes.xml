@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <style name="Theme.MobileApp" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.MobileApp" parent="android:style/Theme.Material.Light.NoActionBar">
+        <!-- 시스템 스플래시 배경색 -->
+        <item name="android:windowSplashScreenBackground">#FBFFF8</item>
+
+        <!-- 기본 앱 배경색 -->
+        <item name="android:windowBackground">#FBFFF8</item>
+
+        <!-- 액션바 제거 -->
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+    </style>
+
 </resources>

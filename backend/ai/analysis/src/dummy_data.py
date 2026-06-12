@@ -1,0 +1,16 @@
+from pathlib import Path
+
+sample_dir = Path("data/sample")
+sample_dir.mkdir(parents=True, exist_ok=True)
+
+csv_content = """audio_file_name,audio_duration,rms_mean,rms_std,zcr_mean,zcr_std,spectral_centroid_mean,spectral_centroid_std,mfcc_1_mean,mfcc_1_std,mfcc_2_mean,mfcc_2_std,mfcc_3_mean,mfcc_3_std,mfcc_4_mean,mfcc_4_std,mfcc_5_mean,mfcc_5_std,mfcc_6_mean,mfcc_6_std,mfcc_7_mean,mfcc_7_std,mfcc_8_mean,mfcc_8_std,mfcc_9_mean,mfcc_9_std,mfcc_10_mean,mfcc_10_std,mfcc_11_mean,mfcc_11_std,mfcc_12_mean,mfcc_12_std,mfcc_13_mean,mfcc_13_std
+sample_001.wav,698.97,0.0048,0.0182,0.36,0.11,11000,3900,-610,68,22,52,5,11,4,9,6,10,4,8,3,7,3,4,3,4,2,4,1,5,1,3,2,4
+sample_002.wav,744.31,0.0051,0.0190,0.35,0.12,11200,4000,-600,70,20,50,6,12,5,10,7,11,3,9,4,8,4,5,2,5,3,5,2,6,2,4,3,5
+"""
+
+output_path = sample_dir / "dummy_audio_features.csv"
+
+with open(output_path, "w", encoding="utf-8-sig") as f:
+    f.write(csv_content)
+
+print("저장 완료:", output_path)

@@ -1,10 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
-    <color name="black">#FF000000</color>
+    <!-- Primary Green -->
+    <color name="green_50">#E8F5E4</color>
+    <color name="green_100">#C2E2B9</color>
+    <color name="green_200">#9DCE8E</color>
+    <color name="green_400">#4CAF50</color>
+    <color name="green_500">#3A9A3F</color>
+    <color name="green_600">#2D7D31</color>
+    <color name="green_900">#1B4D1E</color>
+
+    <!-- Neutral Gray -->
+    <color name="gray_50">#F9FAFB</color>
+    <color name="gray_100">#F3F4F6</color>
+    <color name="gray_200">#E5E7EB</color>
+    <color name="gray_400">#9CA3AF</color>
+    <color name="gray_600">#4B5563</color>
+    <color name="gray_800">#1F2937</color>
+    <color name="gray_900">#111827</color>
+
+    <!-- Semantic -->
+    <color name="amber_400">#F59E0B</color>
+    <color name="red_400">#EF4444</color>
+    <color name="red_50">#FEF2F2</color>
+
+    <!-- Base -->
     <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="transparent">#00000000</color>
 </resources>
