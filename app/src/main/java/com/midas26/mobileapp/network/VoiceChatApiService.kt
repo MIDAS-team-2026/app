@@ -14,12 +14,12 @@ interface VoiceChatApiService {
 
     /**
      * 대화 세션 생성.
-     * @return 생성된 sessionId (Long)
+     * @return 생성된 sessionId + 오늘 고정질문 완료 여부
      */
     @POST("api/chat/session/start")
     suspend fun startSession(
         @Query("userId") userId: Int
-    ): Response<ApiResponse<Long>>
+    ): Response<ApiResponse<SessionStartResponse>>
 
     /**
      * 녹음 WAV 파일 업로드.
@@ -59,6 +59,12 @@ interface VoiceChatApiService {
         @Path("sessionId") sessionId: Long
     ): Response<Unit>
 }
+
+data class SessionStartResponse(
+    val sessionId: Long,
+    val fixedQuestionsDoneToday: Boolean,
+    val openingQuestionText: String?
+)
 
 data class VoiceUploadResponse(
     val audioRecordId: Long,

@@ -18,7 +18,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from transformers import pipeline
 
-from voice_reply_handler import process_voice_reply
+from voice_reply_handler import process_voice_reply, FIXED_QUESTIONS
 from main import run_record_mode, run_full_dummy_mode
 from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
@@ -203,6 +203,11 @@ def run_upload_analysis(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/opening-question")
+def opening_question():
+    """세션 시작 인사말 뒤에 이어질 첫 고정 질문 텍스트. Spring이 세션 시작 시 조회한다."""
+    return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
 
 @app.post("/process")
 def process(req: ProcessRequest, background_tasks: BackgroundTasks):

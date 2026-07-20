@@ -19,6 +19,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -137,6 +138,21 @@ public class VoiceService {
     }
 
 
+
+    @Transactional(readOnly = true)
+    public boolean isFixedQuestionsDoneToday(Integer userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
+        return LocalDate.now().equals(user.getLastFixedQuestionDate());
+    }
+
+    @Transactional
+    public void markFixedQuestionsDoneToday(Integer userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
+        user.setLastFixedQuestionDate(LocalDate.now());
+        userRepository.save(user);
+    }
 
     @Transactional(readOnly = true)
 

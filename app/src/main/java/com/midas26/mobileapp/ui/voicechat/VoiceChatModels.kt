@@ -69,9 +69,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     private var _state by mutableStateOf<VoiceChatState>(VoiceChatState.Idle)
     val state: VoiceChatState get() = _state
 
-    private val _messages: SnapshotStateList<ChatMessage> = listOf(
-        ChatMessage(Sender.AI, "준비되시면 먼저 말씀해주세요!")
-    ).toMutableStateList()
+    private val _messages: SnapshotStateList<ChatMessage> = listOf<ChatMessage>().toMutableStateList()
     val messages: List<ChatMessage> get() = _messages
 
     private var _recordingSeconds by mutableStateOf(0)
@@ -111,9 +109,28 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             runCatching { api.startSession(userId) }
                 .onSuccess { resp ->
-                    sessionId = resp.body()?.data ?: -1L
+                    val data = resp.body()?.data
+                    sessionId = data?.sessionId ?: -1L
                     if (sessionId > 0) prefs.saveLastSessionId(sessionId)
+                    dispatchAiReply(greetingText(data?.fixedQuestionsDoneToday == true, data?.openingQuestionText))
                 }
+                .onFailure {
+                    dispatchAiReply(greetingText(fixedQuestionsDoneToday = false, openingQuestionText = null))
+                }
+        }
+    }
+
+    /**
+     * 세션 시작 직후 AI가 먼저 건네는 인사말.
+     * 오늘 고정질문을 이미 마쳤으면 바로 자유대화로 유도하고,
+     * 그렇지 않으면 서버가 내려준 첫 고정질문(FIXED_QUESTIONS[0], 단일 출처는 backend/ai)으로 이어간다.
+     */
+    private fun greetingText(fixedQuestionsDoneToday: Boolean, openingQuestionText: String?): String {
+        val greeting = "안녕하세요! 오늘도 반갑습니다."
+        return when {
+            fixedQuestionsDoneToday -> "$greeting 편하게 말씀해주세요."
+            !openingQuestionText.isNullOrBlank() -> "$greeting $openingQuestionText"
+            else -> "$greeting 편하게 말씀해주세요."
         }
     }
 
