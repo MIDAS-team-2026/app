@@ -6,7 +6,7 @@
    그 첫 고정 질문에 대한 답변으로 채점된다.
 2. 초기 고정 질문은 FIXED로 저장하며, 하루에 한 번만 노출한다(오늘 이미 완료했다면 건너뛴다).
 3. FIXED / INITIAL / RECALL 답변은 새로운 memoryPoint 후보에서 제외한다.
-4. 자유대화 답변이 3개 이상 쌓이면 회상 질문을 생성한다.
+4. 자유대화 답변이 3개 이상이고 유효한 memoryPoint 후보가 2개 이상이면 회상 질문을 생성한다.
 5. 회상 질문 답변은 RECALL로 저장하고, 이후 다시 자유대화로 복귀한다.
 """
 
@@ -1523,7 +1523,7 @@ def process_voice_reply(
             )
             return
 
-        # 3. 자유대화 답변 3턴 이상 쌓이면 회상 질문 생성
+        # 3. 자유대화 답변이 충분히 쌓이면 회상 질문 생성
         updated_records = _fetch_session_records(session_id)
 
         if not updated_records:
