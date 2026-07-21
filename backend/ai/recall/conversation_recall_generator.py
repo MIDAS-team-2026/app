@@ -9,6 +9,7 @@ from openai import OpenAI
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-4-6"
 BASE_URL = "http://localhost:8080"
+MIN_RECALL_MEMORY_CANDIDATES = 2
 
 _client: OpenAI | None = None
 
@@ -517,6 +518,14 @@ def generate_recall_question_from_conversation(
     valid_conversation_history = select_recall_memory_candidates(
         conversation_history
     )
+
+    if len(valid_conversation_history) < MIN_RECALL_MEMORY_CANDIDATES:
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문을 만들 유효한 memoryPoint 후보가 2개 미만입니다.",
+            "memoryPoint": "",
+            "question": "",
+        }
 
     conversation_text = build_conversation_text(valid_conversation_history)
 
