@@ -159,4 +159,31 @@ public class VoiceController {
     public ResponseEntity<List<SessionRecordsResponseDTO>> getSessionRecords(@PathVariable Long sessionId) {
         return ResponseEntity.ok(voiceService.getRecordsBySession(sessionId));
     }
+
+    /**
+     * 오늘 고정질문(초기 5문항)을 이미 완료했는지 조회. Python AI가 호출한다.
+     */
+    @GetMapping("/fixed-status/{userId}")
+    public ResponseEntity<ApiResponse<Boolean>> getFixedQuestionStatus(@PathVariable Integer userId) {
+        try {
+            return ResponseEntity.ok(ApiResponse.success(voiceService.isFixedQuestionsDoneToday(userId)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
+
+    /**
+     * 오늘 고정질문(초기 5문항)을 완료했다고 기록. Python AI가 5문항 완료 시 호출한다.
+     */
+    @PostMapping("/fixed-complete/{userId}")
+    public ResponseEntity<ApiResponse<Void>> markFixedQuestionsComplete(@PathVariable Integer userId) {
+        try {
+            voiceService.markFixedQuestionsDoneToday(userId);
+            return ResponseEntity.ok(ApiResponse.success());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404)
+                    .body(ApiResponse.fail(404, e.getMessage()));
+        }
+    }
 }

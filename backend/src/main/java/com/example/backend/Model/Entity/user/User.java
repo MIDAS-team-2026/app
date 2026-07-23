@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -60,6 +61,10 @@ public class User {
     @CreatedDate // 자동으로 생성 시간 주입
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // 고정질문(초기 5문항)을 마지막으로 완료한 날짜 — 하루 1회 노출 제한에 사용
+    @Column(name = "last_fixed_question_date")
+    private LocalDate lastFixedQuestionDate;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<ChatSession> chatSessions = new ArrayList<>();

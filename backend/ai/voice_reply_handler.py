@@ -2,10 +2,11 @@
 음성 업로드 후 AI 답변 생성 및 회상 질문 저장 로직.
 
 핵심 흐름:
-1. 앱 첫 화면은 사용자가 먼저 말하는 구조이므로 첫 발화는 채점하지 않고 첫 고정 질문을 안내한다.
-2. 초기 고정 질문은 FIXED로 저장한다.
+1. 앱은 AI가 인사말과 함께 첫 고정 질문을 먼저 말하는 구조이므로, 사용자의 첫 발화는
+   그 첫 고정 질문에 대한 답변으로 채점된다.
+2. 초기 고정 질문은 FIXED로 저장하며, 하루에 한 번만 노출한다(오늘 이미 완료했다면 건너뛴다).
 3. FIXED / INITIAL / RECALL 답변은 새로운 memoryPoint 후보에서 제외한다.
-4. 자유대화 답변이 3개 이상 쌓이면 회상 질문을 생성한다.
+4. 자유대화 답변이 3개 이상이고 유효한 memoryPoint 후보가 2개 이상이면 회상 질문을 생성한다.
 5. 회상 질문 답변은 RECALL로 저장하고, 이후 다시 자유대화로 복귀한다.
 """
 
@@ -406,6 +407,30 @@ def _find_or_create_fixed_question(user_id: int, question_data: dict) -> dict | 
         category=question_data["category"],
         expected_answer=question_data["expectedAnswer"],
     )
+
+
+def _is_fixed_questions_done_today(user_id: int) -> bool:
+    try:
+        resp = requests.get(
+            f"{SPRING_BASE_URL}/api/voice/fixed-status/{user_id}",
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return bool(resp.json().get("data"))
+    except Exception as e:
+        logger.error("고정질문 완료 여부 조회 실패: userId=%s error=%s", user_id, e)
+        return False
+
+
+def _mark_fixed_questions_done_today(user_id: int):
+    try:
+        resp = requests.post(
+            f"{SPRING_BASE_URL}/api/voice/fixed-complete/{user_id}",
+            timeout=10,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        logger.error("고정질문 완료 기록 실패: userId=%s error=%s", user_id, e)
 
 
 def _count_fixed_answers(session_records: list[dict]) -> int:
@@ -1372,18 +1397,6 @@ def _find_pending_recall_question_id(
     return None
 
 
-def _is_first_user_turn(session_records: list[dict], current_record_id: int) -> bool:
-    """
-    앱 첫 화면은 AI가 먼저 질문하지 않고 사용자가 먼저 말하는 구조다.
-    그래서 첫 발화는 FIXED 답변으로 찍지 않고 첫 고정 질문을 안내한다.
-    """
-    if len(session_records) != 1:
-        return False
-
-    only_record = session_records[0]
-    return only_record.get("recordId") == current_record_id
-
-
 def process_voice_reply(
     record_id: int,
     session_id: int,
@@ -1407,15 +1420,6 @@ def process_voice_reply(
                     "parentRecordId": None,
                 }
             ]
-
-        # 0. 세션 첫 발화는 답변으로 채점하지 않고 첫 질문만 제공한다.
-        if _is_first_user_turn(session_records, record_id):
-            _save_ai_reply(
-                record_id=record_id,
-                reply_text=FIXED_QUESTIONS[0]["questionText"],
-            )
-            logger.info("첫 사용자 발화 감지. 첫 고정 질문 제공.")
-            return
 
         # 1. 직전 회상 질문에 대한 답변이면 RECALL로 연결하고 자유대화로 복귀한다.
         pending_recall_question_id = _find_pending_recall_question_id(
@@ -1468,8 +1472,19 @@ def process_voice_reply(
             )
             return
 
-        # 2. 초기 고정 질문 답변 처리
+        # 2. 초기 고정 질문 답변 처리 (하루 1회만 노출)
         fixed_answer_count = _count_fixed_answers(session_records)
+        already_done_today = (
+            fixed_answer_count == 0 and _is_fixed_questions_done_today(user_id)
+        )
+
+        if already_done_today:
+            logger.info("오늘 고정 질문을 이미 완료함. 자유대화로 바로 진입.")
+            _save_ai_reply(
+                record_id=record_id,
+                reply_text=_get_next_normal_question(0, session_records),
+            )
+            return
 
         if fixed_answer_count < len(FIXED_QUESTIONS):
             current_question = FIXED_QUESTIONS[fixed_answer_count]
@@ -1500,6 +1515,7 @@ def process_voice_reply(
                 return
 
             logger.info("초기 고정 질문 5개 완료. 자유대화 단계로 전환.")
+            _mark_fixed_questions_done_today(user_id)
 
             _save_ai_reply(
                 record_id=record_id,
@@ -1507,7 +1523,7 @@ def process_voice_reply(
             )
             return
 
-        # 3. 자유대화 답변 3턴 이상 쌓이면 회상 질문 생성
+        # 3. 자유대화 답변이 충분히 쌓이면 회상 질문 생성
         updated_records = _fetch_session_records(session_id)
 
         if not updated_records:
