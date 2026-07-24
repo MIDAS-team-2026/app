@@ -15,8 +15,42 @@ FEATURE_COLUMNS = [
     "spectral_centroid_std",
 ]
 
+PAUSE_FEATURE_COLUMNS = [
+    "pause_count",
+    "total_pause_duration",
+    "avg_pause_duration",
+    "max_pause_duration",
+    "pause_ratio",
+    "response_latency",
+]
+
+FEATURE_COLUMNS += PAUSE_FEATURE_COLUMNS
 FEATURE_COLUMNS += [f"mfcc_{i}_mean" for i in range(1, 14)]
 FEATURE_COLUMNS += [f"mfcc_{i}_std" for i in range(1, 14)]
+
+
+def _available_reference_columns(reference_df):
+    columns = [column for column in FEATURE_COLUMNS if column in reference_df.columns]
+    if not columns:
+        raise ValueError("reference feature CSV에 사용할 수 있는 음향 특징 컬럼이 없습니다.")
+    return columns
+
+
+def _available_similarity_columns(sample_features, reference_mean, reference_std):
+    sample_columns = set(pd.Series(sample_features).index)
+    mean_columns = set(pd.Series(reference_mean).index)
+    std_columns = set(pd.Series(reference_std).index)
+
+    columns = [
+        column
+        for column in FEATURE_COLUMNS
+        if column in sample_columns and column in mean_columns and column in std_columns
+    ]
+
+    if not columns:
+        raise ValueError("사용자 음성과 reference profile 사이에 공통 음향 특징 컬럼이 없습니다.")
+
+    return columns
 
 
 def build_reference_profile(reference_df):
@@ -28,8 +62,9 @@ def build_reference_profile(reference_df):
     새로운 사용자 음성이 이 참고군과 얼마나 유사한지 비교할 때 사용합니다.
     """
 
-    reference_mean = reference_df[FEATURE_COLUMNS].mean()
-    reference_std = reference_df[FEATURE_COLUMNS].std().replace(0, 1)
+    columns = _available_reference_columns(reference_df)
+    reference_mean = reference_df[columns].mean()
+    reference_std = reference_df[columns].std().replace(0, 1)
 
     return reference_mean, reference_std
 
@@ -44,7 +79,11 @@ def calculate_dysarthria_similarity(sample_features, reference_mean, reference_s
     얼마나 가까운지를 거리 기반으로 계산합니다.
     """
 
-    sample_vector = pd.Series(sample_features)[FEATURE_COLUMNS]
+    columns = _available_similarity_columns(sample_features, reference_mean, reference_std)
+
+    sample_vector = pd.Series(sample_features).reindex(columns).astype(float)
+    reference_mean = pd.Series(reference_mean).reindex(columns).astype(float)
+    reference_std = pd.Series(reference_std).reindex(columns).replace(0, 1).fillna(1).astype(float)
 
     # 참고군의 평균과 표준편차를 기준으로 z-score 차이를 계산합니다.
     z_diff = (sample_vector - reference_mean) / reference_std
@@ -58,6 +97,8 @@ def calculate_dysarthria_similarity(sample_features, reference_mean, reference_s
     return {
         "dysarthria_similarity_score": round(float(similarity), 3),
         "distance_from_reference": round(float(distance), 3),
+        "reference_feature_count": len(columns),
+        "reference_feature_columns": columns,
     }
 
 

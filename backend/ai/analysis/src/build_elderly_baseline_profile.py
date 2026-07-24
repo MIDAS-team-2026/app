@@ -85,6 +85,47 @@ def build_baseline_profile(df):
     }
 }
 
+    optional_metric_columns = [
+        "pause_count",
+        "total_pause_duration",
+        "avg_pause_duration",
+        "max_pause_duration",
+        "pause_ratio",
+        "response_latency",
+        "voice_activity_ratio",
+    ]
+
+    for column in optional_metric_columns:
+        if column not in df.columns:
+            continue
+
+        series = pd.to_numeric(df[column], errors="coerce").dropna()
+        if series.empty:
+            continue
+
+        profile[column] = {
+            "mean": float(series.mean()),
+            "q25": float(series.quantile(0.25)),
+            "q50": float(series.quantile(0.50)),
+            "q75": float(series.quantile(0.75)),
+            "q90": float(series.quantile(0.90)),
+        }
+
+    optional_thresholds = {
+        "high_pause_count": ("pause_count", 0.75),
+        "long_total_pause_duration": ("total_pause_duration", 0.75),
+        "long_avg_pause_duration": ("avg_pause_duration", 0.75),
+        "long_max_pause_duration": ("max_pause_duration", 0.75),
+        "high_pause_ratio": ("pause_ratio", 0.75),
+        "long_response_latency": ("response_latency", 0.75),
+    }
+
+    for threshold_name, (column, quantile) in optional_thresholds.items():
+        if column in df.columns:
+            series = pd.to_numeric(df[column], errors="coerce").dropna()
+            if not series.empty:
+                profile["thresholds"][threshold_name] = float(series.quantile(quantile))
+
     return profile
 
 

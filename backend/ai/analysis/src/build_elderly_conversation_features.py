@@ -5,6 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from text_features import extract_text_features, calculate_basic_speech_features
+from audio_features import extract_audio_features
 
 
 # =========================
@@ -126,6 +127,10 @@ def load_elderly_json_files(label_root, audio_roots):
             # 녹음 시간 기반 발화 특징 추출
             speech_feats = calculate_basic_speech_features(text_feats, record_time)
 
+            audio_feats = {}
+            if audio_path != "NOT_FOUND":
+                audio_feats = extract_audio_features(audio_path) or {}
+
             row = {
                 # 파일 정보
                 "json_path": str(json_path),
@@ -156,6 +161,7 @@ def load_elderly_json_files(label_root, audio_roots):
 
             row.update(text_feats)
             row.update(speech_feats)
+            row.update(audio_feats)
 
             rows.append(row)
 
@@ -206,6 +212,13 @@ def print_summary(df):
         "slow_speech_flag",
         "long_recording_flag",
         "low_content_slow_speech_flag",
+        "pause_count",
+        "total_pause_duration",
+        "avg_pause_duration",
+        "max_pause_duration",
+        "pause_ratio",
+        "response_latency",
+        "voice_activity_ratio",
     ]
 
     existing_cols = [col for col in stat_cols if col in df.columns]
