@@ -206,13 +206,18 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private fun todayCal(): Calendar = Calendar.getInstance()
     private fun Calendar.isSameDay(other: Calendar) =
         get(Calendar.YEAR) == other.get(Calendar.YEAR) &&
-        get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
+                get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
 
     private fun riskToHealthScore(score: Float?): Float? =
         score?.let { (100f - it).coerceIn(0f, 100f) }
 
     private fun displayHealthScore(score: Float?): Int =
         riskToHealthScore(score)?.roundToInt() ?: 0
+
+    private fun formatRecallScore(score: Float?): String {
+        if (score == null || score <= 0f) return "측정 전"
+        return "${score.roundToInt()}점"
+    }
 
     /** 헤더에 표시할 종합 점수. 서버 finalRiskScore는 위험도라 앱에서는 건강 점수로 변환한다. */
     val displayScore: Int get() = selectedDayScore
@@ -264,7 +269,6 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             } catch (_: Exception) { "분석 결과" }
         }
 
-
     // ── 4 카드 ─────────────────────────────────────────────────────────────────
 
     val todayItems: List<AnalysisItem>
@@ -292,7 +296,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.Default.Psychology,
                     label     = "회상 점수",
-                    valueText = dRecall?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatRecallScore(dRecall),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
@@ -408,12 +412,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val y = d.get(Calendar.YEAR); val m = d.get(Calendar.MONTH) + 1; val day = d.get(Calendar.DAY_OF_MONTH)
             when {
                 d.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
+                        d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
                 y != today.get(Calendar.YEAR) -> "${y}년 ${m}월 ${day}일 분석 결과"
                 else -> "${m}월 ${day}일 분석 결과"
             }
         } catch (_: Exception) { "분석 결과" }
     }
-
-
 }
