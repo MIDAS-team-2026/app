@@ -24,28 +24,52 @@ PAUSE_FEATURE_COLUMNS = [
     "response_latency",
 ]
 
+EGEMAPS_FEATURE_COLUMNS = [
+    "f0_semitone_mean",
+    "f0_semitone_stddev_norm",
+    "jitter_local",
+    "shimmer_local_db",
+    "hnr_db",
+    "voiced_segments_per_sec",
+    "mean_voiced_segment_length",
+    "mean_unvoiced_segment_length",
+    "voice_break_count",
+    "voice_break_ratio",
+]
+
 FEATURE_COLUMNS += PAUSE_FEATURE_COLUMNS
+FEATURE_COLUMNS += EGEMAPS_FEATURE_COLUMNS
 FEATURE_COLUMNS += [f"mfcc_{i}_mean" for i in range(1, 14)]
 FEATURE_COLUMNS += [f"mfcc_{i}_std" for i in range(1, 14)]
 
 
 def _available_reference_columns(reference_df):
     columns = [column for column in FEATURE_COLUMNS if column in reference_df.columns]
+    numeric_df = reference_df[columns].apply(pd.to_numeric, errors="coerce") if columns else pd.DataFrame()
+    columns = [column for column in columns if numeric_df[column].notna().any()]
+
     if not columns:
         raise ValueError("reference feature CSV에 사용할 수 있는 음향 특징 컬럼이 없습니다.")
+
     return columns
 
 
 def _available_similarity_columns(sample_features, reference_mean, reference_std):
-    sample_columns = set(pd.Series(sample_features).index)
-    mean_columns = set(pd.Series(reference_mean).index)
-    std_columns = set(pd.Series(reference_std).index)
+    sample_series = pd.Series(sample_features)
+    mean_series = pd.Series(reference_mean)
+    std_series = pd.Series(reference_std)
 
-    columns = [
-        column
-        for column in FEATURE_COLUMNS
-        if column in sample_columns and column in mean_columns and column in std_columns
-    ]
+    columns = []
+    for column in FEATURE_COLUMNS:
+        if column not in sample_series.index or column not in mean_series.index or column not in std_series.index:
+            continue
+
+        sample_value = pd.to_numeric(pd.Series([sample_series[column]]), errors="coerce").iloc[0]
+        mean_value = pd.to_numeric(pd.Series([mean_series[column]]), errors="coerce").iloc[0]
+        std_value = pd.to_numeric(pd.Series([std_series[column]]), errors="coerce").iloc[0]
+
+        if pd.notna(sample_value) and pd.notna(mean_value) and pd.notna(std_value):
+            columns.append(column)
 
     if not columns:
         raise ValueError("사용자 음성과 reference profile 사이에 공통 음향 특징 컬럼이 없습니다.")
@@ -63,8 +87,9 @@ def build_reference_profile(reference_df):
     """
 
     columns = _available_reference_columns(reference_df)
-    reference_mean = reference_df[columns].mean()
-    reference_std = reference_df[columns].std().replace(0, 1)
+    numeric_df = reference_df[columns].apply(pd.to_numeric, errors="coerce")
+    reference_mean = numeric_df.mean()
+    reference_std = numeric_df.std().replace(0, 1).fillna(1)
 
     return reference_mean, reference_std
 

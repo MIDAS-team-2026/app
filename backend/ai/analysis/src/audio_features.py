@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import librosa
 import numpy as np
 import soundfile as sf
@@ -107,6 +107,145 @@ def _summarize_pause_features(voice_intervals, total_duration):
     }
 
 
+
+def _safe_float(value, digits=6):
+    try:
+        if value is None:
+            return None
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not np.isfinite(number):
+        return None
+
+    return round(number, digits)
+
+
+def _find_feature_value(row, exact_names=None, contains_names=None):
+    exact_names = exact_names or []
+    contains_names = contains_names or []
+
+    for name in exact_names:
+        if name in row.index:
+            value = _safe_float(row[name])
+            if value is not None:
+                return value
+
+    lower_columns = {str(column).lower(): column for column in row.index}
+    for pattern in contains_names:
+        pattern = pattern.lower()
+        for lower_name, original_name in lower_columns.items():
+            if pattern in lower_name:
+                value = _safe_float(row[original_name])
+                if value is not None:
+                    return value
+
+    return None
+
+
+
+def _fallback_voice_break_features(base_features):
+    voice_activity_ratio = base_features.get("voice_activity_ratio")
+    voice_break_ratio = None
+    if voice_activity_ratio is not None:
+        voice_break_ratio = round(max(0.0, 1.0 - float(voice_activity_ratio)), 6)
+
+    return {
+        "voice_break_count": int(base_features.get("pause_count", 0) or 0),
+        "voice_break_ratio": voice_break_ratio,
+    }
+
+
+def _extract_egemaps_features(audio_path, base_features):
+    """
+    openSMILE eGeMAPS 기반 음성 품질 feature를 추출한다.
+
+    eGeMAPS는 음성 품질 분석의 필수 지표이며, 실패 원인은 결과 feature에 명시한다.
+    """
+    try:
+        import opensmile
+    except ImportError:
+        return {
+            "egemaps_available": False,
+            "egemaps_error": "opensmile 패키지가 설치되어 있지 않습니다. backend/ai/analysis/requirements.txt를 설치하세요.",
+            **_fallback_voice_break_features(base_features),
+        }
+
+    try:
+        smile = opensmile.Smile(
+            feature_set=opensmile.FeatureSet.eGeMAPSv02,
+            feature_level=opensmile.FeatureLevel.Functionals,
+        )
+        feature_df = smile.process_file(str(audio_path))
+
+        if feature_df.empty:
+            return {
+                "egemaps_available": False,
+                "egemaps_error": "openSMILE eGeMAPS feature가 비어 있습니다.",
+                **_fallback_voice_break_features(base_features),
+            }
+
+        row = feature_df.iloc[0]
+
+        voice_break_features = _fallback_voice_break_features(base_features)
+
+        return {
+            "egemaps_available": True,
+            "egemaps_error": None,
+            "f0_semitone_mean": _find_feature_value(
+                row,
+                exact_names=["F0semitoneFrom27.5Hz_sma3nz_amean"],
+                contains_names=["f0semitone", "f0"],
+            ),
+            "f0_semitone_stddev_norm": _find_feature_value(
+                row,
+                exact_names=["F0semitoneFrom27.5Hz_sma3nz_stddevNorm"],
+                contains_names=["f0semitonefrom27.5hz_sma3nz_stddev"],
+            ),
+            "jitter_local": _find_feature_value(
+                row,
+                exact_names=["jitterLocal_sma3nz_amean"],
+                contains_names=["jitterlocal"],
+            ),
+            "shimmer_local_db": _find_feature_value(
+                row,
+                exact_names=["shimmerLocaldB_sma3nz_amean"],
+                contains_names=["shimmerlocal"],
+            ),
+            "hnr_db": _find_feature_value(
+                row,
+                exact_names=["HNRdBACF_sma3nz_amean"],
+                contains_names=["hnr"],
+            ),
+            "voiced_segments_per_sec": _find_feature_value(
+                row,
+                exact_names=["VoicedSegmentsPerSec"],
+                contains_names=["voicedsegmentspersec"],
+            ),
+            "mean_voiced_segment_length": _find_feature_value(
+                row,
+                exact_names=["MeanVoicedSegmentLengthSec"],
+                contains_names=["meanvoicedsegmentlength"],
+            ),
+            "mean_unvoiced_segment_length": _find_feature_value(
+                row,
+                exact_names=["MeanUnvoicedSegmentLength"],
+                contains_names=["meanunvoicedsegmentlength"],
+            ),
+            **voice_break_features,
+            "egemaps_feature_count": int(len(row.index)),
+        }
+
+    except Exception as e:
+        logger.exception("openSMILE eGeMAPS extraction failed path=%s", audio_path)
+        return {
+            "egemaps_available": False,
+            "egemaps_error": str(e),
+            **_fallback_voice_break_features(base_features),
+        }
+
+
 def extract_audio_features(audio_path, segment_duration=60):
     """
     음성 파일 전체를 segment 단위로 나누어 음향 특징을 추출하는 함수입니다.
@@ -168,6 +307,7 @@ def extract_audio_features(audio_path, segment_duration=60):
             "segment_count": int(segment_count),
         }
         final_features.update(_summarize_pause_features(voice_intervals, total_duration))
+        final_features.update(_extract_egemaps_features(audio_path, final_features))
 
         for key in feature_keys:
             values = np.array([seg[key] for seg in segment_features], dtype=float)
@@ -179,3 +319,4 @@ def extract_audio_features(audio_path, segment_duration=60):
     except Exception as e:
         logger.exception("extract_audio_features failed path=%s", audio_path)
         return None
+

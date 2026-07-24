@@ -80,6 +80,18 @@ def map_to_record_analysis_dto(result):
         "distanceFromReference": result.get("distance_from_reference"),
         "speechAbnormalityLevel": result.get("speech_abnormality_level"),
         "speechAbnormalityScore": result.get("speech_abnormality_score"),
+        "egemapsAvailable": result.get("egemaps_available"),
+        "egemapsError": result.get("egemaps_error"),
+        "f0SemitoneMean": result.get("f0_semitone_mean"),
+        "f0SemitoneStddevNorm": result.get("f0_semitone_stddev_norm"),
+        "jitterLocal": result.get("jitter_local"),
+        "shimmerLocalDb": result.get("shimmer_local_db"),
+        "hnrDb": result.get("hnr_db"),
+        "voicedSegmentsPerSec": result.get("voiced_segments_per_sec"),
+        "meanVoicedSegmentLength": result.get("mean_voiced_segment_length"),
+        "meanUnvoicedSegmentLength": result.get("mean_unvoiced_segment_length"),
+        "voiceBreakCount": result.get("voice_break_count"),
+        "voiceBreakRatio": result.get("voice_break_ratio"),
     }
 
     text_analysis = {

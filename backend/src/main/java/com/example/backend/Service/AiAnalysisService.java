@@ -103,6 +103,18 @@ public class AiAnalysisService {
             speechResult.setResponseLatency(speechDto.getResponseLatency());
             speechResult.setRepetitionCount(speechDto.getRepetitionCount());
             speechResult.setFillerCount(speechDto.getFillerCount());
+            speechResult.setEgemapsAvailable(speechDto.getEgemapsAvailable());
+            speechResult.setEgemapsError(speechDto.getEgemapsError());
+            speechResult.setF0SemitoneMean(speechDto.getF0SemitoneMean());
+            speechResult.setF0SemitoneStddevNorm(speechDto.getF0SemitoneStddevNorm());
+            speechResult.setJitterLocal(speechDto.getJitterLocal());
+            speechResult.setShimmerLocalDb(speechDto.getShimmerLocalDb());
+            speechResult.setHnrDb(speechDto.getHnrDb());
+            speechResult.setVoicedSegmentsPerSec(speechDto.getVoicedSegmentsPerSec());
+            speechResult.setMeanVoicedSegmentLength(speechDto.getMeanVoicedSegmentLength());
+            speechResult.setMeanUnvoicedSegmentLength(speechDto.getMeanUnvoicedSegmentLength());
+            speechResult.setVoiceBreakCount(speechDto.getVoiceBreakCount());
+            speechResult.setVoiceBreakRatio(speechDto.getVoiceBreakRatio());
             speechResult.setDysarthriaSimilarityScore(speechDto.getDysarthriaSimilarityScore());
             speechResult.setDistanceFromReference(speechDto.getDistanceFromReference());
             speechResult.setSpeechAbnormalityLevel(speechDto.getSpeechAbnormalityLevel());
