@@ -219,13 +219,26 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         return "${score.roundToInt()}점"
     }
 
+    private fun formatRiskLevel(level: String?): String {
+        return when (level?.trim()?.uppercase()) {
+            "LOW" -> "안정"
+            "MEDIUM" -> "주의"
+            "HIGH" -> "위험"
+            "안정" -> "안정"
+            "주의" -> "주의"
+            "위험" -> "위험"
+            else -> "─"
+        }
+    }
+
     /** 헤더에 표시할 종합 점수. 서버 finalRiskScore는 위험도라 앱에서는 건강 점수로 변환한다. */
     val displayScore: Int get() = selectedDayScore
         ?.finalRiskScore?.let { displayHealthScore(it) }
         ?: displayHealthScore(finalRiskScore)
 
     /** 헤더 배지 — 위험 등급 */
-    val displayRiskLevel: String get() = selectedDayScore?.riskLevel ?: riskLevel ?: "─"
+    val displayRiskLevel: String get() =
+        formatRiskLevel(selectedDayScore?.riskLevel ?: riskLevel)
 
     /**
      * 그래프에서 강조할 인덱스.
@@ -282,7 +295,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.Default.BarChart,
                     label     = "종합 위험도",
-                    valueText = dRisk ?: "-",
+                    valueText = formatRiskLevel(dRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
