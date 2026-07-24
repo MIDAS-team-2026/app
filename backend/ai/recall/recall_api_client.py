@@ -411,6 +411,8 @@ def analyze_session_recall(
     session_id: int,
     speech_risk_score: float,
     base_url: str = BASE_URL,
+    target_recall_record_id: Optional[int] = None,
+    send_all_recall_results: bool = True,
 ) -> None:
     records = get_session_records(
         session_id=session_id,
@@ -450,23 +452,33 @@ def analyze_session_recall(
             question_type=question_type,
         )
 
-        recall_response = send_recall_result(
-            recall_question_id=question_id,
-            past_record_id=initial_record["recordId"],
-            current_record_id=recall_record["recordId"],
-            similarity_score=recall_scores["similarityScore"],
-            keyword_score=recall_scores["keywordScore"],
-            final_recall_score=recall_scores["finalRecallScore"],
-            base_url=base_url,
+        current_record_id = int(recall_record["recordId"])
+        should_send_recall_result = (
+            send_all_recall_results
+            or (
+                target_recall_record_id is not None
+                and current_record_id == int(target_recall_record_id)
+            )
         )
 
-        print(
-            f"recall question {question_id} status:",
-            recall_response.status_code,
-            recall_response.text,
-        )
+        if should_send_recall_result:
+            recall_response = send_recall_result(
+                recall_question_id=question_id,
+                past_record_id=initial_record["recordId"],
+                current_record_id=current_record_id,
+                similarity_score=recall_scores["similarityScore"],
+                keyword_score=recall_scores["keywordScore"],
+                final_recall_score=recall_scores["finalRecallScore"],
+                base_url=base_url,
+            )
 
-        recall_response.raise_for_status()
+            print(
+                f"recall question {question_id} status:",
+                recall_response.status_code,
+                recall_response.text,
+            )
+
+            recall_response.raise_for_status()
 
         final_recall_scores.append(
             recall_scores["finalRecallScore"]

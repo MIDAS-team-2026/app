@@ -12,13 +12,17 @@
 
 import logging
 import os
+import re
 import requests
 
 from recall.free_talk_question_generator import (
     generate_safe_followup_question,
     is_similar_to_previous_question,
 )
-from recall.conversation_recall_generator import generate_and_save_recall_question
+from recall.conversation_recall_generator import (
+    generate_and_save_recall_question,
+    select_recall_memory_candidates,
+)
 from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
@@ -81,13 +85,13 @@ AFTER_RECALL_OPENING_QUESTIONS = [
     "이번에는 최근에 본 방송이나 들은 노래 이야기도 해볼까요?",
     "이어서 오늘 밖이나 창밖에서 본 것이 있으세요?",
     "이번에는 손에 잡았던 물건이나 하셨던 일이 있으세요?",
-    "오늘 하루 중 편하게 이야기하고 싶은 일이 있으세요?",
+    "이어서 오늘 연락하거나 만나신 사람이 있으세요?",
 ]
 
 AFTER_LOW_INFO_RECALL_OPENING_QUESTIONS = [
-    "괜찮습니다. 오늘 집에서 하신 일 중에 편하게 떠오르는 게 있으세요?",
-    "괜찮습니다. 이번에는 오늘 보신 방송이나 들은 소리 이야기를 해볼까요?",
-    "괜찮습니다. 그러면 오늘 드신 것 중에 기억나는 음식이 있으세요?",
+    "아하, 그렇군요. 오늘 집에서 하신 일 중에 편하게 떠오르는 게 있으세요?",
+    "그러셨군요. 이번에는 오늘 보신 방송이나 들은 소리 이야기를 해볼까요?",
+    "알겠습니다. 그러면 오늘 드신 것 중에 기억나는 음식이 있으세요?",
 ]
 
 AFTER_NEGATIVE_RECALL_OPENING_QUESTIONS = [
@@ -104,14 +108,14 @@ AFTER_SHORT_RECALL_OPENING_QUESTIONS = [
 
 REPEATED_LOW_INFO_QUESTIONS = {
     "DEEPEN": [
-        "괜찮습니다. 그럼 다른 이야기로 해볼까요? 오늘 편하게 떠오르는 일이 있으세요?",
-        "괜찮습니다. 그럼 오늘 집에서 하신 일이나 보신 것 중 편한 것부터 말씀해주실래요?",
-        "알겠습니다. 그럼 오늘 하루 중 가장 편했던 순간이 있으세요?",
+        "아하, 그렇군요. 그럼 오늘 드신 음식 중 하나만 말씀해주실래요?",
+        "그러셨군요. 그럼 오늘 집에서 하신 일이나 보신 것 중 편한 것부터 말씀해주실래요?",
+        "알겠습니다. 그럼 오늘 보신 방송이나 들은 노래가 있으세요?",
     ],
     "ANCHOR": [
-        "괜찮습니다. 오늘 떠올리기 쉬운 일 하나만 말씀해주실래요?",
-        "괜찮습니다. 오늘 기억나는 음식이나 방송 중 편한 것부터 이야기해볼까요?",
-        "알겠습니다. 지금 편하게 생각나는 일이 하나 있으세요?",
+        "아하, 그렇군요. 오늘 손에 자주 잡았던 물건이 하나 있으세요?",
+        "그러셨군요. 오늘 기억나는 음식이나 방송 중 편한 것부터 이야기해볼까요?",
+        "알겠습니다. 오늘 집에서 가장 오래 머문 자리가 어디였어요?",
     ],
 }
 
@@ -143,9 +147,9 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "음, 그렇군요. 오늘 보신 것 중에 기억나는 장면이 있으세요?",
         ],
         "ANCHOR": [
-            "오늘 하루에서 가장 먼저 떠오르는 일이 있으세요?",
-            "오늘 집에서 하신 일 중에 기억나는 게 하나 있으세요?",
-            "방금 이야기 말고 오늘 있었던 일 중에 생각나는 게 있으세요?",
+            "오늘 손에 자주 잡았던 물건이 하나 있으세요?",
+            "오늘 집에서 가장 오래 머문 자리가 어디였어요?",
+            "방금 이야기 말고 오늘 드신 음식 중 하나가 떠오르세요?",
         ],
     },
     "NEGATIVE": {
@@ -184,6 +188,42 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 고른 물건 중에 기억나는 게 있으세요?",
         ],
     },
+    "OBJECT": {
+        "DEEPEN": [
+            "그 물건은 주로 언제 사용하세요?",
+            "그 물건은 집에서 주로 어디에 두세요?",
+            "그 물건을 사용할 때 주로 무엇을 하세요?",
+        ],
+        "ANCHOR": [
+            "그 물건을 떠올리면 어떤 모습이 먼저 생각나세요?",
+            "오늘 그 물건을 어디에서 사용하셨어요?",
+            "그 물건과 관련해서 오늘 기억나는 일이 있으세요?",
+        ],
+    },
+    "ROUTINE": {
+        "DEEPEN": [
+            "그 시간에는 보통 무엇을 하세요?",
+            "그 시간이 기다려지는 이유가 있으세요?",
+            "그때는 주로 누구와 함께 계세요?",
+        ],
+        "ANCHOR": [
+            "그 시간에 가장 자주 하는 일이 무엇인가요?",
+            "그 시간을 떠올리면 어떤 모습이 먼저 생각나세요?",
+            "오늘도 그 시간에 하신 일이 있으세요?",
+        ],
+    },
+    "SCENERY": {
+        "DEEPEN": [
+            "그 풍경은 주로 어디에서 보세요?",
+            "그 풍경에서 가장 눈에 띄는 것이 무엇인가요?",
+            "그 모습을 볼 때 기분은 어떠세요?",
+        ],
+        "ANCHOR": [
+            "오늘도 그 풍경을 보신 시간이 있으세요?",
+            "그 풍경을 떠올리면 어떤 색이나 모습이 먼저 생각나세요?",
+            "그 풍경에서 오늘 기억나는 변화가 있으세요?",
+        ],
+    },
     "HEALTH": {
         "DEEPEN": [
             "약은 언제쯤 드셨어요?",
@@ -192,7 +232,7 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 몸 상태는 어떠셨어요?",
             "어느 쪽이 제일 불편하셨어요?",
             "지금은 조금 괜찮으세요?",
-            "병원에서 기다리거나 진료받을 때 기억나는 게 있으세요?",
+            "병원에 계실 때 기억나는 일이 있으세요?",
         ],
         "ANCHOR": [
             "오늘 몸이나 병원 이야기 중에 기억나는 점이 있으세요?",
@@ -236,8 +276,22 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 주변에서 본 것이 기억나세요?",
         ],
     },
+    "HOME": {
+        "DEEPEN": [
+            "집에서는 주로 무엇을 하며 시간을 보내셨어요?",
+            "집에 계실 때 주로 어느 방이나 자리에 계셨어요?",
+            "집에 계시는 동안 보신 것이나 하신 일이 있으세요?",
+        ],
+        "ANCHOR": [
+            "집에서 가장 오래 머문 자리가 어디였어요?",
+            "집에 계실 때 손에 자주 잡았던 물건이 있으세요?",
+            "집에서 보낸 시간을 떠올리면 어떤 모습이 먼저 생각나세요?",
+        ],
+    },
     "MEDIA": {
         "DEEPEN": [
+            "티비나 방송은 언제쯤 보셨어요?",
+            "어떤 방송이나 프로그램을 보셨어요?",
             "그 노래에서 가장 기억나는 부분이 있으세요?",
             "그 노래를 들을 때 기분은 어떠셨어요?",
             "그 방송에서 기억나는 내용이 있으세요?",
@@ -278,6 +332,78 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
 }
 
 
+FUTURE_TOPIC_QUESTIONS = {
+    "HEALTH": [
+        "병원에는 언제쯤 가실 예정이세요?",
+        "병원에는 혼자 가실 예정이세요, 함께 가실 분이 있으세요?",
+    ],
+    "PERSON": [
+        "그분은 언제쯤 만나실 예정이세요?",
+        "만나시면 어떤 이야기를 나누고 싶으세요?",
+    ],
+    "PLACE": [
+        "그곳에는 언제쯤 가실 예정이세요?",
+        "그곳에는 혼자 가실 예정이세요, 함께 가실 분이 있으세요?",
+        "그곳에 가시면 무엇을 하실 예정이세요?",
+        "그곳에는 어떻게 가실 예정이세요?",
+    ],
+    "SHOPPING": [
+        "장 보러는 언제쯤 가실 예정이세요?",
+        "이번에는 무엇을 사실 예정이세요?",
+    ],
+    "FOOD": [
+        "그 음식은 언제쯤 드실 예정이세요?",
+        "그 음식은 누구와 같이 드실 예정이세요?",
+    ],
+    "MEDIA": [
+        "그 방송은 언제 보실 예정이세요?",
+        "그 방송에서 어떤 내용이 가장 기대되세요?",
+    ],
+    "ACTIVITY": [
+        "그 일은 언제쯤 하실 예정이세요?",
+        "그 일은 혼자 하실 예정이세요?",
+    ],
+    "REST": [
+        "언제쯤 쉬실 예정이세요?",
+        "쉬실 때 어디에서 편하게 계실 예정이세요?",
+    ],
+}
+
+
+WISH_TOPIC_QUESTIONS = {
+    "PERSON": [
+        "그분이 특히 보고 싶은 이유가 있으세요?",
+        "그분을 만나면 가장 먼저 어떤 말을 하고 싶으세요?",
+    ],
+    "PLACE": [
+        "그곳에 가고 싶은 이유가 있으세요?",
+        "그곳에 가시면 가장 먼저 무엇을 하고 싶으세요?",
+    ],
+    "FOOD": [
+        "어떤 음식이 가장 먼저 떠오르세요?",
+        "그 음식이 생각난 이유가 있으세요?",
+        "나중에 드신다면 누구와 같이 드시고 싶으세요?",
+    ],
+    "SHOPPING": [
+        "그 물건을 사고 싶은 이유가 있으세요?",
+        "그 물건은 어디에서 고르고 싶으세요?",
+        "그 물건을 고를 때 가장 중요하게 보는 점이 있으세요?",
+    ],
+    "MEDIA": [
+        "그 방송이나 내용을 보고 싶은 이유가 있으세요?",
+        "보게 되면 어떤 부분이 가장 기대되세요?",
+    ],
+    "ACTIVITY": [
+        "그 일을 하고 싶은 이유가 있으세요?",
+        "하게 되면 누구와 함께하고 싶으세요?",
+    ],
+    "REST": [
+        "어디에서 편하게 쉬고 싶으세요?",
+        "쉬게 되면 무엇을 하며 보내고 싶으세요?",
+    ],
+}
+
+
 TOPIC_CHANGE_ACKNOWLEDGEMENTS = [
     "아하, 그렇군요.",
     "그러셨군요.",
@@ -292,16 +418,26 @@ RECALL_TRANSITION_ACKNOWLEDGEMENTS = [
 
 
 def _fetch_session_records(session_id: int) -> list[dict]:
-    try:
-        resp = requests.get(
-            f"{SPRING_BASE_URL}/api/voice/session/{session_id}/records",
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.error("세션 레코드 조회 실패: sessionId=%s, error=%s", session_id, e)
-        return []
+    for attempt in range(2):
+        try:
+            resp = requests.get(
+                f"{SPRING_BASE_URL}/api/voice/session/{session_id}/records",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "세션 레코드 조회 재시도: sessionId=%s error=%s",
+                    session_id,
+                    e,
+                )
+                continue
+
+            logger.error("세션 레코드 조회 실패: sessionId=%s, error=%s", session_id, e)
+
+    return []
 
 
 def _save_ai_reply(record_id: int, reply_text: str):
@@ -310,46 +446,70 @@ def _save_ai_reply(record_id: int, reply_text: str):
         "replyText": reply_text,
     }
 
-    resp = requests.post(
-        f"{SPRING_BASE_URL}/api/voice/reply",
-        json=payload,
-        timeout=10,
-    )
-    resp.raise_for_status()
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{SPRING_BASE_URL}/api/voice/reply",
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "AI 답변 저장 재시도: recordId=%s error=%s",
+                    record_id,
+                    e,
+                )
+                continue
+
+            raise
 
 
 def _link_recall_question(
     record_id: int,
     recall_question_id: int,
     answer_role: str,
-):
-    try:
-        payload = {
-            "recordId": record_id,
-            "recallQuestionId": recall_question_id,
-            "answerRole": answer_role,
-        }
+) -> bool:
+    payload = {
+        "recordId": record_id,
+        "recallQuestionId": recall_question_id,
+        "answerRole": answer_role,
+    }
 
-        resp = requests.post(
-            f"{SPRING_BASE_URL}/api/voice/recall-link",
-            json=payload,
-            timeout=10,
-        )
-        resp.raise_for_status()
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{SPRING_BASE_URL}/api/voice/recall-link",
+                json=payload,
+                timeout=10,
+            )
+            resp.raise_for_status()
 
-        logger.info(
-            "레코드 질문 연결 완료: recordId=%s questionId=%s role=%s",
-            record_id,
-            recall_question_id,
-            answer_role,
-        )
+            logger.info(
+                "레코드 질문 연결 완료: recordId=%s questionId=%s role=%s",
+                record_id,
+                recall_question_id,
+                answer_role,
+            )
+            return True
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "레코드 질문 연결 재시도: recordId=%s error=%s",
+                    record_id,
+                    e,
+                )
+                continue
 
-    except Exception as e:
-        logger.error(
-            "레코드 질문 연결 실패: recordId=%s error=%s",
-            record_id,
-            e,
-        )
+            logger.error(
+                "레코드 질문 연결 실패: recordId=%s error=%s",
+                record_id,
+                e,
+            )
+
+    return False
 
 
 def _create_recall_question(
@@ -377,16 +537,26 @@ def _create_recall_question(
 
 
 def _fetch_recall_questions(user_id: int) -> list[dict]:
-    try:
-        resp = requests.get(
-            f"{SPRING_BASE_URL}/api/recall/questions/{user_id}",
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.error("회상 질문 조회 실패: userId=%s error=%s", user_id, e)
-        return []
+    for attempt in range(2):
+        try:
+            resp = requests.get(
+                f"{SPRING_BASE_URL}/api/recall/questions/{user_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "회상 질문 조회 재시도: userId=%s error=%s",
+                    user_id,
+                    e,
+                )
+                continue
+
+            logger.error("회상 질문 조회 실패: userId=%s error=%s", user_id, e)
+
+    return []
 
 
 def _find_or_create_fixed_question(user_id: int, question_data: dict) -> dict | None:
@@ -410,27 +580,49 @@ def _find_or_create_fixed_question(user_id: int, question_data: dict) -> dict | 
 
 
 def _is_fixed_questions_done_today(user_id: int) -> bool:
-    try:
-        resp = requests.get(
-            f"{SPRING_BASE_URL}/api/voice/fixed-status/{user_id}",
-            timeout=10,
-        )
-        resp.raise_for_status()
-        return bool(resp.json().get("data"))
-    except Exception as e:
-        logger.error("고정질문 완료 여부 조회 실패: userId=%s error=%s", user_id, e)
-        return False
+    for attempt in range(2):
+        try:
+            resp = requests.get(
+                f"{SPRING_BASE_URL}/api/voice/fixed-status/{user_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return bool(resp.json().get("data"))
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "고정질문 완료 여부 조회 재시도: userId=%s error=%s",
+                    user_id,
+                    e,
+                )
+                continue
+
+            logger.error("고정질문 완료 여부 조회 실패: userId=%s error=%s", user_id, e)
+
+    return False
 
 
-def _mark_fixed_questions_done_today(user_id: int):
-    try:
-        resp = requests.post(
-            f"{SPRING_BASE_URL}/api/voice/fixed-complete/{user_id}",
-            timeout=10,
-        )
-        resp.raise_for_status()
-    except Exception as e:
-        logger.error("고정질문 완료 기록 실패: userId=%s error=%s", user_id, e)
+def _mark_fixed_questions_done_today(user_id: int) -> bool:
+    for attempt in range(2):
+        try:
+            resp = requests.post(
+                f"{SPRING_BASE_URL}/api/voice/fixed-complete/{user_id}",
+                timeout=10,
+            )
+            resp.raise_for_status()
+            return True
+        except Exception as e:
+            if attempt == 0:
+                logger.warning(
+                    "고정질문 완료 기록 재시도: userId=%s error=%s",
+                    user_id,
+                    e,
+                )
+                continue
+
+            logger.error("고정질문 완료 기록 실패: userId=%s error=%s", user_id, e)
+
+    return False
 
 
 def _count_fixed_answers(session_records: list[dict]) -> int:
@@ -476,7 +668,9 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
         if role in {"INITIAL", "RECALL"}:
             boundary_record_id = max(boundary_record_id, record_id)
 
-    if fixed_count < len(FIXED_QUESTIONS):
+    # 고정 질문이 0개인 세션은 오늘 고정 질문을 이미 마친 뒤 다시 시작한
+    # 자유대화 세션일 수 있다. 일부(1~4개)만 있으면 고정 질문 진행 중이다.
+    if 0 < fixed_count < len(FIXED_QUESTIONS):
         return []
 
     for record in sorted_records:
@@ -498,8 +692,98 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
     return transcripts
 
 
+def _get_recall_ready_history(transcripts: list[str]) -> list[str]:
+    """
+    충분히 축적되고 한 턴 이상 지난 기억 단서만 회상 질문 생성에 사용한다.
+
+    최신 답변을 즉시 다시 묻지 않도록 제외한 뒤, 그 이전 대화에서
+    서로 다른 유효한 memoryPoint 후보가 2개 이상일 때만 회상을 시작한다.
+    """
+    if len(transcripts) < 2:
+        return []
+
+    matured_history = transcripts[:-1]
+    matured_candidates = select_recall_memory_candidates(matured_history)
+
+    if len(matured_candidates) < 2:
+        return []
+
+    return matured_history
+
+
+def _find_memory_source_record_id(
+    session_records: list[dict],
+    source_text: str,
+) -> int | None:
+    normalized_source = _normalize_text(source_text)
+
+    if not normalized_source:
+        return None
+
+    candidate_record_ids = []
+
+    for record in session_records:
+        record_text = _normalize_text(record.get("transcriptText") or "")
+        role = str(record.get("answerRole") or "").upper()
+
+        if record_text != normalized_source:
+            continue
+
+        if role in {"FIXED", "INITIAL", "RECALL"}:
+            continue
+
+        record_id = record.get("recordId")
+
+        if record_id is not None:
+            candidate_record_ids.append(int(record_id))
+
+    return max(candidate_record_ids) if candidate_record_ids else None
+
+
 def _normalize_question_text(text: str) -> str:
     return " ".join(str(text or "").split())
+
+
+def _find_recall_question_text(user_id: int, question_id: int) -> str:
+    for question in _fetch_recall_questions(user_id):
+        current_question_id = question.get("questionId")
+
+        if current_question_id is None or int(current_question_id) != int(question_id):
+            continue
+
+        return _normalize_question_text(question.get("questionText") or "")
+
+    return ""
+
+
+def _was_recall_question_presented(
+    session_records: list[dict],
+    current_record_id: int,
+    recall_question_id: int,
+    question_text: str,
+) -> bool:
+    normalized_question = _normalize_question_text(question_text)
+
+    if not normalized_question:
+        return False
+
+    source_record_ids = [
+        int(record.get("recordId") or 0)
+        for record in session_records
+        if (
+            str(record.get("answerRole") or "").upper() == "INITIAL"
+            and int(record.get("recallQuestionId") or 0) == int(recall_question_id)
+        )
+    ]
+    boundary_record_id = min(source_record_ids) if source_record_ids else 0
+
+    return any(
+        int(record.get("recordId") or 0) >= boundary_record_id
+        and int(record.get("recordId") or 0) != int(current_record_id)
+        and _normalize_question_text(record.get("aiReplyText") or "")
+        == normalized_question
+        for record in session_records
+    )
 
 
 def _count_completed_recall_answers(session_records: list[dict] | None) -> int:
@@ -560,8 +844,45 @@ def _get_cycle_transcripts(session_records: list[dict] | None) -> list[str]:
     return _extract_recall_candidate_transcripts(session_records)
 
 
+def _build_generation_history(cycle_texts: list[str], latest_text: str) -> list[str]:
+    history = [text for text in cycle_texts if _normalize_text(text)]
+    latest_text = _normalize_text(latest_text)
+
+    if latest_text and (not history or _normalize_text(history[-1]) != latest_text):
+        history.append(latest_text)
+
+    return history
+
+
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
     return any(keyword in text for keyword in keywords)
+
+
+def _get_final_correction_segment(text: str) -> str:
+    text = str(text or "")
+    correction_patterns = (
+        r"다시\s*생각해\s*보니",
+        r"정정(?:할게요?|하면)",
+        r"(?:^|[,.;!?]\s*|\s+)(?:아니에요|아니요|아니)(?![가-힣])\s*[,，]?\s*",
+    )
+    last_end = -1
+
+    for pattern in correction_patterns:
+        for match in re.finditer(pattern, text):
+            last_end = max(last_end, match.end())
+
+    corrected_text = text if last_end < 0 else text[last_end:].strip()
+    alternative_matches = list(
+        re.finditer(r"(?:아니라|아니고|말고)\s*", corrected_text)
+    )
+
+    if alternative_matches:
+        alternative_text = corrected_text[alternative_matches[-1].end():].strip()
+
+        if alternative_text:
+            corrected_text = alternative_text
+
+    return corrected_text or text
 
 
 QUALITATIVE_ABSENCE_PHRASES = (
@@ -569,12 +890,101 @@ QUALITATIVE_ABSENCE_PHRASES = (
     "맛없",
     "재미없",
     "재미 없",
+    "재미가 없",
     "기운이 없",
     "입맛이 없",
+    "입맛 없",
+    "밥맛이 없",
+    "밥맛 없",
+    "식욕이 없",
+    "식욕 없",
 )
 
 
+NEGATED_NEGATIVE_PHRASES = (
+    "별로 걱정되지 않",
+    "걱정 안",
+    "안 아파",
+    "안 아프",
+    "안 힘든",
+    "안 힘들",
+    "안 나쁘",
+    "안 불편",
+    "안 외롭",
+    "안 피곤",
+    "안 무섭",
+    "안 속상",
+    "안 슬프",
+    "안 우울",
+    "힘들지 않",
+    "나쁘지 않",
+    "불편하지 않",
+    "걱정되지 않",
+    "걱정하지 않",
+    "외롭지 않",
+    "피곤하지 않",
+    "무섭지 않",
+    "속상하지 않",
+    "슬프지 않",
+    "우울하지 않",
+)
+
+
+NEGATED_NEGATIVE_PATTERN = re.compile(
+    r"(?:"
+    r"(?:아프|힘들|나쁘|외롭|무섭|슬프)(?:지|진|지는)\s*않|"
+    r"(?:불편하|피곤하|속상하|우울하|걱정되)(?:지|진|지는)\s*않|"
+    r"안\s*(?:아파|아프|힘들|나빠|나쁘|불편|외로|피곤|무서|속상|슬프|우울)|"
+    r"걱정(?:은|이)?\s*안"
+    r")"
+)
+
+
+NEGATED_POSITIVE_PHRASES = (
+    "좋지는 않",
+    "좋진 않",
+    "좋지 않",
+    "안 좋",
+)
+
+
+NEGATED_ACTION_RESPONSE_PATTERN = re.compile(
+    r"(?:"
+    r"(?:^|\s)(?:안|못)\s*"
+    r"(?:먹|먹었|마시|마셨|가|갔|다녀|보|봤|만나|만났|사|샀|"
+    r"하|했|오|왔|나가|나갔|들|쉬|자|잤|읽|읽었|쓰|썼|타|탔|통화|전화|"
+    r"연락|운동|산책|청소|요리|아프|아팠)[가-힣]*"
+    r"|(?:^|\s)[가-힣]+지\s*않[가-힣]*"
+    r")"
+)
+
+
+CONFIRMED_ACTION_CUES = (
+    "먹었", "마셨어", "마셨", "갔", "다녀왔", "왔어", "봤", "보았",
+    "들었", "샀", "만났", "통화", "전화", "연락", "쉬었", "잤",
+    "누워", "산책했", "운동했", "청소했", "빨래했", "설거지했",
+    "요리했", "목욕했", "정리했", "걸었",
+)
+
+
+def _get_confirmed_text_after_negated_action(text: str) -> str:
+    text = _normalize_text(_get_final_correction_segment(text))
+    matches = list(NEGATED_ACTION_RESPONSE_PATTERN.finditer(text))
+
+    if not matches:
+        return ""
+
+    suffix = text[matches[-1].end():].strip(" ,.;!?")
+
+    if _contains_any(suffix, CONFIRMED_ACTION_CUES):
+        return suffix
+
+    return ""
+
+
 def _is_low_info_response(text: str) -> bool:
+    text = _get_final_correction_segment(text)
+
     if _contains_any(text, QUALITATIVE_ABSENCE_PHRASES):
         return False
 
@@ -584,7 +994,9 @@ def _is_low_info_response(text: str) -> bool:
             "몰라",
             "모르",
             "기억 안",
+            "기억이 안",
             "생각 안",
+            "생각이 안",
             "없어",
             "없다",
             "없었",
@@ -595,12 +1007,22 @@ def _is_low_info_response(text: str) -> bool:
 
 
 def _is_negative_response(text: str) -> bool:
+    text = _get_final_correction_segment(text)
+    negative_evidence_text = text
+
+    for phrase in NEGATED_NEGATIVE_PHRASES:
+        negative_evidence_text = negative_evidence_text.replace(phrase, "")
+
+    negative_evidence_text = NEGATED_NEGATIVE_PATTERN.sub("", negative_evidence_text)
+
     return _contains_any(
-        text,
+        negative_evidence_text,
         (
             "별로",
             "싫",
             "힘들",
+            "아프",
+            "아파",
             "우울",
             "속상",
             "걱정",
@@ -609,12 +1031,71 @@ def _is_negative_response(text: str) -> bool:
             "화가",
             "화났",
             "짜증",
+            "슬프",
+            "슬펐",
+            "외로",
+            "무서",
+            "불안",
+            "서운",
+            "피곤",
+            "기운이 없",
+            "기운 없",
+            "재미없",
+            "재미 없",
+            "맛없",
+            "맛이 없",
+            "입맛이 없",
+            "입맛 없",
+            "밥맛이 없",
+            "밥맛 없",
+            "식욕이 없",
+            "식욕 없",
+            "안 좋",
+            "좋지 않",
+            "나쁘",
+            "나빴",
+            "아쉽",
+            "아쉬",
         ),
     )
 
 
+def _is_positive_response(text: str) -> bool:
+    text = _get_final_correction_segment(text)
+    positive_evidence_text = text
+
+    for phrase in NEGATED_POSITIVE_PHRASES:
+        positive_evidence_text = positive_evidence_text.replace(phrase, "")
+
+    return _contains_any(
+        positive_evidence_text,
+        (
+            "좋",
+            "재밌",
+            "즐거",
+            "맛있",
+            "상쾌",
+            "편안",
+            "기쁘",
+            "반가",
+        ),
+    )
+
+
+def _is_negated_action_response(text: str) -> bool:
+    final_text = _get_final_correction_segment(text)
+    return bool(NEGATED_ACTION_RESPONSE_PATTERN.search(_normalize_text(final_text)))
+
+
 def _is_short_response(text: str) -> bool:
     return len(_normalize_text(text)) <= 4
+
+
+def _is_recall_recovery_response(text: str) -> bool:
+    return _contains_any(
+        _normalize_text(text),
+        ("생각났", "기억났", "떠올랐"),
+    )
 
 
 def _count_recent_low_info_responses(texts: list[str], limit: int = 3) -> int:
@@ -632,6 +1113,17 @@ EXPLICIT_FOOD_KEYWORDS = (
     "볶음밥",
     "피자",
     "간식",
+    "물을",
+    "물은",
+    "물도",
+    "물만",
+    "물 마",
+    "커피",
+    "우유",
+    "주스",
+    "차를",
+    "차도",
+    "차 마",
 )
 
 EXPLICIT_PLACE_KEYWORDS = (
@@ -653,9 +1145,9 @@ FOOD_WISH_QUESTIONS = {
         "나중에 드신다면 누구와 같이 드시고 싶으세요?",
     ],
     "ANCHOR": [
-        "먹고 싶었던 음식 중에 나중에 기억할 만한 게 있으세요?",
-        "그 음식을 떠올리면 제일 먼저 생각나는 모습이 있으세요?",
-        "그 음식 이야기를 다시 한다면 어떤 말이 먼저 떠오를까요?",
+        "같이 드시고 싶은 음식이 정해져 있으세요?",
+        "그 음식은 어디에서 드시고 싶으세요?",
+        "그 음식을 드실 때 가장 기대되는 점은 무엇인가요?",
     ],
 }
 
@@ -669,6 +1161,16 @@ FOOD_NEGATED_QUESTIONS = {
         "오늘 먹는 일과 관련해서 기억나는 점이 있으세요?",
         "오늘 식사 이야기를 떠올리면 먼저 생각나는 게 있으세요?",
         "오늘 드시거나 마신 것 중 나중에 기억할 만한 게 있으세요?",
+    ],
+}
+
+
+UNSPECIFIED_PLACE_QUESTIONS = {
+    "DEEPEN": [
+        "어디에 다녀오셨어요?",
+    ],
+    "ANCHOR": [
+        "다녀오신 곳이 어디인지 말씀해주실래요?",
     ],
 }
 
@@ -686,16 +1188,275 @@ FOOD_APPETITE_QUESTIONS = {
 }
 
 
+FOOD_DRINK_QUESTIONS = {
+    "DEEPEN": [
+        "그건 어디에서 마셨어요?",
+        "그건 누구와 함께 마셨어요?",
+        "마실 때 주변에 누가 있었어요?",
+    ],
+    "ANCHOR": [
+        "아까 마신 것에서 가장 기억나는 점이 있으세요?",
+        "그때 마신 것을 떠올리면 어떤 모습이 먼저 생각나세요?",
+        "마시던 때를 떠올리면 주변에 무엇이 보였어요?",
+    ],
+}
+
+FOOD_DRINK_WISH_QUESTIONS = [
+    "그걸 마시고 싶은 이유가 있으세요?",
+    "그건 누구와 같이 마시고 싶으세요?",
+    "그건 언제쯤 마시고 싶으세요?",
+]
+
+
+PERSON_CONTACT_QUESTIONS = {
+    "DEEPEN": [
+        "그분과는 어떤 이야기를 나누셨어요?",
+        "통화는 언제쯤 하셨어요?",
+        "통화하실 때 어디에 계셨어요?",
+    ],
+    "ANCHOR": [
+        "그 통화에서 가장 기억나는 말이 있으세요?",
+        "통화하던 때를 떠올리면 어떤 장면이 먼저 생각나세요?",
+        "그분과 나눈 이야기 중에 지금도 기억나는 게 있으세요?",
+    ],
+}
+
+PERSON_NEGATED_CONTACT_QUESTIONS = {
+    "DEEPEN": [
+        "그분께 연락하게 되면 어떤 이야기를 나누고 싶으세요?",
+        "그분께는 언제쯤 연락해 보고 싶으세요?",
+    ],
+    "ANCHOR": [
+        "그분께 연락하면 가장 먼저 어떤 말을 하고 싶으세요?",
+        "그분과 다시 이야기할 때 꼭 나누고 싶은 말이 있으세요?",
+    ],
+}
+
+FUTURE_PERSON_CONTACT_QUESTIONS = [
+    "전화하시면 어떤 이야기를 나누고 싶으세요?",
+    "그분께 가장 먼저 어떤 말을 하고 싶으세요?",
+]
+
+PERSON_MEETING_PLACE_QUESTIONS = {
+    "DEEPEN": [
+        "그곳에서 그분과 무엇을 하셨어요?",
+        "그곳에서 그분과 어떤 이야기를 나누셨어요?",
+    ],
+    "ANCHOR": [
+        "그분과 그곳에는 얼마나 함께 계셨어요?",
+        "그곳에서 그분과 함께한 일 중에 기억나는 게 있으세요?",
+        "그곳에서 나눈 이야기 중에 기억나는 말이 있으세요?",
+    ],
+}
+
+PERSON_IN_PERSON_CONVERSATION_QUESTIONS = {
+    "DEEPEN": [
+        "그분과 어떤 이야기를 나누셨어요?",
+        "이야기하실 때 가장 즐거웠던 부분이 있으세요?",
+    ],
+    "ANCHOR": [
+        "그분과 얼마나 오래 이야기하셨어요?",
+        "그 이야기 중에 가장 기억나는 말이 있으세요?",
+        "그분과 이야기하던 모습을 떠올리면 어떤 장면이 생각나세요?",
+    ],
+}
+
+OBJECT_PLACEMENT_QUESTIONS = {
+    "DEEPEN": [
+        "그 자리에 두신 이유가 있으세요?",
+        "옮겨 두고 나니 모습이 어떻게 달라졌어요?",
+    ],
+    "ANCHOR": [
+        "옮겨 둔 자리를 떠올리면 주변에 무엇이 보이세요?",
+        "그 물건을 옮긴 뒤 가장 먼저 눈에 띈 게 있으세요?",
+    ],
+}
+
+
+def _has_medicine_reference(text: str) -> bool:
+    normalized = re.sub(r"[^가-힣a-zA-Z0-9\s]", " ", str(text or ""))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    return bool(
+        re.search(
+            r"(?:^|\s)약(?:을|은|이|도|만)?(?:\s|$)",
+            normalized,
+        )
+        or re.search(r"(?:^|\s)약\s*(?:먹|드|챙)", normalized)
+    )
+
+
+def _has_standalone_soup_reference(text: str) -> bool:
+    normalized = re.sub(r"[^가-힣a-zA-Z0-9\s]", " ", str(text or ""))
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return bool(
+        re.search(
+            r"(?:^|\s)국(?:을|은|이|도|만)?(?:\s|$)",
+            normalized,
+        )
+    )
+
+
+def _has_confirmed_reference(texts: list[str], keyword: str) -> bool:
+    for text in texts:
+        normalized = _normalize_text(_get_final_correction_segment(text))
+        confirmed_text = _get_confirmed_text_after_negated_action(normalized)
+        evidence_text = confirmed_text or normalized
+
+        if keyword in evidence_text and (
+            confirmed_text or not _is_negated_action_response(normalized)
+        ):
+            return True
+
+    return False
+
+
+def _is_future_response(text: str) -> bool:
+    text = _get_final_correction_segment(text)
+    return _contains_any(
+        text,
+        (
+            "내일",
+            "모레",
+            "예정",
+            "갈 거",
+            "갈거",
+            "할 거",
+            "할거",
+            "먹을 거",
+            "먹을거",
+            "볼 거",
+            "볼거",
+            "만날 거",
+            "만날거",
+            "쉴 거",
+            "쉴거",
+            "잘 거",
+            "잘거",
+            "살 거",
+            "살거",
+            "갈게",
+            "다녀올게",
+            "할게",
+            "먹을게",
+            "볼게",
+            "만날게",
+            "쉴게",
+            "살게",
+            "올게",
+            "가려고",
+            "다녀오려고",
+            "하려고",
+            "먹으려고",
+            "보려고",
+            "만나려고",
+            "쉬려고",
+            "자려고",
+            "사려고",
+            "오려고",
+            "갈래",
+            "할래",
+            "먹을래",
+            "볼래",
+            "만날래",
+            "쉴래",
+            "살래",
+            "올래",
+            "으면 좋",
+            "면 좋겠",
+            "오실 거",
+            "올 거",
+            "올거",
+        ),
+    )
+
+
+def _is_wish_response(text: str) -> bool:
+    text = _get_final_correction_segment(text)
+    return _contains_any(
+        text,
+        (
+            "가고 싶",
+            "다녀오고 싶",
+            "먹고 싶",
+            "마시고 싶",
+            "보고 싶",
+            "만나고 싶",
+            "하고 싶",
+            "쉬고 싶",
+            "자고 싶",
+            "사고 싶",
+            "듣고 싶",
+        ),
+    )
+
+
+def _has_everyday_object_action(text: str) -> bool:
+    normalized = _normalize_text(text)
+    action_pattern = r"(?:옮겼|뒀|두었|열었|닫았|닦았|사용했|썼)[가-힣]*"
+    match = re.search(
+        rf"(?:^|\s)([가-힣]{{2,}}?)(?:을|를|은|는|이|가)\s*{action_pattern}",
+        normalized,
+    ) or re.search(
+        rf"(?:^|\s)([가-힣]{{2,}})\s+{action_pattern}",
+        normalized,
+    )
+
+    if not match:
+        return False
+
+    object_word = match.group(1)
+    return object_word not in {
+        "오늘",
+        "어제",
+        "아까",
+        "방금",
+        "그거",
+        "이거",
+        "저거",
+        "뭔가",
+    }
+
+
 def _detect_topic_in_text(text: str) -> str | None:
-    health_text = text.replace("약속", "")
+    text = _get_final_correction_segment(text)
+    confirmed_text = _get_confirmed_text_after_negated_action(text)
+
+    if confirmed_text:
+        text = confirmed_text
+
+    health_text = text.replace("약속", "").replace("예약", "")
+    has_explicit_media = _contains_any(
+        text,
+        (
+            "텔레비전",
+            "티비",
+            "방송",
+            "프로그램",
+            "노래",
+            "가수",
+            "미스터트롯",
+            "드라마",
+            "뉴스",
+        ),
+    )
+    has_media_consumption = (
+        has_explicit_media
+        and _contains_any(text, ("봤", "보았", "시청", "들었", "들어"))
+    )
+
+    if _is_low_info_response(health_text) and _is_negative_response(health_text):
+        return "NEGATIVE"
 
     if _is_low_info_response(health_text):
         return "LOW_INFO"
 
-    if _contains_any(
+    if "기다려" in text and _contains_any(text, ("시간", "때", "저녁", "아침")):
+        return "ROUTINE"
+
+    has_explicit_health_context = _contains_any(
         health_text,
         (
-            "약",
             "병원",
             "진료",
             "의사",
@@ -704,41 +1465,60 @@ def _detect_topic_in_text(text: str) -> str | None:
             "아팠",
             "다쳤",
             "몸",
-            "허리",
             "검사",
-            "팔",
-            "다리",
-            "무릎",
-            "어깨",
-            "배",
-            "머리",
-            "눈이 아",
+            "나아",
+            "괜찮아졌",
+            "호전",
         ),
+    )
+    has_body_part = _contains_any(
+        health_text,
+        ("허리", "팔", "다리", "무릎", "어깨", "배", "머리", "눈"),
+    )
+    has_health_symptom = _contains_any(
+        health_text,
+        ("불편", "쑤", "삐끗", "저리", "안 좋", "통증"),
+    )
+
+    if (
+        has_explicit_health_context
+        or _has_medicine_reference(health_text)
+        or (has_body_part and has_health_symptom)
     ):
         return "HEALTH"
+
+    if (
+        _contains_any(text, EXPLICIT_FOOD_KEYWORDS)
+        and _contains_any(text, ("맛없", "맛이 없", "맛이 별로"))
+    ):
+        return "FOOD"
 
     if _contains_any(
         text,
         (
-            "별로",
-            "싫",
-            "힘들",
-            "우울",
-            "속상",
-            "걱정",
-            "불편",
-            "무거웠",
-            "화가",
-            "화났",
-            "짜증",
-            "슬프",
-            "슬펐",
-            "외로",
-            "무서",
-            "불안",
-            "서운",
+            "입맛이 없",
+            "입맛 없",
+            "밥맛이 없",
+            "밥맛 없",
+            "식욕이 없",
+            "식욕 없",
         ),
     ):
+        return "FOOD"
+
+    if has_explicit_media and _contains_any(
+        text,
+        ("재미없", "재미 없", "재미가 없", "별로"),
+    ):
+        return "MEDIA"
+
+    if _contains_any(
+        text,
+        ("낮잠", "잠을", "잤", "쉬었", "쉬고", "쉬는", "휴식", "누워"),
+    ):
+        return "REST"
+
+    if _is_negative_response(text):
         return "NEGATIVE"
 
     if _contains_any(
@@ -761,15 +1541,26 @@ def _detect_topic_in_text(text: str) -> str | None:
     ):
         return "WEATHER"
 
+    if _contains_any(text, ("풍경", "벚꽃", "꽃이 피", "꽃이 폈")) or (
+        "창밖" in text and _contains_any(text, ("봤", "보았", "보여", "보였"))
+    ):
+        return "SCENERY"
+
     if _contains_any(
         text,
         (
             "샀",
             "사왔",
+            "사고 싶",
+            "사려고",
+            "살 거",
+            "살거",
             "장 봤",
             "장봤",
             "장 보",
             "장보",
+            "장 볼",
+            "장볼",
             "장보러",
             "물건",
         ),
@@ -777,43 +1568,28 @@ def _detect_topic_in_text(text: str) -> str | None:
         return "SHOPPING"
 
     if _contains_any(
-        health_text,
-        (
-            "약",
-            "병원",
-            "진료",
-            "의사",
-            "간호",
-            "아프",
-            "아팠",
-            "다쳤",
-            "몸",
-            "허리",
-            "불편",
-            "검사",
-        ),
-    ):
-        return "HEALTH"
-
-    if _contains_any(
         text,
         (
             "먹",
             "마시",
+            "마셨",
             "식사",
             "음식",
             "밥",
             "반찬",
-            "국",
             "찌개",
             "김치",
             "볶음밥",
             "피자",
             "간식",
+            "식욕",
             "맛",
         ),
-    ):
+    ) or _has_standalone_soup_reference(text):
         return "FOOD"
+
+    if _has_everyday_object_action(text):
+        return "OBJECT"
 
     if _contains_any(
         text,
@@ -873,11 +1649,33 @@ def _detect_topic_in_text(text: str) -> str | None:
             "연락",
             "통화",
             "만났",
+            "이야기",
         ),
     ):
         return "PERSON"
 
-    if _contains_any(
+    if (
+        "집" in text
+        and _contains_any(
+            text,
+            (
+                "집에 있었",
+                "집에만 있었",
+                "집에서 있었",
+                "집에서 지냈",
+                "집에 머물",
+                "집에서 머물",
+                "집에서만",
+                "집에만",
+                "안 나갔",
+                "못 나갔",
+            ),
+        )
+        and not _contains_any(text, ("집 밖", "집밖"))
+    ):
+        return "HOME"
+
+    if not has_media_consumption and _contains_any(
         text,
         (
             "집",
@@ -896,7 +1694,7 @@ def _detect_topic_in_text(text: str) -> str | None:
     ):
         return "PLACE"
 
-    if _contains_any(
+    if has_media_consumption or _contains_any(
         text,
         (
             "텔레비전",
@@ -919,13 +1717,43 @@ def _detect_recent_context_topic(cycle_texts: list[str]) -> str | None:
     for text in reversed(cycle_texts):
         topic = _detect_topic_in_text(text)
 
-        if topic is not None:
+        if topic not in {None, "LOW_INFO", "NEGATIVE"}:
             return topic
 
     return None
 
 
-def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str | None:
+def _detect_topic_from_question(question: str) -> str | None:
+    question = _normalize_text(question)
+
+    topic_cues = (
+        ("HEALTH", ("병원", "약", "몸", "아프", "불편")),
+        ("FOOD", ("음식", "드셨어", "먹었", "마셨어", "식사", "맛")),
+        ("MEDIA", ("방송", "프로그램", "노래", "가수", "드라마", "뉴스", "티비")),
+        ("SHOPPING", ("사신", "샀", "고르셨어", "장 보", "마트", "시장")),
+        ("OBJECT", ("물건", "손에 자주", "자주 잡", "어디에 두")),
+        ("HOME", ("집에서", "집 안", "집에 계실", "어느 방", "머문 자리")),
+        ("REST", ("쉬", "낮잠", "휴식")),
+        ("ROUTINE", ("기다려지는 시간", "기다리는 시간")),
+        ("SCENERY", ("동네", "풍경", "창밖에서 본", "자주 보이는")),
+        ("ACTIVITY", ("하신 일", "하시던 일", "운동", "산책", "청소")),
+        ("WEATHER", ("날씨", "더웠", "추웠", "바람", "햇빛")),
+        ("PLACE", ("어디", "그곳", "장소", "다녀오신 곳")),
+        ("PERSON", ("누구", "사람", "그분", "통화", "연락")),
+    )
+
+    for topic, cues in topic_cues:
+        if _contains_any(question, cues):
+            return topic
+
+    return None
+
+
+def _detect_conversation_topic(
+    latest_text: str,
+    cycle_texts: list[str],
+    previous_question: str = "",
+) -> str | None:
     # 최신 답변의 주제를 우선한다. 이전 답변까지 먼저 섞으면
     # 사용자가 새 주제로 넘어갔는데도 이전 주제 질문이 계속 나올 수 있다.
     latest_topic = _detect_topic_in_text(latest_text)
@@ -936,6 +1764,10 @@ def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str 
         previous_cycle_texts = previous_cycle_texts[:-1]
 
     previous_context_topic = _detect_recent_context_topic(previous_cycle_texts)
+    question_topic = _detect_topic_from_question(previous_question)
+
+    if latest_topic is None and question_topic is not None:
+        return question_topic
 
     if (
         latest_topic == "FOOD"
@@ -968,6 +1800,27 @@ def _detect_conversation_topic(latest_text: str, cycle_texts: list[str]) -> str 
     ):
         return previous_context_topic
 
+    if (
+        latest_topic == "WEATHER"
+        and (previous_context_topic == "MEDIA" or question_topic == "MEDIA")
+        and _contains_any(latest_text, ("소식", "예보", "뉴스", "방송"))
+    ):
+        return "MEDIA"
+
+    if (
+        latest_topic == "PERSON"
+        and previous_context_topic == "PLACE"
+        and _contains_any(latest_text, ("갈 거", "갈거", "가려고", "가고 싶"))
+    ):
+        return "PLACE"
+
+    if (
+        latest_topic == "NEGATIVE"
+        and previous_context_topic is not None
+        and _contains_any(latest_text, ("별로",))
+    ):
+        return previous_context_topic
+
     if latest_topic is not None:
         return latest_topic
 
@@ -981,11 +1834,48 @@ def _get_topic_aware_fallback_candidates(
     stage: str,
     latest_text: str,
     cycle_texts: list[str],
+    previous_question: str = "",
 ) -> list[str]:
-    topic = _detect_conversation_topic(latest_text, cycle_texts)
+    topic = _detect_conversation_topic(
+        latest_text,
+        cycle_texts,
+        previous_question,
+    )
 
     if topic is None:
         return []
+
+    if _is_wish_response(latest_text) and topic in WISH_TOPIC_QUESTIONS:
+        if topic == "FOOD" and _contains_any(
+            latest_text,
+            ("마시고 싶", "커피", "우유", "주스", "차를", "차 마"),
+        ):
+            return FOOD_DRINK_WISH_QUESTIONS
+
+        return WISH_TOPIC_QUESTIONS[topic]
+
+    if (
+        _is_future_response(latest_text)
+        and topic == "PERSON"
+        and _contains_any(latest_text, ("통화", "전화", "연락"))
+    ):
+        return FUTURE_PERSON_CONTACT_QUESTIONS
+
+    if _is_future_response(latest_text) and topic in FUTURE_TOPIC_QUESTIONS:
+        candidates = FUTURE_TOPIC_QUESTIONS[topic]
+
+        if topic == "PLACE":
+            if _contains_any(latest_text, ("내일", "모레", "오늘", "다음 주", "다음주")):
+                candidates = [question for question in candidates if "언제쯤" not in question]
+
+            if _detect_topic_in_text(latest_text) == "PERSON":
+                candidates = [
+                    question
+                    for question in candidates
+                    if "혼자" not in question and "함께 가실 분" not in question
+                ]
+
+        return candidates
 
     candidates = TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS.get(topic, {}).get(stage, [])
 
@@ -993,8 +1883,19 @@ def _get_topic_aware_fallback_candidates(
         candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
 
     if topic == "FOOD":
-        if _contains_any(latest_text, ("입맛", "밥맛")):
+        has_appetite_expression = _contains_any(
+            latest_text,
+            ("입맛", "밥맛", "식욕"),
+        )
+        has_drink_expression = _contains_any(
+            latest_text,
+            ("마셨어", "마셨", "마신", "마시"),
+        )
+
+        if has_appetite_expression:
             candidates = FOOD_APPETITE_QUESTIONS.get(stage, candidates)
+        elif has_drink_expression:
+            candidates = FOOD_DRINK_QUESTIONS.get(stage, candidates)
         elif _contains_any(latest_text, ("안 먹", "못 먹", "아직 안")):
             candidates = FOOD_NEGATED_QUESTIONS.get(stage, candidates)
         elif _contains_any(latest_text, ("먹고 싶", "먹고싶")):
@@ -1007,7 +1908,10 @@ def _get_topic_aware_fallback_candidates(
                 if "누구와 같이" not in question
             ]
 
-        if _contains_any(latest_text, ("맛있", "맛은", "맛이", "시원")):
+        if not has_appetite_expression and _contains_any(
+            latest_text,
+            ("맛있", "맛없", "맛 없", "맛은", "맛이", "시원", "별로"),
+        ):
             candidates = [
                 question
                 for question in candidates
@@ -1021,17 +1925,70 @@ def _get_topic_aware_fallback_candidates(
                 if "어디에서" not in question
             ]
 
+    if topic == "PERSON" and _contains_any(
+        latest_text,
+        ("통화", "전화", "연락"),
+    ):
+        candidates = (
+            PERSON_NEGATED_CONTACT_QUESTIONS.get(stage, candidates)
+            if _is_negated_action_response(latest_text)
+            else PERSON_CONTACT_QUESTIONS.get(stage, candidates)
+        )
+
+        if _contains_any(
+            latest_text,
+            ("아침", "점심", "저녁", "오전", "오후", "새벽", "밤에", "낮에"),
+        ) or re.search(r"\d+\s*시", latest_text):
+            candidates = [
+                question
+                for question in candidates
+                if "언제" not in question
+            ]
+
+        if _contains_any(
+            latest_text,
+            ("집에서", "병원에서", "공원에서", "밖에서", "방에서", "거실에서"),
+        ):
+            candidates = [
+                question
+                for question in candidates
+                if "어디" not in question
+            ]
+
+    if (
+        topic == "PERSON"
+        and "만났" in latest_text
+        and _contains_any(latest_text, EXPLICIT_PLACE_KEYWORDS)
+    ):
+        candidates = PERSON_MEETING_PLACE_QUESTIONS.get(stage, candidates)
+
+    if (
+        topic == "PERSON"
+        and _contains_any(latest_text, ("이야기", "대화"))
+        and not _contains_any(latest_text, ("통화", "전화", "연락"))
+    ):
+        candidates = PERSON_IN_PERSON_CONVERSATION_QUESTIONS.get(stage, candidates)
+
+    if topic == "OBJECT" and _contains_any(
+        latest_text,
+        ("옮겼", "뒀", "두었", "놓았", "놨어"),
+    ):
+        candidates = OBJECT_PLACEMENT_QUESTIONS.get(stage, candidates)
+
     if topic == "HEALTH":
         context = " ".join([latest_text, *cycle_texts])
 
-        if "약" not in context:
+        if not _has_medicine_reference(context):
             candidates = [
                 question
                 for question in candidates
                 if "약" not in question
             ]
 
-        if "병원" not in context:
+        if not _has_confirmed_reference(
+            [latest_text, *cycle_texts],
+            "병원",
+        ):
             candidates = [
                 question
                 for question in candidates
@@ -1059,6 +2016,20 @@ def _get_topic_aware_fallback_candidates(
                 if "어느 쪽" not in question
             ]
 
+        if not _contains_any(
+            context,
+            ("아프", "아팠", "다쳤", "불편", "쑤", "삐끗", "저리", "안 좋", "통증", "몸"),
+        ):
+            candidates = [
+                question
+                for question in candidates
+                if (
+                    "몸 상태" not in question
+                    and "어느 쪽" not in question
+                    and "괜찮으세요" not in question
+                )
+            ]
+
     if topic == "WEATHER":
         context = " ".join([latest_text, *cycle_texts])
 
@@ -1071,6 +2042,16 @@ def _get_topic_aware_fallback_candidates(
 
     if topic == "MEDIA":
         context = " ".join([latest_text, *cycle_texts])
+        has_specific_media_detail = _contains_any(
+            context,
+            (
+                "뉴스",
+                "드라마",
+                "미스터트롯",
+                "가수",
+                "노래",
+            ),
+        )
 
         if not _contains_any(context, ("노래", "가수", "들었")):
             candidates = [
@@ -1079,11 +2060,24 @@ def _get_topic_aware_fallback_candidates(
                 if "노래" not in question and "들을 때" not in question
             ]
 
-        if _contains_any(latest_text, ("재미없", "재미 없", "별로")):
+        if not has_specific_media_detail:
             candidates = [
                 question
                 for question in candidates
                 if "사람" not in question
+            ]
+        else:
+            candidates = [
+                question
+                for question in candidates
+                if "어떤 방송이나 프로그램" not in question
+            ]
+
+        if _contains_any(latest_text, ("재미없", "재미 없", "별로")):
+            candidates = [
+                question
+                for question in candidates
+                if "사람" not in question and "기분" not in question
             ]
 
         if _contains_any(context, ("노래", "가수", "들었")):
@@ -1114,11 +2108,111 @@ def _get_topic_aware_fallback_candidates(
                 if "기분" not in question
             ]
 
+    if topic == "PERSON":
+        context = " ".join([latest_text, *cycle_texts])
+
+        if not _contains_any(
+            context,
+            (
+                "통화",
+                "전화",
+                "대화",
+                "이야기했",
+                "연락",
+                "말했",
+                "만났",
+                "다녀갔",
+                "찾아왔",
+                "들렀",
+            ),
+        ):
+            candidates = [
+                question
+                for question in candidates
+                if "이야기를 나누셨어" not in question
+            ]
+
+        if _contains_any(latest_text, ("이야기했", "얘기했", "말했")):
+            candidates = [
+                question
+                for question in candidates
+                if "어떤 이야기를" not in question
+            ]
+
+    if topic == "PLACE" and "혼자" in latest_text:
+        candidates = [
+            question
+            for question in candidates
+            if "혼자" not in question
+        ]
+
+    if topic == "PLACE" and not _contains_any(
+        " ".join([latest_text, *cycle_texts]),
+        (
+            "병원",
+            "마트",
+            "시장",
+            "공원",
+            "동네",
+            "약국",
+            "은행",
+            "식당",
+            "카페",
+            "경로당",
+            "복지관",
+            "교회",
+            "성당",
+            "절",
+        ),
+    ):
+        candidates = UNSPECIFIED_PLACE_QUESTIONS.get(stage, candidates)
+
+    if topic == "REST":
+        if "에서" in latest_text:
+            candidates = [
+                question
+                for question in candidates
+                if "어디에서" not in question
+            ]
+
+        if _contains_any(latest_text, ("괜찮", "좋아졌", "나아졌")):
+            candidates = [
+                question
+                for question in candidates
+                if "몸이 조금 괜찮" not in question
+            ]
+
     return candidates
 
 
 def _get_topic_openers() -> list[str]:
     return SAFE_OPENING_QUESTIONS
+
+
+def _get_topic_change_openers(current_topic: str | None) -> list[str]:
+    topic_markers = {
+        "PERSON": ("보고 싶은 사람",),
+        "FOOD": ("드신 것", "음식"),
+        "PLACE": ("다녀오신 곳", "동네", "집 안"),
+        "HOME": ("집에서는", "집 안", "머무는 자리"),
+        "MEDIA": ("방송", "노래"),
+        "WEATHER": ("날씨",),
+        "SHOPPING": ("물건", "시장", "마트"),
+        "OBJECT": ("손에", "물건"),
+        "ROUTINE": ("기다려지는 시간", "하루 중"),
+        "SCENERY": ("풍경", "동네", "창밖"),
+        "ACTIVITY": ("하시던 일",),
+    }
+    markers = topic_markers.get(current_topic, ())
+
+    if not markers:
+        return _get_topic_openers()
+
+    return [
+        question
+        for question in _get_topic_openers()
+        if not _contains_any(question, markers)
+    ]
 
 
 def _pick_non_repeated_question(
@@ -1143,19 +2237,46 @@ def _pick_non_repeated_question(
 
         return question
 
-    for offset in range(len(candidates)):
-        question = candidates[(start_index + offset) % len(candidates)]
-
-        if _normalize_text(question) not in used_questions:
-            return question
-
     return None
+
+
+def _pick_least_recent_question(
+    candidates: list[str],
+    previous_questions: list[str] | None,
+    start_index: int,
+) -> str:
+    previous_questions = previous_questions or []
+    rotated_candidates = [
+        candidates[(start_index + offset) % len(candidates)]
+        for offset in range(len(candidates))
+    ]
+
+    def last_similar_index(candidate: str) -> int:
+        for index in range(len(previous_questions) - 1, -1, -1):
+            if is_similar_to_previous_question(
+                candidate,
+                [previous_questions[index]],
+            ):
+                return index
+
+        return -1
+
+    return min(rotated_candidates, key=last_similar_index)
 
 
 def _with_topic_change_acknowledgement(
     question: str,
     session_records: list[dict] | None,
 ) -> str:
+    latest_record = _get_latest_record(session_records)
+    latest_text = str((latest_record or {}).get("transcriptText") or "")
+
+    if _is_positive_response(latest_text):
+        return f"좋으셨겠어요. {question}"
+
+    if _is_negative_response(latest_text):
+        return f"그러셨군요. {question}"
+
     index = len(session_records or []) % len(TOPIC_CHANGE_ACKNOWLEDGEMENTS)
     acknowledgement = TOPIC_CHANGE_ACKNOWLEDGEMENTS[index]
     return f"{acknowledgement} {question}"
@@ -1171,6 +2292,20 @@ def _get_latest_record(session_records: list[dict] | None) -> dict | None:
         records,
         key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
     )
+
+
+def _get_question_answered_by_latest_record(
+    session_records: list[dict] | None,
+) -> str:
+    records = sorted(
+        [record for record in session_records or [] if record.get("recordId")],
+        key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
+    )
+
+    if len(records) < 2:
+        return ""
+
+    return str(records[-2].get("aiReplyText") or "")
 
 
 def _is_after_recall_answer(session_records: list[dict] | None) -> bool:
@@ -1189,17 +2324,29 @@ def _with_recall_transition_acknowledgement(
     if _contains_any(question, ("괜찮습니다.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.")):
         return question
 
+    latest_record = _get_latest_record(session_records)
+    latest_text = str((latest_record or {}).get("transcriptText") or "")
+
+    if _is_recall_recovery_response(latest_text):
+        return f"아하, 생각나셨군요. {question}"
+
+    if _is_positive_response(latest_text):
+        return f"좋으셨겠어요. {question}"
+
     index = len(session_records or []) % len(RECALL_TRANSITION_ACKNOWLEDGEMENTS)
     acknowledgement = RECALL_TRANSITION_ACKNOWLEDGEMENTS[index]
     return f"{acknowledgement} {question}"
 
 
 def _get_after_recall_opening_candidates(recall_answer_text: str) -> list[str]:
-    if _is_low_info_response(recall_answer_text):
-        return AFTER_LOW_INFO_RECALL_OPENING_QUESTIONS
+    if _is_recall_recovery_response(recall_answer_text):
+        return AFTER_RECALL_OPENING_QUESTIONS
 
     if _is_negative_response(recall_answer_text):
         return AFTER_NEGATIVE_RECALL_OPENING_QUESTIONS
+
+    if _is_low_info_response(recall_answer_text):
+        return AFTER_LOW_INFO_RECALL_OPENING_QUESTIONS
 
     if _is_short_response(recall_answer_text):
         return AFTER_SHORT_RECALL_OPENING_QUESTIONS
@@ -1216,8 +2363,25 @@ def _get_next_normal_question(
     question_index = cycle_index + candidate_count
     used_questions = _get_recent_ai_replies(session_records)
     previous_questions = _get_recent_ai_reply_list(session_records)
-    recent_context = previous_questions + _get_recent_transcript_list(session_records)
     cycle_texts = _get_cycle_transcripts(session_records)
+    followup_latest_text = (
+        _get_confirmed_text_after_negated_action(latest_text)
+        or latest_text
+    )
+    followup_cycle_texts = list(cycle_texts)
+    previous_question = _get_question_answered_by_latest_record(session_records)
+
+    if followup_latest_text != latest_text:
+        for index in range(len(followup_cycle_texts) - 1, -1, -1):
+            if followup_cycle_texts[index].strip() == latest_text.strip():
+                followup_cycle_texts[index] = followup_latest_text
+                break
+
+    followup_topic = _detect_conversation_topic(
+        followup_latest_text,
+        followup_cycle_texts,
+        previous_question,
+    )
 
     if candidate_count <= 0:
         after_recall_answer = _is_after_recall_answer(session_records)
@@ -1233,7 +2397,7 @@ def _get_next_normal_question(
         opener_question = _pick_non_repeated_question(
             candidates=opening_candidates,
             used_questions=used_questions,
-            previous_questions=recent_context,
+            previous_questions=previous_questions,
             start_index=cycle_index,
         )
 
@@ -1246,17 +2410,53 @@ def _get_next_normal_question(
 
             return opener_question
 
+    if (
+        _is_negated_action_response(latest_text)
+        and not _get_confirmed_text_after_negated_action(latest_text)
+        and _detect_topic_in_text(latest_text) != "FOOD"
+        and not (
+            followup_topic == "PERSON"
+            and _contains_any(latest_text, ("통화", "전화", "연락"))
+        )
+    ):
+        opener_question = _pick_non_repeated_question(
+            candidates=_get_topic_change_openers(followup_topic),
+            used_questions=used_questions,
+            previous_questions=previous_questions,
+            start_index=cycle_index + candidate_count,
+        )
+
+        if opener_question:
+            return _with_topic_change_acknowledgement(
+                opener_question,
+                session_records,
+            )
+
     stage = "DEEPEN" if candidate_count <= 2 else "ANCHOR"
     topic_aware_candidates = _get_topic_aware_fallback_candidates(
         stage,
-        latest_text,
-        cycle_texts,
+        followup_latest_text,
+        followup_cycle_texts,
+        previous_question,
     )
+    if followup_topic is not None and not topic_aware_candidates:
+        opener_question = _pick_non_repeated_question(
+            candidates=_get_topic_change_openers(followup_topic),
+            used_questions=used_questions,
+            previous_questions=previous_questions,
+            start_index=cycle_index + candidate_count,
+        )
+
+        if opener_question:
+            return _with_topic_change_acknowledgement(
+                opener_question,
+                session_records,
+            )
 
     if (
-        _is_low_info_response(latest_text)
+        _is_low_info_response(followup_latest_text)
         and _count_recent_low_info_responses(
-            _get_recent_transcript_list(session_records),
+            _build_generation_history(followup_cycle_texts, followup_latest_text),
         )
         >= 2
     ):
@@ -1269,23 +2469,26 @@ def _get_next_normal_question(
     fallback_question = _pick_non_repeated_question(
         candidates=fallback_candidates,
         used_questions=used_questions,
-        previous_questions=recent_context,
+        previous_questions=previous_questions,
         start_index=question_index,
     )
 
     if fallback_question:
         generated_question = generate_safe_followup_question(
-            conversation_history=cycle_texts + [latest_text],
+            conversation_history=_build_generation_history(
+                followup_cycle_texts,
+                followup_latest_text,
+            ),
             stage=stage,
             fallback_question=fallback_question,
-            previous_questions=recent_context,
+            previous_questions=previous_questions,
         )
 
         if generated_question.get("shouldChangeTopic"):
             opener_question = _pick_non_repeated_question(
-                candidates=_get_topic_openers(),
+                candidates=_get_topic_change_openers(followup_topic),
                 used_questions=used_questions,
-                previous_questions=recent_context,
+                previous_questions=previous_questions,
                 start_index=cycle_index + 1,
             )
 
@@ -1300,14 +2503,18 @@ def _get_next_normal_question(
     opener_question = _pick_non_repeated_question(
         candidates=_get_topic_openers(),
         used_questions=used_questions,
-        previous_questions=recent_context,
+        previous_questions=previous_questions,
         start_index=question_index,
     )
 
     if opener_question:
         return opener_question
 
-    return _get_topic_openers()[question_index % len(_get_topic_openers())]
+    return _pick_least_recent_question(
+        candidates=_get_topic_openers(),
+        previous_questions=previous_questions,
+        start_index=question_index,
+    )
 
 
 def _get_current_transcript(
@@ -1320,6 +2527,17 @@ def _get_current_transcript(
             return record.get("transcriptText") or fallback_text
 
     return fallback_text
+
+
+def _get_record_by_id(
+    session_records: list[dict],
+    record_id: int,
+) -> dict | None:
+    for record in session_records:
+        if record.get("recordId") == record_id:
+            return record
+
+    return None
 
 
 def _with_current_answer_role(
@@ -1411,15 +2629,73 @@ def process_voice_reply(
         session_records = _fetch_session_records(session_id)
 
         if not session_records:
-            session_records = [
-                {
-                    "recordId": record_id,
-                    "transcriptText": transcript_text,
-                    "answerRole": None,
-                    "recallQuestionId": None,
-                    "parentRecordId": None,
-                }
-            ]
+            logger.error(
+                "세션 레코드를 확인하지 못해 역할을 추측하지 않고 처리 중단: "
+                "recordId=%s sessionId=%s",
+                record_id,
+                session_id,
+            )
+            return
+
+        current_record = _get_record_by_id(session_records, record_id)
+
+        if str((current_record or {}).get("aiReplyText") or "").strip():
+            logger.info(
+                "이미 AI 답변이 저장된 레코드이므로 중복 처리를 건너뜀: recordId=%s",
+                record_id,
+            )
+            return
+
+        current_answer_role = str(
+            (current_record or {}).get("answerRole") or ""
+        ).upper()
+
+        if current_answer_role == "INITIAL":
+            current_question_id = (current_record or {}).get("recallQuestionId")
+            question_text = (
+                _find_recall_question_text(user_id, int(current_question_id))
+                if current_question_id is not None
+                else ""
+            )
+
+            if not question_text:
+                logger.error(
+                    "연결된 회상 질문 문구를 찾지 못해 복구 중단: recordId=%s questionId=%s",
+                    record_id,
+                    current_question_id,
+                )
+                return
+
+            _save_ai_reply(record_id=record_id, reply_text=question_text)
+            logger.info(
+                "INITIAL 연결 후 누락된 회상 질문 저장 복구: recordId=%s questionId=%s",
+                record_id,
+                current_question_id,
+            )
+            return
+
+        if current_answer_role == "FIXED":
+            fixed_answer_count = _count_fixed_answers(session_records)
+
+            if fixed_answer_count < len(FIXED_QUESTIONS):
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text=FIXED_QUESTIONS[fixed_answer_count]["questionText"],
+                )
+                logger.info(
+                    "연결 완료된 고정 답변의 다음 질문 저장 재개: recordId=%s nextIndex=%s",
+                    record_id,
+                    fixed_answer_count,
+                )
+                return
+
+            _mark_fixed_questions_done_today(user_id)
+            _save_ai_reply(
+                record_id=record_id,
+                reply_text=_get_next_normal_question(0, session_records),
+            )
+            logger.info("마지막 고정 답변 이후 자유대화 질문 저장 재개: recordId=%s", record_id)
+            return
 
         # 1. 직전 회상 질문에 대한 답변이면 RECALL로 연결하고 자유대화로 복귀한다.
         pending_recall_question_id = _find_pending_recall_question_id(
@@ -1428,11 +2704,50 @@ def process_voice_reply(
         )
 
         if pending_recall_question_id is not None:
-            _link_recall_question(
+            pending_question_text = _find_recall_question_text(
+                user_id,
+                pending_recall_question_id,
+            )
+
+            if not pending_question_text:
+                logger.error(
+                    "대기 중인 회상 질문 문구를 찾지 못해 답변 연결 중단: recordId=%s questionId=%s",
+                    record_id,
+                    pending_recall_question_id,
+                )
+                return
+
+            if not _was_recall_question_presented(
+                session_records=session_records,
+                current_record_id=record_id,
+                recall_question_id=pending_recall_question_id,
+                question_text=pending_question_text,
+            ):
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text=pending_question_text,
+                )
+                logger.warning(
+                    "표시되지 않은 회상 질문을 먼저 복구하고 현재 답변의 RECALL 연결은 보류: "
+                    "recordId=%s questionId=%s",
+                    record_id,
+                    pending_recall_question_id,
+                )
+                return
+
+            linked = _link_recall_question(
                 record_id=record_id,
                 recall_question_id=pending_recall_question_id,
                 answer_role="RECALL",
             )
+
+            if not linked:
+                logger.error(
+                    "회상 답변 연결 실패로 다음 단계 중단: recordId=%s questionId=%s",
+                    record_id,
+                    pending_recall_question_id,
+                )
+                return
 
             logger.info(
                 "회상 질문 답변으로 매핑 완료: recordId=%s questionId=%s",
@@ -1479,14 +2794,9 @@ def process_voice_reply(
         )
 
         if already_done_today:
-            logger.info("오늘 고정 질문을 이미 완료함. 자유대화로 바로 진입.")
-            _save_ai_reply(
-                record_id=record_id,
-                reply_text=_get_next_normal_question(0, session_records),
-            )
-            return
+            logger.info("오늘 고정 질문을 이미 완료함. 현재 답변부터 자유대화로 처리.")
 
-        if fixed_answer_count < len(FIXED_QUESTIONS):
+        if not already_done_today and fixed_answer_count < len(FIXED_QUESTIONS):
             current_question = FIXED_QUESTIONS[fixed_answer_count]
 
             fixed_question = _find_or_create_fixed_question(
@@ -1496,12 +2806,23 @@ def process_voice_reply(
 
             fixed_question_id = fixed_question.get("questionId") if fixed_question else None
 
-            if fixed_question_id:
-                _link_recall_question(
-                    record_id=record_id,
-                    recall_question_id=fixed_question_id,
-                    answer_role="FIXED",
+            if not fixed_question_id:
+                logger.error("고정 질문 ID 확인 실패로 다음 단계 중단: recordId=%s", record_id)
+                return
+
+            linked = _link_recall_question(
+                record_id=record_id,
+                recall_question_id=fixed_question_id,
+                answer_role="FIXED",
+            )
+
+            if not linked:
+                logger.error(
+                    "고정 질문 답변 연결 실패로 다음 단계 중단: recordId=%s questionId=%s",
+                    record_id,
+                    fixed_question_id,
                 )
+                return
 
             next_index = fixed_answer_count + 1
 
@@ -1523,15 +2844,16 @@ def process_voice_reply(
             )
             return
 
-        # 3. 자유대화 답변이 충분히 쌓이면 회상 질문 생성
+        # 3. 충분히 축적되고 한 턴 이상 지난 memoryPoint가 있으면 회상 질문 생성
         updated_records = _fetch_session_records(session_id)
 
         if not updated_records:
             updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
+        recall_ready_history = _get_recall_ready_history(transcripts)
 
-        if len(transcripts) < 3:
+        if not recall_ready_history:
             _save_ai_reply(
                 record_id=record_id,
                 reply_text=_get_next_normal_question(
@@ -1544,18 +2866,29 @@ def process_voice_reply(
                     ),
                 ),
             )
-            logger.info("자유대화 후보 부족: count=%s. 일반 질문 제공.", len(transcripts))
+            logger.info(
+                "회상 가능한 memoryPoint가 아직 충분히 축적되지 않음: "
+                "freeTalkCount=%s. 일반 질문 제공.",
+                len(transcripts),
+            )
             return
 
-        result = generate_and_save_recall_question(
-            user_id=user_id,
-            conversation_history=transcripts,
-            base_url=SPRING_BASE_URL,
-        )
+        try:
+            result = generate_and_save_recall_question(
+                user_id=user_id,
+                conversation_history=recall_ready_history,
+                base_url=SPRING_BASE_URL,
+            )
+        except Exception as e:
+            logger.warning("회상 질문 생성 또는 저장 실패. 일반 질문으로 복귀: %s", e)
+            result = {
+                "status": "SKIPPED",
+                "reason": "회상 질문 생성 또는 저장 중 오류가 발생했습니다.",
+            }
 
         reply_text = result.get("question")
         saved_question = result.get("savedQuestion")
-        memory_point = result.get("memoryPoint", "")
+        source_text = result.get("sourceText", "")
 
         if result.get("status") != "CREATED" or not reply_text:
             _save_ai_reply(
@@ -1573,26 +2906,70 @@ def process_voice_reply(
             logger.info("회상 질문 생성 실패 또는 SKIPPED. 일반 질문으로 대체: %s", result.get("reason"))
             return
 
+        recall_question_id = (saved_question or {}).get("questionId")
+        source_record_id = _find_memory_source_record_id(
+            updated_records,
+            source_text,
+        )
+
+        if not recall_question_id or source_record_id is None:
+            logger.error(
+                "회상 질문 또는 기준 레코드를 확인하지 못해 일반 질문으로 복귀: "
+                "questionId=%s sourceText=%s",
+                recall_question_id,
+                source_text,
+            )
+            _save_ai_reply(
+                record_id=record_id,
+                reply_text=_get_next_normal_question(
+                    len(transcripts),
+                    updated_records,
+                    latest_text=_get_current_transcript(
+                        updated_records,
+                        record_id,
+                        transcript_text,
+                    ),
+                ),
+            )
+            return
+
+        linked = _link_recall_question(
+            record_id=source_record_id,
+            recall_question_id=recall_question_id,
+            answer_role="INITIAL",
+        )
+
+        if not linked:
+            logger.error(
+                "회상 기준 레코드 연결 실패로 회상 질문을 노출하지 않고 일반 질문으로 복귀: "
+                "questionId=%s sourceRecordId=%s",
+                recall_question_id,
+                source_record_id,
+            )
+            _save_ai_reply(
+                record_id=record_id,
+                reply_text=_get_next_normal_question(
+                    len(transcripts),
+                    updated_records,
+                    latest_text=_get_current_transcript(
+                        updated_records,
+                        record_id,
+                        transcript_text,
+                    ),
+                ),
+            )
+            return
+
         _save_ai_reply(
             record_id=record_id,
             reply_text=reply_text,
         )
 
-        if saved_question:
-            recall_question_id = saved_question.get("questionId")
-
-            if recall_question_id:
-                _link_recall_question(
-                    record_id=record_id,
-                    recall_question_id=recall_question_id,
-                    answer_role="INITIAL",
-                )
-
-                logger.info(
-                    "자연 회상 질문 저장 및 INITIAL 연결 완료: questionId=%s memoryPoint=%s",
-                    recall_question_id,
-                    memory_point,
-                )
+        logger.info(
+            "자연 회상 질문 저장 및 INITIAL 연결 완료: questionId=%s sourceRecordId=%s",
+            recall_question_id,
+            source_record_id,
+        )
 
     except Exception as e:
         logger.exception(
