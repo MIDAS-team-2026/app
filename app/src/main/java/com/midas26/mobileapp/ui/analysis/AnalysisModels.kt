@@ -206,7 +206,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private fun todayCal(): Calendar = Calendar.getInstance()
     private fun Calendar.isSameDay(other: Calendar) =
         get(Calendar.YEAR) == other.get(Calendar.YEAR) &&
-        get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
+                get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
 
     private fun riskToHealthScore(score: Float?): Float? =
         score?.let { (100f - it).coerceIn(0f, 100f) }
@@ -214,13 +214,37 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private fun displayHealthScore(score: Float?): Int =
         riskToHealthScore(score)?.roundToInt() ?: 0
 
+    private fun formatScore(score: Float?): String =
+        score?.roundToInt()?.let { "${it}점" } ?: "-"
+
+    private fun formatHealthScoreFromRisk(score: Float?): String =
+        formatScore(riskToHealthScore(score))
+
+    private fun formatRecallScore(score: Float?): String {
+        if (score == null || score <= 0f) return "측정 전"
+        return formatScore(score)
+    }
+
+    private fun formatRiskLevel(level: String?): String {
+        return when (level?.trim()?.uppercase()) {
+            "LOW" -> "안정"
+            "MEDIUM" -> "주의"
+            "HIGH" -> "위험"
+            "안정" -> "안정"
+            "주의" -> "주의"
+            "위험" -> "위험"
+            else -> "─"
+        }
+    }
+
     /** 헤더에 표시할 종합 점수. 서버 finalRiskScore는 위험도라 앱에서는 건강 점수로 변환한다. */
     val displayScore: Int get() = selectedDayScore
         ?.finalRiskScore?.let { displayHealthScore(it) }
         ?: displayHealthScore(finalRiskScore)
 
     /** 헤더 배지 — 위험 등급 */
-    val displayRiskLevel: String get() = selectedDayScore?.riskLevel ?: riskLevel ?: "─"
+    val displayRiskLevel: String get() =
+        formatRiskLevel(selectedDayScore?.riskLevel ?: riskLevel)
 
     /**
      * 그래프에서 강조할 인덱스.
@@ -264,42 +288,42 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             } catch (_: Exception) { "분석 결과" }
         }
 
-
     // ── 4 카드 ─────────────────────────────────────────────────────────────────
 
     val todayItems: List<AnalysisItem>
         get() {
             val sel = selectedDayScore
-            val dRisk    = sel?.riskLevel    ?: riskLevel
-            val dSpeech  = riskToHealthScore(sel?.speechScore ?: speechScore)
-            val dRecall  = sel?.recallScore  ?: recallScore
-            val dText    = sel?.textScore    ?: textScore
+            val dRisk       = sel?.riskLevel   ?: riskLevel
+            val dSpeechRisk = sel?.speechScore ?: speechScore
+            val dTextRisk   = sel?.textScore   ?: textScore
+            val dRecall     = sel?.recallScore ?: recallScore
+
             return listOf(
                 AnalysisItem(
                     icon      = Icons.Default.BarChart,
                     label     = "종합 위험도",
-                    valueText = dRisk ?: "-",
+                    valueText = formatRiskLevel(dRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
                 AnalysisItem(
                     icon      = Icons.Default.RecordVoiceOver,
                     label     = "음성 점수",
-                    valueText = dSpeech?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatHealthScoreFromRisk(dSpeechRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
                 AnalysisItem(
                     icon      = Icons.Default.Psychology,
                     label     = "회상 점수",
-                    valueText = dRecall?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatRecallScore(dRecall),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
                 AnalysisItem(
                     icon      = Icons.AutoMirrored.Filled.MenuBook,
                     label     = "텍스트 점수",
-                    valueText = dText?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatHealthScoreFromRisk(dTextRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 )
@@ -408,12 +432,10 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val y = d.get(Calendar.YEAR); val m = d.get(Calendar.MONTH) + 1; val day = d.get(Calendar.DAY_OF_MONTH)
             when {
                 d.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
-                d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
+                        d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
                 y != today.get(Calendar.YEAR) -> "${y}년 ${m}월 ${day}일 분석 결과"
                 else -> "${m}월 ${day}일 분석 결과"
             }
         } catch (_: Exception) { "분석 결과" }
     }
-
-
 }
