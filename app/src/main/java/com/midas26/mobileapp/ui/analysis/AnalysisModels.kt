@@ -214,9 +214,15 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private fun displayHealthScore(score: Float?): Int =
         riskToHealthScore(score)?.roundToInt() ?: 0
 
+    private fun formatScore(score: Float?): String =
+        score?.roundToInt()?.let { "${it}점" } ?: "-"
+
+    private fun formatHealthScoreFromRisk(score: Float?): String =
+        formatScore(riskToHealthScore(score))
+
     private fun formatRecallScore(score: Float?): String {
         if (score == null || score <= 0f) return "측정 전"
-        return "${score.roundToInt()}점"
+        return formatScore(score)
     }
 
     private fun formatRiskLevel(level: String?): String {
@@ -287,10 +293,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     val todayItems: List<AnalysisItem>
         get() {
             val sel = selectedDayScore
-            val dRisk    = sel?.riskLevel    ?: riskLevel
-            val dSpeech  = riskToHealthScore(sel?.speechScore ?: speechScore)
-            val dRecall  = sel?.recallScore  ?: recallScore
-            val dText    = sel?.textScore    ?: textScore
+            val dRisk       = sel?.riskLevel   ?: riskLevel
+            val dSpeechRisk = sel?.speechScore ?: speechScore
+            val dTextRisk   = sel?.textScore   ?: textScore
+            val dRecall     = sel?.recallScore ?: recallScore
+
             return listOf(
                 AnalysisItem(
                     icon      = Icons.Default.BarChart,
@@ -302,7 +309,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.Default.RecordVoiceOver,
                     label     = "음성 점수",
-                    valueText = dSpeech?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatHealthScoreFromRisk(dSpeechRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
@@ -316,7 +323,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.AutoMirrored.Filled.MenuBook,
                     label     = "텍스트 점수",
-                    valueText = dText?.let { "${it.roundToInt()}점" } ?: "-",
+                    valueText = formatHealthScoreFromRisk(dTextRisk),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 )
