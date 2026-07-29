@@ -6,6 +6,7 @@ import android.location.Geocoder
 import android.location.Location
 import android.net.Uri
 import android.view.MotionEvent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -117,10 +118,24 @@ fun LocationListScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📍", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("GPS 위치 확인", fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = AppColor.textPrimary,
+                            modifier = Modifier.size(31.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
+                        Text(
+                            text = "GPS 위치 확인",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 22.sp,
+                            color = AppColor.textPrimary
+                        )
                     }
                 },
                 navigationIcon = {
@@ -156,22 +171,27 @@ fun LocationListScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 24.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(18.dp),
-                    color = Color(0xFFFFF9E0)
+                    color = Color(0xFFFFE5DF)
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("📡", fontSize = 25.sp)
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = Color(0xFFC85E48),
+                            modifier = Modifier.size(30.dp)
+                        )
 
                         Spacer(modifier = Modifier.width(10.dp))
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "실시간 위치를 확인하세요",
+                                text = "실시간 위치를 확인하세요!",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFFB8860B),
+                                color = Color(0xFFC85E48),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -181,7 +201,7 @@ fun LocationListScreen(
                             Text(
                                 text = "위치는 5분마다 갱신됩니다",
                                 fontSize = 14.sp,
-                                color = Color(0xFFB8860B).copy(alpha = 0.7f),
+                                color = Color(0xFFC85E48).copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -263,7 +283,7 @@ private fun UserLocationCard(
             .padding(horizontal = 24.dp, vertical = 6.dp)
             .heightIn(min = 126.dp)
             .clickable { onClick() }
-            .border(1.5.dp, Color(0xFFB3D4F5), RoundedCornerShape(18.dp)),
+            .border(1.5.dp, Color(0xFFC85E48), RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(18.dp),
         color = Color.White
     ) {
@@ -469,15 +489,18 @@ fun LocationDetailScreen(
                             .height(58.dp)
                             .clickable { onRouteClick() },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFFF0F7EC),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+                        color = Color(0xFFFFE5DF),
+                        border = BorderStroke(
+                            width = 1.0.dp,
+                            color = Color(0xFFC85E48)
+                        )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "${user.name}님 이동 경로",
-                                fontSize = 17.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = AppColor.textPrimary
+                                color = Color.Black
                             )
                         }
                     }
@@ -488,15 +511,18 @@ fun LocationDetailScreen(
                             .height(58.dp)
                             .clickable { showCallDialog = true },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFFF0F7EC),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+                        color = Color(0xFFFFE5DF),
+                        border = BorderStroke(
+                            width = 1.0.dp,
+                            color = Color(0xFFC85E48)
+                        )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "${user.name}님 전화 걸기",
-                                fontSize = 17.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = AppColor.textPrimary
+                                color = Color.Black
                             )
                         }
                     }
@@ -676,12 +702,13 @@ fun LocationRouteScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF0F7EC)
+                    color = Color(0xFFFFE5DF)
                 ) {
                     Text(
-                        text = "📍 위치는 5분마다 자동으로 업데이트돼요",
-                        fontSize = 13.sp,
-                        color = AppColor.accentDark,
+                        text = "위치는 5분마다 자동 업데이트 됩니다!",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFC85E48),
                         modifier = Modifier.padding(12.dp),
                         textAlign = TextAlign.Center
                     )
@@ -794,8 +821,11 @@ private fun SummaryRow(label: String, value: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
-        color = Color(0xFFE4725B),
-        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.dp)
+        color = Color(0xFFFFE5DF),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFFC85E48)
+        )
     ) {
         Row(
             modifier = Modifier
@@ -883,7 +913,7 @@ private fun StatusBar(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp),
         shape = RoundedCornerShape(10.dp),
-        color = if (isError) Color(0xFFFCEEED) else Color(0xFFF0F7EC)
+        color = if (isError) Color(0xFFFCEEED) else Color(0xFFFFE5DF)
     ) {
         Row(
             modifier = Modifier.padding(10.dp),
@@ -892,7 +922,7 @@ private fun StatusBar(
             Icon(
                 imageVector = Icons.Default.LocationOn,
                 contentDescription = null,
-                tint = if (isError) Color(0xFFD9534F) else AppColor.greenSecondary,
+                tint = if (isError) Color(0xFFD9534F) else Color(0xFFC85E48),
                 modifier = Modifier.size(16.dp)
             )
 
@@ -901,7 +931,8 @@ private fun StatusBar(
             Text(
                 text = text,
                 fontSize = 12.sp,
-                color = if (isError) Color(0xFFD9534F) else AppColor.accentDark
+                fontWeight = FontWeight.Bold,
+                color = if (isError) Color(0xFFD9534F) else Color(0xFFC85E48)
             )
         }
     }
@@ -985,9 +1016,9 @@ fun CallDialog(
 
                 Text(
                     text = "${user.name}님께 전화 걸기",
-                    fontSize = 17.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
+                    color = Color.Black
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -995,8 +1026,11 @@ fun CallDialog(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFF0F7EC),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+                    color = Color(0xFFFFE5DF),
+                    border = BorderStroke(
+                        width = 1.5.dp,
+                        color = Color(0xFFC85E48)
+                    )
                 ) {
                     Column(
                         modifier = Modifier
@@ -1006,18 +1040,18 @@ fun CallDialog(
                     ) {
                         Text(
                             text = "${user.name}님",
-                            fontSize = 18.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            color = AppColor.textPrimary
+                            color = Color.Black
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = user.phone,
-                            fontSize = 20.sp,
+                            text = formatPhoneNumber(user.phone),
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            color = AppColor.textPrimary,
+                            color = Color.Black,
                             letterSpacing = 1.sp
                         )
                     }
@@ -1032,18 +1066,21 @@ fun CallDialog(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(54.dp)
+                            .height(58.dp)
                             .clickable { makeCall() },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFFF0F7EC),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+                        color = Color(0xFFFFE5DF),
+                        border = BorderStroke(
+                            width = 1.5.dp,
+                            color = Color(0xFFC85E48)
+                        )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "전화 연결",
-                                fontSize = 16.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = AppColor.textPrimary
+                                color = Color.Black
                             )
                         }
                     }
@@ -1051,18 +1088,21 @@ fun CallDialog(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(54.dp)
+                            .height(58.dp)
                             .clickable { onDismiss() },
                         shape = RoundedCornerShape(14.dp),
-                        color = Color(0xFFF0F7EC),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(width = 1.5.dp)
+                        color = Color(0xFFF9FAFB),
+                        border = BorderStroke(
+                            width = 1.5.dp,
+                            color = Color(0xFFE5E7EB)
+                        )
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "취소",
-                                fontSize = 16.sp,
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = AppColor.textTertiary
+                                color = Color.Black
                             )
                         }
                     }
@@ -1071,6 +1111,30 @@ fun CallDialog(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+}
+
+
+private fun formatPhoneNumber(phone: String): String {
+    val digits = phone.filter { it.isDigit() }
+
+    return when (digits.length) {
+        11 -> "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7, 11)}"
+        10 -> {
+            if (digits.startsWith("02")) {
+                "${digits.substring(0, 2)}-${digits.substring(2, 6)}-${digits.substring(6, 10)}"
+            } else {
+                "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6, 10)}"
+            }
+        }
+        9 -> {
+            if (digits.startsWith("02")) {
+                "${digits.substring(0, 2)}-${digits.substring(2, 5)}-${digits.substring(5, 9)}"
+            } else {
+                phone
+            }
+        }
+        else -> phone
     }
 }
 

@@ -3,6 +3,7 @@ package com.midas26.mobileapp.ui.voicechat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.SpanStyle
@@ -31,6 +33,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
@@ -211,7 +214,9 @@ fun VoiceChatScreen(
             CharacterImage(
                 state = state,
                 onClick = replayTap,
-                modifier = Modifier.align(Alignment.Center)
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = (-10).dp)
             )
 
             // ③ 다시 말하기 비활성화 안내 카드
@@ -282,35 +287,39 @@ fun VoiceChatScreen(
                          *
                          * 단, 종료 중에는 클릭 동작을 실행하지 않는다.
                          */
-                        BigActionButton(
-                            mode = if (
-                                state is VoiceChatState.Recording
-                            ) {
-                                BigActionMode.Stop
-                            } else {
-                                BigActionMode.Mic
-                            },
-                            onClick = {
-                                if (isEnding) {
-                                    return@BigActionButton
-                                }
-
-                                if (
+                        Box(
+                            modifier = Modifier.offset(y = (-18).dp)
+                        ) {
+                            BigActionButton(
+                                mode = if (
                                     state is VoiceChatState.Recording
                                 ) {
-                                    viewModel.stopRecording()
+                                    BigActionMode.Stop
                                 } else {
-                                    if (
-                                        state is VoiceChatState.Playing
-                                    ) {
-                                        ttsManager?.stop()
-                                        viewModel.finishPlaying()
+                                    BigActionMode.Mic
+                                },
+                                onClick = {
+                                    if (isEnding) {
+                                        return@BigActionButton
                                     }
 
-                                    viewModel.startRecording()
+                                    if (
+                                        state is VoiceChatState.Recording
+                                    ) {
+                                        viewModel.stopRecording()
+                                    } else {
+                                        if (
+                                            state is VoiceChatState.Playing
+                                        ) {
+                                            ttsManager?.stop()
+                                            viewModel.finishPlaying()
+                                        }
+
+                                        viewModel.startRecording()
+                                    }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
 
                     // 대화종료 버튼
@@ -367,8 +376,9 @@ fun VoiceChatScreen(
                             .padding(
                                 start = 24.dp,
                                 end = 24.dp,
-                                bottom = 4.dp
+                                bottom = 0.dp
                             )
+                            .offset(y = 12.dp)
                     )
                 }
 
@@ -390,21 +400,32 @@ private fun EndConversationButton(
     val backgroundColor = if (isEnding) {
         Color(0xFFE0E0E0)
     } else {
-        Color(0xFFFFE8E3)
+        Color(0xFFD6EED8)
+    }
+
+    val borderColor = if (isEnding) {
+        Color(0xFFBDBDBD)
+    } else {
+        Color(0xFF43A047)
     }
 
     val textColor = if (isEnding) {
         Color(0xFF8A8A8A)
     } else {
-        Color(0xFFC85E48)
+        Color(0xFF1F2937)
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(48.dp)
+            .height(56.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(backgroundColor)
+            .border(
+                width = 2.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(14.dp)
+            )
             .clickable(
                 enabled = !isEnding,
                 onClick = onClick
@@ -417,7 +438,8 @@ private fun EndConversationButton(
             } else {
                 "대화종료"
             },
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.titleMedium,
+            fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = textColor
         )
