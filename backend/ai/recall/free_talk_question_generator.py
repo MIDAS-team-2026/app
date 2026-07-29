@@ -75,6 +75,19 @@ QUESTION_STOPWORDS = {
     "뭐가",
     "어떤",
     "하나",
+    "이번에는",
+    "이번에",
+    "이어서",
+    "그럼",
+    "그러면",
+    "그러셨군요",
+    "그렇군요",
+    "그랬군요",
+    "알겠습니다",
+    "좋으셨겠어요",
+    "좋았겠어요",
+    "아하",
+    "음",
 }
 
 
@@ -108,8 +121,16 @@ POSITIVE_CUE_PATTERNS = [
 ]
 
 
+IMPROVEMENT_CUE_PATTERNS = [
+    "나아",
+    "괜찮아졌",
+    "호전",
+]
+
+
 NEGATIVE_CUE_PATTERNS = [
     "아프",
+    "아파",
     "아팠",
     "다쳤",
     "넘어",
@@ -120,17 +141,191 @@ NEGATIVE_CUE_PATTERNS = [
     "속상",
     "무서",
     "걱정",
+    "피곤",
+    "기운이 없",
+    "기운 없",
+    "재미없",
+    "재미 없",
+    "재미가 없",
+    "맛없",
+    "맛이 없",
+    "입맛이 없",
+    "입맛 없",
+    "밥맛이 없",
+    "밥맛 없",
+    "식욕이 없",
+    "식욕 없",
+    "안 좋",
+    "좋지 않",
+    "나쁘",
+    "나빴",
+    "아쉽",
+    "아쉬",
 ]
+
+
+NEGATED_NEGATIVE_CUE_PATTERNS = [
+    "별로 걱정되지 않",
+    "걱정 안",
+    "안 아파",
+    "안 아프",
+    "안 힘든",
+    "안 힘들",
+    "안 나쁘",
+    "안 불편",
+    "안 외롭",
+    "안 피곤",
+    "안 무섭",
+    "안 속상",
+    "안 슬프",
+    "안 우울",
+    "힘들지 않",
+    "나쁘지 않",
+    "불편하지 않",
+    "걱정되지 않",
+    "걱정하지 않",
+    "외롭지 않",
+    "피곤하지 않",
+    "무섭지 않",
+    "속상하지 않",
+    "슬프지 않",
+    "우울하지 않",
+]
+
+
+NEGATED_NEGATIVE_CUE_PATTERN = re.compile(
+    r"(?:"
+    r"(?:아프|힘들|나쁘|외롭|무섭|슬프)(?:지|진|지는)\s*않|"
+    r"(?:불편하|피곤하|속상하|우울하|걱정되)(?:지|진|지는)\s*않|"
+    r"안\s*(?:아파|아프|힘들|나빠|나쁘|불편|외로|피곤|무서|속상|슬프|우울)|"
+    r"걱정(?:은|이)?\s*안"
+    r")"
+)
 
 
 TOPIC_SIMILARITY_GROUPS = [
     ("방송", "프로그램", "텔레비전", "티비", "tv", "TV", "노래", "가수", "트롯", "미스터트롯", "임영웅"),
     ("집", "집안", "집밖", "집 밖", "집에", "집에서", "방", "거실"),
     ("동네", "풍경", "바깥", "밖에", "나가", "다녀온", "초록", "산책", "공원", "길"),
-    ("음식", "식사", "밥", "아침", "점심", "저녁", "김치볶음밥", "피자", "약"),
+    ("음식", "식사", "밥", "아침", "점심", "저녁", "김치볶음밥", "피자"),
     ("가족", "아들", "딸", "손주", "배우자", "자식", "연락"),
     ("병원", "약", "진료", "의사", "간호사", "아프", "다쳤", "무릎"),
     ("날씨", "바람", "비", "눈", "햇빛", "더워", "추워", "쌀쌀"),
+]
+
+
+QUESTION_FOCUS_PATTERNS = {
+    "PERSON": ("누구", "누가", "사람", "그분", "함께", "같이", "혼자"),
+    "PLACE": ("어디", "어느 곳", "장소"),
+    "TIME": ("언제", "몇 시", "시간", "아침", "점심", "저녁"),
+    "REASON": ("왜", "이유"),
+    "FEELING": ("기분", "마음", "어떠셨어"),
+    "CATEGORY": (
+        "어떤 방송",
+        "무슨 방송",
+        "어떤 프로그램",
+        "무슨 프로그램",
+        "어떤 음식",
+        "무슨 음식",
+        "어떤 노래",
+        "무슨 노래",
+    ),
+    "ACTION": ("무엇을 하", "뭘 하", "하신 일", "하는 일", "하시던 일", "자주 하는"),
+    "CONTENT": ("내용", "부분", "장면", "모습", "변화", "어떤 색", "눈에 띄"),
+    "FOOD_TARGET": ("음식", "드신 것", "먹은 것"),
+    "DETAIL": ("무엇", "뭐", "어떤", "장면", "모습"),
+}
+
+
+GENERIC_ANCHORED_FOLLOWUP_WORDS = {
+    "그때",
+    "그",
+    "이야기",
+    "방금",
+    "조금",
+    "누구",
+    "누가",
+    "같이",
+    "함께",
+    "혼자",
+    "계셨어요",
+    "있었나요",
+    "있으셨어요",
+    "어디",
+    "언제",
+    "언제쯤",
+    "시간",
+    "장면",
+    "모습",
+    "기분",
+    "마음",
+    "주변",
+    "생각",
+    "떠올리면",
+    "기억나는",
+    "가장",
+    "먼저",
+    "말씀",
+    "일",
+    "점",
+    "것",
+    "드셨어요",
+    "가셨어요",
+    "보셨어요",
+    "하셨어요",
+    "그분",
+    "사람",
+    "최근",
+    "최근에",
+    "나누셨어요",
+    "드셨나요",
+    "먹었나요",
+    "다녀오셨어요",
+    "보셨나요",
+    "들으셨어요",
+    "하셨나요",
+    "어땠나요",
+    "어떠셨나요",
+    "내용",
+    "부분",
+    "곳",
+    "장소",
+    "음식",
+    "방송",
+    "프로그램",
+    "노래",
+    "음악",
+}
+
+
+PERSON_GROUNDING_WORDS = (
+    "아들",
+    "딸",
+    "손주",
+    "동생",
+    "형",
+    "누나",
+    "언니",
+    "오빠",
+    "엄마",
+    "아빠",
+    "어머니",
+    "아버지",
+    "남편",
+    "아내",
+    "조카",
+    "사촌",
+    "친구",
+    "가족",
+)
+
+
+GROUNDING_PRONOUN_GROUPS = [
+    (PERSON_GROUNDING_WORDS, ("그분", "그 사람")),
+    (("먹", "음식", "식사", "밥", "반찬", "국", "찌개", "김치", "피자"), ("그 음식", "드신 것")),
+    (("집", "병원", "마트", "시장", "공원", "동네", "장소", "다녀", "갔"), ("그곳", "그 장소")),
+    (("방송", "프로그램", "텔레비전", "티비", "드라마", "뉴스"), ("그 방송", "그 프로그램", "그 장면")),
+    (("노래", "가수", "들었"), ("그 노래", "그 음악")),
 ]
 
 
@@ -160,11 +355,41 @@ def clean_text(text: str) -> str:
     return text
 
 
+def _get_final_correction_segment(text: str) -> str:
+    text = str(text or "")
+    correction_patterns = (
+        r"다시\s*생각해\s*보니",
+        r"정정(?:할게요?|하면)",
+        r"(?:^|[,.;!?]\s*|\s+)(?:아니에요|아니요|아니)(?![가-힣])\s*[,，]?\s*",
+    )
+    last_end = -1
+
+    for pattern in correction_patterns:
+        for match in re.finditer(pattern, text):
+            last_end = max(last_end, match.end())
+
+    corrected_text = text if last_end < 0 else text[last_end:].strip()
+    alternative_matches = list(
+        re.finditer(r"(?:아니라|아니고|말고)\s*", corrected_text)
+    )
+
+    if alternative_matches:
+        alternative_text = corrected_text[alternative_matches[-1].end():].strip()
+
+        if alternative_text:
+            corrected_text = alternative_text
+
+    return corrected_text or text
+
+
 def _normalize_similarity_word(word: str) -> str:
     word = clean_text(word)
 
     for suffix in (
         "\uc5d0\uc11c\ub294",
+        "\uc5d0\uac8c\ub294",
+        "\uc73c\ub85c\ub294",
+        "\uc5d0\ub294",
         "\uc5d0\uc11c",
         "\uc73c\ub85c",
         "\uc5d0\uac8c",
@@ -205,9 +430,14 @@ def _has_empathy_prefix(question: str) -> bool:
         "\uc88b\uc73c\uc168\uaca0\uc5b4\uc694",
         "\uc7ac\ubbf8\uc788\uc73c\uc168\uaca0\uc5b4\uc694",
         "\uadf8\ub7ec\uc168\uad70\uc694",
+        "\uadf8\ub807\uad70\uc694",
+        "\uadf8\ub7ac\uad70\uc694",
+        "\uc54c\uaca0\uc2b5\ub2c8\ub2e4",
+        "\uc88b\uc558\uaca0\uc5b4\uc694",
         "\uc544\ud558",
         "\uc74c",
         "\uc544\uc774\uace0",
+        "\ub2e4\ud589\uc774\ub124\uc694",
     )
     return question.startswith(prefixes)
 
@@ -238,26 +468,196 @@ def _meaningful_words(text: str) -> set[str]:
     }
 
 
+def _question_focuses(text: str) -> set[str]:
+    text = clean_text(text)
+
+    for focus, patterns in QUESTION_FOCUS_PATTERNS.items():
+        if any(pattern in text for pattern in patterns):
+            return {focus}
+
+    return set()
+
+
+def _coerce_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "y"}
+
+    return False
+
+
+def _has_pronoun_grounding(question: str, history_text: str) -> bool:
+    for history_patterns, question_patterns in GROUNDING_PRONOUN_GROUPS:
+        if any(pattern in history_text for pattern in history_patterns) and any(
+            pattern in question
+            for pattern in question_patterns
+        ):
+            return True
+
+    return False
+
+
+def _latest_answer_has_unfinished_action(text: str) -> bool:
+    text = clean_text(_get_final_correction_segment(text))
+
+    if re.search(r"[가-힣]+고\s*싶", text):
+        return True
+
+    if any(
+        phrase in text
+        for phrase in (
+            "먹고 싶",
+            "먹고싶",
+            "보고 싶",
+            "보고싶",
+            "하고 싶",
+            "하고싶",
+            "내일",
+            "모레",
+            "예정",
+            "갈 거",
+            "갈거",
+            "할 거",
+            "할거",
+            "먹을 거",
+            "먹을거",
+            "볼 거",
+            "볼거",
+            "만날 거",
+            "만날거",
+            "갈게",
+            "다녀올게",
+            "할게",
+            "먹을게",
+            "볼게",
+            "만날게",
+            "쉴게",
+            "살게",
+            "올게",
+            "가려고",
+            "다녀오려고",
+            "하려고",
+            "먹으려고",
+            "보려고",
+            "만나려고",
+            "쉬려고",
+            "자려고",
+            "사려고",
+            "오려고",
+            "갈래",
+            "할래",
+            "먹을래",
+            "볼래",
+            "만날래",
+            "쉴래",
+            "살래",
+            "올래",
+        )
+    ):
+        return True
+
+    return bool(
+        re.search(
+            r"(?:^|\s)(?:안|못)\s*"
+            r"(?:먹|먹었|마시|마셨|가|갔|다녀|보|봤|만나|만났|사|샀|"
+            r"하|했|오|왔|나가|나갔|듣|들었|쉬|쉬었|자|잤|읽|읽었|"
+            r"쓰|썼|타|탔|통화|전화|연락)[가-힣]*",
+            text,
+        )
+        or re.search(r"(?:^|\s)[가-힣]+지\s*않[가-힣]*", text)
+    )
+
+
+def _question_assumes_completed_action(question: str) -> bool:
+    return any(
+        phrase in clean_text(question)
+        for phrase in (
+            "드셨어",
+            "먹었",
+            "가셨어",
+            "다녀오셨어",
+            "보셨어",
+            "들으셨어",
+            "하셨어",
+            "사셨어",
+            "만나셨어",
+            "통화하셨어",
+            "연락하셨어",
+            "계셨어",
+            "있었",
+            "쉬고 나서는",
+            "쉬셨어",
+            "주무셨어",
+            "낮잠을 주무",
+            "낮잠 잤",
+        )
+    )
+
+
 def is_question_grounded_in_history(
     question: str,
     conversation_history: List[str],
 ) -> bool:
     question = clean_text(question)
-    history = [clean_text(text) for text in conversation_history if clean_text(text)]
+    history = [
+        clean_text(_get_final_correction_segment(text))
+        for text in conversation_history
+        if clean_text(_get_final_correction_segment(text))
+    ]
 
     if not question or not history:
         return True
 
     joined_history = " ".join(history)
+    latest_text = history[-1]
 
-    if _shares_topic_group(question, joined_history):
-        return True
+    if (
+        _latest_answer_has_unfinished_action(latest_text)
+        and _question_assumes_completed_action(question)
+    ):
+        return False
+
+    asks_about_completed_contact = any(
+        phrase in question
+        for phrase in ("이야기를 나누셨어", "통화하셨어", "연락하셨어")
+    )
+    has_contact_history = any(
+        phrase in joined_history
+        for phrase in (
+            "통화",
+            "전화",
+            "대화",
+            "이야기했",
+            "연락",
+            "말했",
+            "만났",
+            "다녀갔",
+            "찾아왔",
+            "들렀",
+        )
+    )
+
+    if asks_about_completed_contact and not has_contact_history:
+        return False
 
     question_words = _meaningful_words(question)
     history_words = _meaningful_words(joined_history)
 
-    if question_words & history_words:
-        return True
+    has_direct_grounding = bool(question_words & history_words)
+    has_pronoun_grounding = _has_pronoun_grounding(question, joined_history)
+
+    if has_direct_grounding or has_pronoun_grounding:
+        unsupported_words = (
+            question_words
+            - history_words
+            - GENERIC_ANCHORED_FOLLOWUP_WORDS
+        )
+        return not unsupported_words
 
     anchored_followup_phrases = [
         "그때",
@@ -266,7 +666,11 @@ def is_question_grounded_in_history(
         "조금 더",
     ]
 
-    return any(phrase in question for phrase in anchored_followup_phrases)
+    if not any(phrase in question for phrase in anchored_followup_phrases):
+        return False
+
+    unsupported_words = question_words - GENERIC_ANCHORED_FOLLOWUP_WORDS
+    return not unsupported_words
 
 
 def _format_history(conversation_history: List[str]) -> str:
@@ -355,6 +759,9 @@ def is_weak_free_talk_answer(text: str) -> bool:
         "딱히",
         "그냥",
         "기억 안",
+        "기억이 안",
+        "생각 안",
+        "생각이 안",
         "라니까",
         "말했",
         "했잖",
@@ -367,20 +774,66 @@ def build_fallback_with_empathy(
     question: str,
     conversation_history: List[str],
 ) -> str:
-    latest_text = clean_text(conversation_history[-1] if conversation_history else "")
+    latest_text = clean_text(
+        _get_final_correction_segment(
+            conversation_history[-1] if conversation_history else ""
+        )
+    )
     question = clean_text(question)
 
     if not latest_text or not question:
         return question
 
-    if _has_empathy_prefix(question):
-        return question
+    negative_prefixes = ("그러셨군요", "그랬군요", "아이고")
+    positive_prefixes = ("좋으셨겠어요", "좋았겠어요", "재미있으셨겠어요")
 
-    if any(pattern in latest_text for pattern in NEGATIVE_CUE_PATTERNS):
+    negative_evidence_text = latest_text
+
+    for pattern in NEGATED_NEGATIVE_CUE_PATTERNS:
+        negative_evidence_text = negative_evidence_text.replace(pattern, "")
+
+    negative_evidence_text = NEGATED_NEGATIVE_CUE_PATTERN.sub(
+        "",
+        negative_evidence_text,
+    )
+
+    has_negative_cue = any(
+        pattern in negative_evidence_text
+        for pattern in NEGATIVE_CUE_PATTERNS
+    )
+
+    if has_negative_cue:
+        if question.startswith(positive_prefixes):
+            _prefix, separator, remainder = question.partition(".")
+            question = remainder.strip() if separator and remainder.strip() else question
+
+        if _has_empathy_prefix(question):
+            return question
+
         return f"그러셨군요. {question}"
 
+    if any(pattern in latest_text for pattern in IMPROVEMENT_CUE_PATTERNS):
+        if question.startswith(negative_prefixes):
+            _prefix, separator, remainder = question.partition(".")
+            question = remainder.strip() if separator and remainder.strip() else question
+
+        if _has_empathy_prefix(question):
+            return question
+
+        return f"다행이네요. {question}"
+
     if any(pattern in latest_text for pattern in POSITIVE_CUE_PATTERNS):
+        if question.startswith(negative_prefixes):
+            _prefix, separator, remainder = question.partition(".")
+            question = remainder.strip() if separator and remainder.strip() else question
+
+        if _has_empathy_prefix(question):
+            return question
+
         return f"좋으셨겠어요. {question}"
+
+    if _has_empathy_prefix(question):
+        return question
 
     return question
 
@@ -410,11 +863,11 @@ def is_similar_to_previous_question(
         if not previous_words:
             continue
 
-        if _shares_topic_group(question, previous):
-            return True
+        question_focuses = _question_focuses(question)
+        previous_focuses = _question_focuses(previous)
 
-        if question[:12] and question[:12] == previous[:12]:
-            return True
+        if question_focuses and previous_focuses and question_focuses.isdisjoint(previous_focuses):
+            continue
 
         overlap = len(question_words & previous_words)
         smaller_size = min(len(question_words), len(previous_words))
@@ -423,6 +876,14 @@ def is_similar_to_previous_question(
             return True
 
         if smaller_size > 0 and overlap / smaller_size >= 0.45:
+            return True
+
+        if (
+            _shares_topic_group(question, previous)
+            and overlap >= 1
+            and smaller_size > 0
+            and overlap / smaller_size >= 0.3
+        ):
             return True
 
     return False
@@ -453,8 +914,8 @@ def generate_safe_followup_question(
 
 대화 목표:
 - 검사처럼 느껴지지 않게 편안하게 대화를 이어갑니다.
-- 자유대화 3턴 안에서 회상 질문으로 쓸 수 있는 구체적인 단서를 모읍니다.
-- 한 주제를 너무 오래 캐묻지 않고, 현재 3턴 흐름 안에서만 자연스럽게 구체화합니다.
+- 자연스러운 대화 중 회상 질문으로 쓸 수 있는 구체적인 단서를 모읍니다.
+- 유효한 기억 단서가 충분히 쌓일 때까지 한 주제를 너무 오래 캐묻지 않고 자연스럽게 구체화합니다.
 - 정해진 질문지를 반복하지 말고, 사용자의 말에서 핵심 단서를 잡아 이어 묻습니다.
 - 새 주제를 열 때는 매번 비슷한 사람/음식 질문만 반복하지 말고 다양한 일상 주제를 사용합니다.
 - 사용자의 말이 긍정적이면 짧게 좋은 반응을 하고, 부정적이면 짧게 받아준 뒤 자연스럽게 이어 묻습니다.
@@ -467,8 +928,8 @@ def generate_safe_followup_question(
 
 단계 의미:
 - OPEN: 새로운 자유대화 주제를 엽니다. 너무 넓지 않게 사람, 음식, 장소, 집에서 한 일, 방송/노래 같은 일상 주제 중 하나를 자연스럽게 묻습니다.
-- DEEPEN: 사용자가 방금 말한 내용을 한 번 더 구체화합니다. 이유, 누구와, 어디서, 언제쯤 중 자연스러운 하나만 묻습니다.
-- ANCHOR: 나중에 회상 질문으로 만들 수 있게 장면, 장소, 사람, 시간 중 하나를 구체적으로 묻습니다.
+- DEEPEN: 사용자가 방금 말한 내용을 자연스럽게 한 단계 더 이어갑니다. 이미 답한 내용은 다시 묻지 않습니다.
+- ANCHOR: 현재 이야기에서 정답이 명확한 기억 사건이 부족할 때만 장면, 장소, 사람, 시간 중 하나를 구체적으로 묻습니다.
 
 최근 자유대화 답변:
 {_format_history(conversation_history)}
@@ -529,7 +990,7 @@ def generate_safe_followup_question(
         content = response.choices[0].message.content
         parsed = _extract_json_object(content)
         question = clean_text(parsed.get("nextQuestion", ""))
-        should_change_topic = bool(parsed.get("shouldChangeTopic", False))
+        should_change_topic = _coerce_bool(parsed.get("shouldChangeTopic", False))
         reason = clean_text(parsed.get("reason", ""))
 
         if is_weak_free_talk_answer(conversation_history[-1] if conversation_history else ""):
