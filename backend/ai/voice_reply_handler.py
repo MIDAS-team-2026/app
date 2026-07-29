@@ -6,7 +6,7 @@
    그 첫 고정 질문에 대한 답변으로 채점된다.
 2. 초기 고정 질문은 FIXED로 저장하며, 하루에 한 번만 노출한다(오늘 이미 완료했다면 건너뛴다).
 3. FIXED / INITIAL / RECALL 답변은 새로운 memoryPoint 후보에서 제외한다.
-4. 자유대화 답변이 3개 이상이고 유효한 memoryPoint 후보가 2개 이상이면 회상 질문을 생성한다.
+4. 충분한 memoryPoint가 쌓이고 현재 대화가 회상 전환에 적절할 때 회상 질문을 생성한다.
 5. 회상 질문 답변은 RECALL로 저장하고, 이후 다시 자유대화로 복귀한다.
 """
 
@@ -19,7 +19,12 @@ from recall.free_talk_question_generator import (
     generate_safe_followup_question,
     is_similar_to_previous_question,
 )
-from recall.conversation_policy import ConversationAction, decide_conversation_action
+from recall.conversation_policy import (
+    ConversationAction,
+    RecallTimingAction,
+    decide_conversation_action,
+    decide_recall_timing,
+)
 from recall.conversation_recall_generator import (
     generate_and_save_recall_question,
     score_recall_memory_candidate,
@@ -694,12 +699,16 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
     return transcripts
 
 
-def _get_recall_ready_history(transcripts: list[str]) -> list[str]:
+def _get_recall_ready_history(
+    transcripts: list[str],
+    previous_question: str = "",
+) -> list[str]:
     """
     충분히 축적되고 한 턴 이상 지난 기억 단서만 회상 질문 생성에 사용한다.
 
     최신 답변을 즉시 다시 묻지 않도록 제외한 뒤, 그 이전 대화에서
-    서로 다른 유효한 memoryPoint 후보가 2개 이상일 때만 회상을 시작한다.
+    서로 다른 유효한 memoryPoint 후보가 2개 이상이어야 하며,
+    최신 답변의 주제가 더 이어져야 한다면 회상 전환을 잠시 미룬다.
     """
     if len(transcripts) < 2:
         return []
@@ -707,7 +716,25 @@ def _get_recall_ready_history(transcripts: list[str]) -> list[str]:
     matured_history = transcripts[:-1]
     matured_candidates = select_recall_memory_candidates(matured_history)
 
-    if len(matured_candidates) < 2:
+    latest_text = transcripts[-1]
+    latest_evaluation = score_recall_memory_candidate(latest_text)
+    latest_topic = _detect_conversation_topic(
+        latest_text,
+        transcripts,
+        previous_question,
+    )
+    timing = decide_recall_timing(
+        matured_candidate_count=len(matured_candidates),
+        latest_is_memory_candidate=bool(latest_evaluation["isValid"]),
+        latest_has_followup_context=(
+            latest_topic is not None
+            and latest_topic not in {"LOW_INFO", "NEGATIVE"}
+        ),
+        latest_is_low_info=_is_low_info_response(latest_text),
+        latest_is_negative=_is_negative_response(latest_text),
+    )
+
+    if timing.action != RecallTimingAction.ASK_RECALL:
         return []
 
     return matured_history
@@ -782,8 +809,9 @@ def _was_recall_question_presented(
     return any(
         int(record.get("recordId") or 0) >= boundary_record_id
         and int(record.get("recordId") or 0) != int(current_record_id)
-        and _normalize_question_text(record.get("aiReplyText") or "")
-        == normalized_question
+        and _normalize_question_text(record.get("aiReplyText") or "").endswith(
+            normalized_question
+        )
         for record in session_records
     )
 
@@ -2358,6 +2386,22 @@ def _with_recall_transition_acknowledgement(
     return f"{acknowledgement} {question}"
 
 
+def _with_recall_question_acknowledgement(
+    question: str,
+    session_records: list[dict] | None,
+) -> str:
+    if _contains_any(
+        question,
+        ("좋으셨겠어요.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요."),
+    ):
+        return question
+
+    return _with_topic_change_acknowledgement(
+        question,
+        session_records,
+    )
+
+
 def _get_after_recall_opening_candidates(recall_answer_text: str) -> list[str]:
     if _is_recall_recovery_response(recall_answer_text):
         return AFTER_RECALL_OPENING_QUESTIONS
@@ -2895,7 +2939,12 @@ def process_voice_reply(
             updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
-        recall_ready_history = _get_recall_ready_history(transcripts)
+        recall_ready_history = _get_recall_ready_history(
+            transcripts,
+            previous_question=_get_question_answered_by_latest_record(
+                updated_records
+            ),
+        )
 
         if not recall_ready_history:
             _save_ai_reply(
@@ -3006,7 +3055,10 @@ def process_voice_reply(
 
         _save_ai_reply(
             record_id=record_id,
-            reply_text=reply_text,
+            reply_text=_with_recall_question_acknowledgement(
+                reply_text,
+                updated_records,
+            ),
         )
 
         logger.info(

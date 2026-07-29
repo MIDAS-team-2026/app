@@ -11,10 +11,21 @@ class ConversationAction(str, Enum):
     RESUME_AFTER_RECALL = "RESUME_AFTER_RECALL"
 
 
+class RecallTimingAction(str, Enum):
+    WAIT = "WAIT"
+    ASK_RECALL = "ASK_RECALL"
+
+
 @dataclass(frozen=True)
 class ConversationDecision:
     action: ConversationAction
     stage: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class RecallTimingDecision:
+    action: RecallTimingAction
     reason: str
 
 
@@ -59,4 +70,41 @@ def decide_conversation_action(
                 else "continue_grounded_topic"
             )
         ),
+    )
+
+
+def decide_recall_timing(
+    *,
+    matured_candidate_count: int,
+    latest_is_memory_candidate: bool,
+    latest_has_followup_context: bool,
+    latest_is_low_info: bool,
+    latest_is_negative: bool,
+) -> RecallTimingDecision:
+    if matured_candidate_count < 2:
+        return RecallTimingDecision(
+            action=RecallTimingAction.WAIT,
+            reason="not_enough_matured_memories",
+        )
+
+    if latest_is_negative:
+        return RecallTimingDecision(
+            action=RecallTimingAction.WAIT,
+            reason="respond_to_negative_emotion_first",
+        )
+
+    if (
+        matured_candidate_count == 2
+        and latest_has_followup_context
+        and not latest_is_memory_candidate
+        and not latest_is_low_info
+    ):
+        return RecallTimingDecision(
+            action=RecallTimingAction.WAIT,
+            reason="continue_latest_topic_before_recall",
+        )
+
+    return RecallTimingDecision(
+        action=RecallTimingAction.ASK_RECALL,
+        reason="natural_recall_opportunity",
     )

@@ -187,6 +187,67 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual("DEEPEN", detailed.stage)
         self.assertEqual("ANCHOR", incomplete.stage)
 
+    def test_recall_timing_uses_memory_count_and_latest_conversation_state(self):
+        cases = (
+            (
+                {
+                    "matured_candidate_count": 1,
+                    "latest_is_memory_candidate": True,
+                    "latest_has_followup_context": True,
+                    "latest_is_low_info": False,
+                    "latest_is_negative": False,
+                },
+                conversation_policy.RecallTimingAction.WAIT,
+            ),
+            (
+                {
+                    "matured_candidate_count": 2,
+                    "latest_is_memory_candidate": False,
+                    "latest_has_followup_context": True,
+                    "latest_is_low_info": False,
+                    "latest_is_negative": False,
+                },
+                conversation_policy.RecallTimingAction.WAIT,
+            ),
+            (
+                {
+                    "matured_candidate_count": 2,
+                    "latest_is_memory_candidate": False,
+                    "latest_has_followup_context": False,
+                    "latest_is_low_info": True,
+                    "latest_is_negative": False,
+                },
+                conversation_policy.RecallTimingAction.ASK_RECALL,
+            ),
+            (
+                {
+                    "matured_candidate_count": 3,
+                    "latest_is_memory_candidate": True,
+                    "latest_has_followup_context": True,
+                    "latest_is_low_info": False,
+                    "latest_is_negative": False,
+                },
+                conversation_policy.RecallTimingAction.ASK_RECALL,
+            ),
+            (
+                {
+                    "matured_candidate_count": 3,
+                    "latest_is_memory_candidate": False,
+                    "latest_has_followup_context": False,
+                    "latest_is_low_info": False,
+                    "latest_is_negative": True,
+                },
+                conversation_policy.RecallTimingAction.WAIT,
+            ),
+        )
+
+        for inputs, expected in cases:
+            with self.subTest(inputs=inputs):
+                self.assertEqual(
+                    expected,
+                    conversation_policy.decide_recall_timing(**inputs).action,
+                )
+
     def test_non_memory_topic_can_continue_without_becoming_recall_candidate(self):
         records = [
             {
@@ -1454,6 +1515,43 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual(transcripts[:-1], ready_history)
         self.assertNotIn(transcripts[-1], ready_history)
 
+    def test_recall_waits_when_latest_non_memory_topic_can_continue(self):
+        self.assertEqual(
+            [],
+            handler._get_recall_ready_history(
+                [
+                    "오늘 김치볶음밥을 먹었어",
+                    "오후에 동생이랑 통화했어",
+                    "피자가 먹고 싶어",
+                ]
+            ),
+        )
+
+    def test_recall_can_start_at_low_info_boundary_after_two_memories(self):
+        transcripts = [
+            "오늘 김치볶음밥을 먹었어",
+            "오후에 동생이랑 통화했어",
+            "아직은 없어",
+        ]
+
+        self.assertEqual(
+            transcripts[:-1],
+            handler._get_recall_ready_history(transcripts),
+        )
+
+    def test_negative_latest_answer_defers_recall_even_with_three_memories(self):
+        self.assertEqual(
+            [],
+            handler._get_recall_ready_history(
+                [
+                    "오늘 김치볶음밥을 먹었어",
+                    "오후에 동생이랑 통화했어",
+                    "저녁에 텔레비전 뉴스를 봤어",
+                    "오늘은 너무 속상했어",
+                ]
+            ),
+        )
+
     def test_repeated_memory_does_not_make_recall_ready(self):
         self.assertEqual(
             [],
@@ -2018,6 +2116,44 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             records,
         )
         self.assertTrue(result.startswith("좋으셨겠어요."))
+
+    def test_prefixed_recall_question_is_still_recognized_as_presented(self):
+        question = "아까 드신 음식이 무엇이었나요?"
+        records = [
+            {
+                "recordId": 6,
+                "turnOrder": 6,
+                "transcriptText": "점심에 김치볶음밥을 먹었어",
+                "aiReplyText": "",
+                "answerRole": "INITIAL",
+                "recallQuestionId": 99,
+            },
+            {
+                "recordId": 8,
+                "turnOrder": 8,
+                "transcriptText": "저녁에 텔레비전을 봤어",
+                "aiReplyText": f"아하, 그렇군요. {question}",
+                "answerRole": None,
+                "recallQuestionId": None,
+            },
+            {
+                "recordId": 9,
+                "turnOrder": 9,
+                "transcriptText": "김치볶음밥",
+                "aiReplyText": "",
+                "answerRole": None,
+                "recallQuestionId": None,
+            },
+        ]
+
+        self.assertTrue(
+            handler._was_recall_question_presented(
+                session_records=records,
+                current_record_id=9,
+                recall_question_id=99,
+                question_text=question,
+            )
+        )
 
     def test_duplicate_memory_point_is_rejected_after_llm_generation(self):
         client = self._recall_client(
@@ -3135,7 +3271,12 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         self.assertEqual(6, linked[-1]["record_id"])
         self.assertEqual("INITIAL", linked[-1]["answer_role"])
-        self.assertEqual("아까 드신 음식이 무엇이었나요?", saved[-1]["reply_text"])
+        self.assertTrue(saved[-1]["reply_text"].startswith("음, 그렇군요."))
+        self.assertTrue(
+            saved[-1]["reply_text"].endswith(
+                "아까 드신 음식이 무엇이었나요?"
+            )
+        )
 
     def test_recall_api_failure_falls_back_to_free_talk(self):
         records = [
