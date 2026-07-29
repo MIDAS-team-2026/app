@@ -8,6 +8,9 @@ import requests
 from openai import OpenAI
 
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
+from recall.recall_score_calculator import calculate_similarity_score
+
+MEMORY_POINT_SEMANTIC_SIMILARITY_THRESHOLD = 70.0
 
 
 logger = logging.getLogger(__name__)
@@ -877,17 +880,14 @@ def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bo
     ):
         return True
 
-    if len(_content_words(memory_point) & _content_words(previous_memory_point)) >= 2:
-        return True
-
-    current_bigrams = _character_bigrams(memory_point)
-    previous_bigrams = _character_bigrams(previous_memory_point)
-    union = current_bigrams | previous_bigrams
-
-    if not union:
-        return False
-
-    return len(current_bigrams & previous_bigrams) / len(union) >= 0.55
+    # 짧은 답변은 실질 단어가 1~2개뿐이라 글자 단위 비교(단어 겹침·bigram)로는
+    # "제육볶음을 먹었다" vs "제육볶음 먹었어" 같은 조사·어미 차이만 있는
+    # 패러프레이즈조차 다른 내용으로 오판하기 쉽다. 이미 recall_score_calculator에서
+    # 검증된 한국어 문장 임베딩 모델로 의미 유사도를 재사용해 판단한다.
+    return calculate_similarity_score(
+        memory_point,
+        previous_memory_point,
+    ) >= MEMORY_POINT_SEMANTIC_SIMILARITY_THRESHOLD
 
 
 def memory_point_match_score(memory_point: str, candidate_text: str) -> float:

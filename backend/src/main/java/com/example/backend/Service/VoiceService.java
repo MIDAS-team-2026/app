@@ -143,7 +143,8 @@ public class VoiceService {
                         record.getAudioFilePath(),
                         record.getAnswerRole() != null ? record.getAnswerRole().toString() : null,
                         record.getRecallQuestionId(),
-                        record.getParentRecord() != null ? record.getParentRecord().getId() : null
+                        record.getParentRecord() != null ? record.getParentRecord().getId() : null,
+                        record.getAiReplyText()
                 ))
 
                 .collect(Collectors.toList());
