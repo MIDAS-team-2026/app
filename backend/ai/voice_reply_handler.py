@@ -19,8 +19,10 @@ from recall.free_talk_question_generator import (
     generate_safe_followup_question,
     is_similar_to_previous_question,
 )
+from recall.conversation_policy import ConversationAction, decide_conversation_action
 from recall.conversation_recall_generator import (
     generate_and_save_recall_question,
+    score_recall_memory_candidate,
     select_recall_memory_candidates,
 )
 from recall.recall_api_client import analyze_session_recall
@@ -143,7 +145,7 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
     "LOW_INFO": {
         "DEEPEN": [
             "아하, 그러셨군요. 그럼 오늘 드신 것 중에 기억나는 음식이 있으세요?",
-            "그러셨군요. 오늘 집에서 하신 일 중에 하나만 떠오르세요?",
+            "그러셨군요. 오늘 집에서 하신 일 중에 하나 떠오르는 게 있으세요?",
             "음, 그렇군요. 오늘 보신 것 중에 기억나는 장면이 있으세요?",
         ],
         "ANCHOR": [
@@ -1126,6 +1128,12 @@ EXPLICIT_FOOD_KEYWORDS = (
     "차 마",
 )
 
+SPECIFIC_FOOD_KEYWORDS = tuple(
+    keyword
+    for keyword in EXPLICIT_FOOD_KEYWORDS
+    if keyword not in {"식사", "음식"}
+)
+
 EXPLICIT_PLACE_KEYWORDS = (
     "집",
     "병원",
@@ -1252,7 +1260,7 @@ PERSON_MEETING_PLACE_QUESTIONS = {
 PERSON_IN_PERSON_CONVERSATION_QUESTIONS = {
     "DEEPEN": [
         "그분과 어떤 이야기를 나누셨어요?",
-        "이야기하실 때 가장 즐거웠던 부분이 있으세요?",
+        "그분과 이야기하실 때 가장 즐거웠던 부분이 있으세요?",
     ],
     "ANCHOR": [
         "그분과 얼마나 오래 이야기하셨어요?",
@@ -1852,7 +1860,19 @@ def _get_topic_aware_fallback_candidates(
         ):
             return FOOD_DRINK_WISH_QUESTIONS
 
-        return WISH_TOPIC_QUESTIONS[topic]
+        candidates = WISH_TOPIC_QUESTIONS[topic]
+
+        if topic == "FOOD" and _contains_any(
+            latest_text,
+            SPECIFIC_FOOD_KEYWORDS,
+        ):
+            candidates = [
+                question
+                for question in candidates
+                if "어떤 음식" not in question
+            ]
+
+        return candidates
 
     if (
         _is_future_response(latest_text)
@@ -2382,9 +2402,41 @@ def _get_next_normal_question(
         followup_cycle_texts,
         previous_question,
     )
+    after_recall_answer = _is_after_recall_answer(session_records)
+    should_change_topic = (
+        _is_negated_action_response(latest_text)
+        and not _get_confirmed_text_after_negated_action(latest_text)
+        and _detect_topic_in_text(latest_text) != "FOOD"
+        and not (
+            followup_topic == "PERSON"
+            and _contains_any(latest_text, ("통화", "전화", "연락"))
+        )
+    )
+    latest_memory_evaluation = score_recall_memory_candidate(
+        followup_latest_text
+    )
+    needs_memory_detail = (
+        followup_topic is not None
+        and followup_topic != "PERSON"
+        and not latest_memory_evaluation["isValid"]
+        and not _is_low_info_response(followup_latest_text)
+        and not _is_negative_response(followup_latest_text)
+    )
+    decision = decide_conversation_action(
+        candidate_count=candidate_count,
+        after_recall_answer=after_recall_answer,
+        should_change_topic=should_change_topic,
+        needs_memory_detail=needs_memory_detail,
+        has_followup_context=(
+            followup_topic is not None
+            and followup_topic not in {"LOW_INFO", "NEGATIVE"}
+        ),
+    )
 
-    if candidate_count <= 0:
-        after_recall_answer = _is_after_recall_answer(session_records)
+    if decision.action in {
+        ConversationAction.OPEN_TOPIC,
+        ConversationAction.RESUME_AFTER_RECALL,
+    }:
         latest_record = _get_latest_record(session_records)
         latest_transcript = str(
             (latest_record or {}).get("transcriptText") or latest_text or ""
@@ -2410,15 +2462,7 @@ def _get_next_normal_question(
 
             return opener_question
 
-    if (
-        _is_negated_action_response(latest_text)
-        and not _get_confirmed_text_after_negated_action(latest_text)
-        and _detect_topic_in_text(latest_text) != "FOOD"
-        and not (
-            followup_topic == "PERSON"
-            and _contains_any(latest_text, ("통화", "전화", "연락"))
-        )
-    ):
+    if decision.action == ConversationAction.CHANGE_TOPIC:
         opener_question = _pick_non_repeated_question(
             candidates=_get_topic_change_openers(followup_topic),
             used_questions=used_questions,
@@ -2432,7 +2476,7 @@ def _get_next_normal_question(
                 session_records,
             )
 
-    stage = "DEEPEN" if candidate_count <= 2 else "ANCHOR"
+    stage = decision.stage
     topic_aware_candidates = _get_topic_aware_fallback_candidates(
         stage,
         followup_latest_text,

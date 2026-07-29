@@ -7,6 +7,8 @@ from typing import Dict, List, Optional
 import requests
 from openai import OpenAI
 
+from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
+
 
 logger = logging.getLogger(__name__)
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
@@ -1036,10 +1038,8 @@ def is_answer_keyword_compatible_with_question(
         if _memory_hint_occurs(hint, answer_keyword)
     }
 
-    asks_person = any(
-        cue in question
-        for cue in ("누구", "누가", "어느 분", "어떤 분", "어떤 사람")
-    )
+    answer_type = infer_answer_type(question)
+    asks_person = answer_type == MemoryAnswerType.PERSON
 
     if asks_person:
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PERSON_MEMORY_HINTS):
@@ -1058,7 +1058,7 @@ def is_answer_keyword_compatible_with_question(
         )
         return has_person_relation and bool(source_actions & {"MEET", "CONTACT"})
 
-    asks_place = any(cue in question for cue in ("어디", "어느 곳", "어떤 곳", "장소"))
+    asks_place = answer_type == MemoryAnswerType.PLACE
 
     if asks_place:
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PLACE_MEMORY_HINTS):
@@ -1075,7 +1075,7 @@ def is_answer_keyword_compatible_with_question(
             )
         )
 
-    asks_time = any(cue in question for cue in ("언제", "몇 시", "몇시", "시간대"))
+    asks_time = answer_type == MemoryAnswerType.TIME
 
     if asks_time:
         return bool(re.search(r"\d", answer_keyword)) or any(
@@ -1083,20 +1083,7 @@ def is_answer_keyword_compatible_with_question(
             for hint in TIME_MEMORY_HINTS
         )
 
-    asks_food = any(
-        cue in question
-        for cue in (
-            "무엇을 드",
-            "뭘 드",
-            "어떤 음식",
-            "무슨 음식",
-            "드신 음식",
-            "무엇을 먹",
-            "뭘 먹",
-            "어떤 걸 드",
-            "무슨 걸 드",
-        )
-    )
+    asks_food = answer_type == MemoryAnswerType.FOOD
 
     if asks_food:
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PERSON_MEMORY_HINTS):
@@ -1827,6 +1814,16 @@ question: 자연스러운 회상 질문
                     "question": question,
                 }
 
+    action_concepts, _concrete_concepts = _memory_signature(source_text)
+    memory_event = MemoryEvent.from_generation(
+        source_text=source_text,
+        memory_point=memory_point,
+        answer_keyword=answer_keyword,
+        question=question,
+        action=",".join(sorted(action_concepts)),
+        quality_score=memory_evaluation["recallScore"],
+    )
+
     return {
         "status": "CREATED",
         "reason": "",
@@ -1836,6 +1833,7 @@ question: 자연스러운 회상 질문
         "question": question,
         "memoryQualityScore": memory_evaluation["recallScore"],
         "memoryQualityReasons": memory_evaluation["reasons"],
+        "memoryEvent": memory_event.to_dict(),
     }
 
 

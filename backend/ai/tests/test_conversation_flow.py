@@ -39,8 +39,10 @@ sys.modules.setdefault("recall.recall_api_client", recall_api_stub)
 
 
 import voice_reply_handler as handler
+from recall import conversation_policy
 from recall import conversation_recall_generator as recall_generator
 from recall import free_talk_question_generator as free_talk_generator
+from recall import memory_event
 from recall import recall_score_calculator
 
 
@@ -81,6 +83,193 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 ["김치볶음밥 먹었어"],
                 "김치볶음밥 먹었어",
             ),
+        )
+
+    def test_memory_event_answer_type_comes_from_the_question_slot(self):
+        cases = (
+            ("아까 누구와 통화하셨나요?", memory_event.MemoryAnswerType.PERSON),
+            ("아까 어디에 다녀오셨나요?", memory_event.MemoryAnswerType.PLACE),
+            ("아까 언제 병원에 다녀오셨나요?", memory_event.MemoryAnswerType.TIME),
+            ("아까 어떤 음식을 드셨나요?", memory_event.MemoryAnswerType.FOOD),
+        )
+
+        for question, expected in cases:
+            with self.subTest(question=question):
+                self.assertEqual(
+                    expected,
+                    memory_event.infer_answer_type(question),
+                )
+
+    def test_memory_event_keeps_grounded_source_and_typed_answer(self):
+        event = memory_event.MemoryEvent.from_generation(
+            source_text="점심에 김치볶음밥을 먹었어",
+            memory_point="김치볶음밥을 먹은 일",
+            answer_keyword="김치볶음밥",
+            question="아까 어떤 음식을 드셨나요?",
+            action="EAT",
+            quality_score=87,
+        ).to_dict()
+
+        self.assertEqual("점심에 김치볶음밥을 먹었어", event["sourceText"])
+        self.assertEqual("FOOD", event["answerType"])
+        self.assertEqual("MEAL", event["topic"])
+        self.assertEqual("김치볶음밥", event["objectName"])
+        self.assertIsNone(event["person"])
+        self.assertIsNone(event["sourceRecordId"])
+
+    def test_conversation_policy_exposes_the_next_action(self):
+        cases = (
+            (
+                {
+                    "candidate_count": 0,
+                    "after_recall_answer": False,
+                    "should_change_topic": False,
+                },
+                conversation_policy.ConversationAction.OPEN_TOPIC,
+            ),
+            (
+                {
+                    "candidate_count": 1,
+                    "after_recall_answer": False,
+                    "should_change_topic": False,
+                    "needs_memory_detail": False,
+                },
+                conversation_policy.ConversationAction.FOLLOW_UP,
+            ),
+            (
+                {
+                    "candidate_count": 0,
+                    "after_recall_answer": False,
+                    "should_change_topic": False,
+                    "has_followup_context": True,
+                },
+                conversation_policy.ConversationAction.FOLLOW_UP,
+            ),
+            (
+                {
+                    "candidate_count": 1,
+                    "after_recall_answer": False,
+                    "should_change_topic": True,
+                },
+                conversation_policy.ConversationAction.CHANGE_TOPIC,
+            ),
+            (
+                {
+                    "candidate_count": 0,
+                    "after_recall_answer": True,
+                    "should_change_topic": False,
+                },
+                conversation_policy.ConversationAction.RESUME_AFTER_RECALL,
+            ),
+        )
+
+        for inputs, expected in cases:
+            with self.subTest(inputs=inputs):
+                decision = conversation_policy.decide_conversation_action(
+                    **inputs
+                )
+                self.assertEqual(expected, decision.action)
+
+    def test_conversation_stage_uses_memory_quality_instead_of_turn_count(self):
+        detailed = conversation_policy.decide_conversation_action(
+            candidate_count=10,
+            after_recall_answer=False,
+            should_change_topic=False,
+            needs_memory_detail=False,
+        )
+        incomplete = conversation_policy.decide_conversation_action(
+            candidate_count=1,
+            after_recall_answer=False,
+            should_change_topic=False,
+            needs_memory_detail=True,
+        )
+
+        self.assertEqual("DEEPEN", detailed.stage)
+        self.assertEqual("ANCHOR", incomplete.stage)
+
+    def test_non_memory_topic_can_continue_without_becoming_recall_candidate(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "글쎄",
+                "aiReplyText": "요즘 제일 보고 싶은 사람은 누구세요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "동생",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        with patch.object(
+            handler,
+            "generate_safe_followup_question",
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "simulation",
+            },
+        ):
+            question = handler._get_next_normal_question(
+                candidate_count=0,
+                session_records=records,
+                latest_text="동생",
+            )
+
+        self.assertFalse(
+            recall_generator.score_recall_memory_candidate("동생")["isValid"]
+        )
+        self.assertIn("그분", question)
+        self.assertNotIn("음식", question)
+
+    def test_wish_continues_as_conversation_but_not_as_recall_memory(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "글쎄",
+                "aiReplyText": "지금 드시고 싶은 음식이 있으세요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "피자가 먹고 싶어",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        self.assertFalse(
+            recall_generator.score_recall_memory_candidate(
+                "피자가 먹고 싶어"
+            )["isValid"]
+        )
+
+        with patch.object(
+            handler,
+            "generate_safe_followup_question",
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "simulation",
+            },
+        ):
+            question = handler._get_next_normal_question(
+                candidate_count=0,
+                session_records=records,
+                latest_text="피자가 먹고 싶어",
+            )
+
+        self.assertTrue(
+            any(
+                phrase in question
+                for phrase in ("이유", "드신다면", "누구와")
+            )
         )
 
     def test_generation_history_appends_new_latest_answer(self):
@@ -2075,6 +2264,16 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         self.assertEqual("CREATED", result["status"])
         self.assertEqual("점심에 김치볶음밥을 먹었어", result["sourceText"])
+        self.assertEqual("FOOD", result["memoryEvent"]["answerType"])
+        self.assertEqual("MEAL", result["memoryEvent"]["topic"])
+        self.assertEqual(
+            "김치볶음밥",
+            result["memoryEvent"]["objectName"],
+        )
+        self.assertEqual(
+            result["memoryQualityScore"],
+            result["memoryEvent"]["qualityScore"],
+        )
 
     def test_recall_question_that_reveals_answer_is_rejected(self):
         client = self._recall_client(
