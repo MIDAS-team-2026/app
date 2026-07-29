@@ -14,6 +14,8 @@ import logging
 import os
 import re
 import requests
+import hashlib
+from dataclasses import dataclass
 
 from recall.free_talk_question_generator import (
     generate_safe_followup_question,
@@ -21,6 +23,7 @@ from recall.free_talk_question_generator import (
 )
 from recall.conversation_policy import (
     ConversationAction,
+    ConversationDecision,
     RecallTimingAction,
     decide_conversation_action,
     decide_recall_timing,
@@ -34,6 +37,19 @@ from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
+
+
+@dataclass(frozen=True)
+class ConversationTurnState:
+    latest_text: str
+    conversation_history: tuple[str, ...]
+    previous_question: str
+    topic: str | None
+    consecutive_topic_turns: int
+    after_recall_answer: bool
+    should_change_topic: bool
+    is_memory_candidate: bool
+    needs_memory_detail: bool
 
 
 FIXED_QUESTIONS = [
@@ -239,6 +255,7 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 몸 상태는 어떠셨어요?",
             "어느 쪽이 제일 불편하셨어요?",
             "지금은 조금 괜찮으세요?",
+            "지금도 움직이실 때 불편하세요?",
             "병원에 계실 때 기억나는 일이 있으세요?",
         ],
         "ANCHOR": [
@@ -1053,6 +1070,7 @@ def _is_negative_response(text: str) -> bool:
             "힘들",
             "아프",
             "아파",
+            "아팠",
             "우울",
             "속상",
             "걱정",
@@ -1097,6 +1115,9 @@ def _is_positive_response(text: str) -> bool:
     for phrase in NEGATED_POSITIVE_PHRASES:
         positive_evidence_text = positive_evidence_text.replace(phrase, "")
 
+    for phrase in ("좋겠", "좋을 것 같", "좋을것 같"):
+        positive_evidence_text = positive_evidence_text.replace(phrase, "")
+
     return _contains_any(
         positive_evidence_text,
         (
@@ -1105,6 +1126,7 @@ def _is_positive_response(text: str) -> bool:
             "즐거",
             "맛있",
             "상쾌",
+            "개운",
             "편안",
             "기쁘",
             "반가",
@@ -1159,8 +1181,25 @@ EXPLICIT_FOOD_KEYWORDS = (
 SPECIFIC_FOOD_KEYWORDS = tuple(
     keyword
     for keyword in EXPLICIT_FOOD_KEYWORDS
-    if keyword not in {"식사", "음식"}
+    if keyword not in {"식사", "음식", "밥"}
 )
+
+
+def _is_unspecified_food_wish(text: str) -> bool:
+    normalized = _normalize_text(text)
+    return _contains_any(
+        normalized,
+        (
+            "밥 먹고 싶",
+            "밥을 먹고 싶",
+            "음식 먹고 싶",
+            "음식을 먹고 싶",
+            "뭐 먹고 싶",
+            "무언가 먹고 싶",
+            "뭔가 먹고 싶",
+        ),
+    )
+
 
 EXPLICIT_PLACE_KEYWORDS = (
     "집",
@@ -1763,7 +1802,7 @@ def _detect_topic_from_question(question: str) -> str | None:
     question = _normalize_text(question)
 
     topic_cues = (
-        ("HEALTH", ("병원", "약", "몸", "아프", "불편")),
+        ("HEALTH", ("병원", "약", "몸", "아프", "불편", "괜찮")),
         ("FOOD", ("음식", "드셨어", "먹었", "마셨어", "식사", "맛")),
         ("MEDIA", ("방송", "프로그램", "노래", "가수", "드라마", "뉴스", "티비")),
         ("SHOPPING", ("사신", "샀", "고르셨어", "장 보", "마트", "시장")),
@@ -1804,6 +1843,9 @@ def _detect_conversation_topic(
 
     if latest_topic is None and question_topic is not None:
         return question_topic
+
+    if latest_topic == "NEGATIVE" and question_topic == "HEALTH":
+        return "HEALTH"
 
     if (
         latest_topic == "FOOD"
@@ -1866,6 +1908,38 @@ def _detect_conversation_topic(
     return None
 
 
+def _count_consecutive_topic_turns(
+    cycle_texts: list[str],
+    current_topic: str | None,
+    previous_question: str = "",
+) -> int:
+    if current_topic in {None, "LOW_INFO", "NEGATIVE"}:
+        return 0
+
+    count = 0
+    last_index = len(cycle_texts) - 1
+    question_topic = _detect_topic_from_question(previous_question)
+
+    for index in range(last_index, -1, -1):
+        text = cycle_texts[index]
+        topic = _detect_topic_in_text(text)
+
+        if topic in {"LOW_INFO", "NEGATIVE"}:
+            break
+
+        if topic is None and index == last_index:
+            topic = question_topic or current_topic
+        elif topic is None and count > 0 and _is_short_response(text):
+            topic = current_topic
+
+        if topic != current_topic:
+            break
+
+        count += 1
+
+    return count
+
+
 def _get_topic_aware_fallback_candidates(
     stage: str,
     latest_text: str,
@@ -1890,15 +1964,19 @@ def _get_topic_aware_fallback_candidates(
 
         candidates = WISH_TOPIC_QUESTIONS[topic]
 
-        if topic == "FOOD" and _contains_any(
-            latest_text,
-            SPECIFIC_FOOD_KEYWORDS,
-        ):
-            candidates = [
-                question
-                for question in candidates
-                if "어떤 음식" not in question
-            ]
+        if topic == "FOOD":
+            if _is_unspecified_food_wish(latest_text):
+                candidates = [
+                    question
+                    for question in candidates
+                    if "어떤 음식" in question
+                ]
+            else:
+                candidates = [
+                    question
+                    for question in candidates
+                    if "어떤 음식" not in question
+                ]
 
         return candidates
 
@@ -2025,6 +2103,32 @@ def _get_topic_aware_fallback_candidates(
 
     if topic == "HEALTH":
         context = " ".join([latest_text, *cycle_texts])
+
+        if _is_negative_response(latest_text) and _contains_any(
+            latest_text,
+            (
+                "아프",
+                "아팠",
+                "다쳤",
+                "불편",
+                "쑤",
+                "삐끗",
+                "저리",
+                "통증",
+                "걷기",
+                "움직",
+            ),
+        ):
+            if _contains_any(latest_text, ("걷기", "움직")):
+                candidates = [
+                    "걷거나 움직이실 때도 계속 불편하세요?",
+                ]
+            else:
+                candidates = [
+                    question
+                    for question in candidates
+                    if "지금" in question
+                ]
 
         if not _has_medicine_reference(context):
             candidates = [
@@ -2180,7 +2284,10 @@ def _get_topic_aware_fallback_candidates(
                 if "이야기를 나누셨어" not in question
             ]
 
-        if _contains_any(latest_text, ("이야기했", "얘기했", "말했")):
+        if _contains_any(
+            latest_text,
+            ("이야기", "얘기", "말했"),
+        ):
             candidates = [
                 question
                 for question in candidates
@@ -2261,6 +2368,58 @@ def _get_topic_change_openers(current_topic: str | None) -> list[str]:
         for question in _get_topic_openers()
         if not _contains_any(question, markers)
     ]
+
+
+def _get_contextual_topic_openers(
+    current_topic: str | None,
+    session_records: list[dict] | None,
+    latest_text: str,
+    candidates: list[str] | None = None,
+) -> list[str]:
+    candidates = list(candidates or _get_topic_change_openers(current_topic))
+    recent_topics = []
+    context_parts = []
+
+    for record in (session_records or [])[-12:]:
+        transcript = _normalize_text(record.get("transcriptText") or "")
+        reply = _normalize_text(record.get("aiReplyText") or "")
+
+        if transcript:
+            context_parts.append(transcript)
+            topic = _detect_topic_in_text(transcript)
+            if topic not in {None, "LOW_INFO", "NEGATIVE"}:
+                recent_topics.append(topic)
+
+        if reply:
+            context_parts.append(reply)
+            topic = _detect_topic_from_question(reply)
+            if topic is not None:
+                recent_topics.append(topic)
+
+    normalized_latest = _normalize_text(latest_text)
+    if normalized_latest:
+        context_parts.append(normalized_latest)
+
+    context_key = "|".join(context_parts)
+
+    def opener_priority(question: str) -> tuple[int, int, str]:
+        topic = _detect_topic_from_question(question)
+        use_count = recent_topics.count(topic) if topic is not None else 0
+        last_used = (
+            max(
+                index
+                for index, recent_topic in enumerate(recent_topics)
+                if recent_topic == topic
+            )
+            if topic in recent_topics
+            else -1
+        )
+        tie_breaker = hashlib.sha256(
+            f"{context_key}|{question}".encode("utf-8")
+        ).hexdigest()
+        return use_count, last_used, tie_breaker
+
+    return sorted(candidates, key=opener_priority)
 
 
 def _pick_non_repeated_question(
@@ -2418,6 +2577,78 @@ def _get_after_recall_opening_candidates(recall_answer_text: str) -> list[str]:
     return AFTER_RECALL_OPENING_QUESTIONS
 
 
+def _analyze_conversation_turn(
+    session_records: list[dict] | None,
+    latest_text: str,
+) -> ConversationTurnState:
+    cycle_texts = _get_cycle_transcripts(session_records)
+    confirmed_text = _get_confirmed_text_after_negated_action(latest_text)
+    analyzed_text = confirmed_text or latest_text
+    conversation_history = list(cycle_texts)
+    previous_question = _get_question_answered_by_latest_record(session_records)
+
+    if analyzed_text != latest_text:
+        for index in range(len(conversation_history) - 1, -1, -1):
+            if conversation_history[index].strip() == latest_text.strip():
+                conversation_history[index] = analyzed_text
+                break
+
+    topic = _detect_conversation_topic(
+        analyzed_text,
+        conversation_history,
+        previous_question,
+    )
+    memory_evaluation = score_recall_memory_candidate(analyzed_text)
+    should_change_topic = (
+        _is_negated_action_response(latest_text)
+        and not confirmed_text
+        and _detect_topic_in_text(latest_text) != "FOOD"
+        and not (
+            topic == "PERSON"
+            and _contains_any(latest_text, ("통화", "전화", "연락"))
+        )
+    )
+
+    return ConversationTurnState(
+        latest_text=analyzed_text,
+        conversation_history=tuple(conversation_history),
+        previous_question=previous_question,
+        topic=topic,
+        consecutive_topic_turns=_count_consecutive_topic_turns(
+            conversation_history,
+            topic,
+            previous_question,
+        ),
+        after_recall_answer=_is_after_recall_answer(session_records),
+        should_change_topic=should_change_topic,
+        is_memory_candidate=bool(memory_evaluation["isValid"]),
+        needs_memory_detail=(
+            topic is not None
+            and topic != "PERSON"
+            and not memory_evaluation["isValid"]
+            and not _is_low_info_response(analyzed_text)
+            and not _is_negative_response(analyzed_text)
+        ),
+    )
+
+
+def _decide_next_conversation_action(
+    state: ConversationTurnState,
+    candidate_count: int,
+) -> ConversationDecision:
+    return decide_conversation_action(
+        candidate_count=candidate_count,
+        after_recall_answer=state.after_recall_answer,
+        should_change_topic=state.should_change_topic,
+        needs_memory_detail=state.needs_memory_detail,
+        has_followup_context=(
+            state.topic is not None
+            and state.topic != "LOW_INFO"
+        ),
+        consecutive_topic_turns=state.consecutive_topic_turns,
+    )
+
+
 def _get_next_normal_question(
     candidate_count: int,
     session_records: list[dict] | None = None,
@@ -2427,55 +2658,13 @@ def _get_next_normal_question(
     question_index = cycle_index + candidate_count
     used_questions = _get_recent_ai_replies(session_records)
     previous_questions = _get_recent_ai_reply_list(session_records)
-    cycle_texts = _get_cycle_transcripts(session_records)
-    followup_latest_text = (
-        _get_confirmed_text_after_negated_action(latest_text)
-        or latest_text
-    )
-    followup_cycle_texts = list(cycle_texts)
-    previous_question = _get_question_answered_by_latest_record(session_records)
-
-    if followup_latest_text != latest_text:
-        for index in range(len(followup_cycle_texts) - 1, -1, -1):
-            if followup_cycle_texts[index].strip() == latest_text.strip():
-                followup_cycle_texts[index] = followup_latest_text
-                break
-
-    followup_topic = _detect_conversation_topic(
-        followup_latest_text,
-        followup_cycle_texts,
-        previous_question,
-    )
-    after_recall_answer = _is_after_recall_answer(session_records)
-    should_change_topic = (
-        _is_negated_action_response(latest_text)
-        and not _get_confirmed_text_after_negated_action(latest_text)
-        and _detect_topic_in_text(latest_text) != "FOOD"
-        and not (
-            followup_topic == "PERSON"
-            and _contains_any(latest_text, ("통화", "전화", "연락"))
-        )
-    )
-    latest_memory_evaluation = score_recall_memory_candidate(
-        followup_latest_text
-    )
-    needs_memory_detail = (
-        followup_topic is not None
-        and followup_topic != "PERSON"
-        and not latest_memory_evaluation["isValid"]
-        and not _is_low_info_response(followup_latest_text)
-        and not _is_negative_response(followup_latest_text)
-    )
-    decision = decide_conversation_action(
-        candidate_count=candidate_count,
-        after_recall_answer=after_recall_answer,
-        should_change_topic=should_change_topic,
-        needs_memory_detail=needs_memory_detail,
-        has_followup_context=(
-            followup_topic is not None
-            and followup_topic not in {"LOW_INFO", "NEGATIVE"}
-        ),
-    )
+    state = _analyze_conversation_turn(session_records, latest_text)
+    followup_latest_text = state.latest_text
+    followup_cycle_texts = list(state.conversation_history)
+    previous_question = state.previous_question
+    followup_topic = state.topic
+    after_recall_answer = state.after_recall_answer
+    decision = _decide_next_conversation_action(state, candidate_count)
 
     if decision.action in {
         ConversationAction.OPEN_TOPIC,
@@ -2488,13 +2677,24 @@ def _get_next_normal_question(
         opening_candidates = (
             _get_after_recall_opening_candidates(latest_transcript)
             if after_recall_answer
-            else _get_topic_openers()
+            else _get_contextual_topic_openers(
+                state.topic,
+                session_records,
+                state.latest_text,
+            )
         )
+        if after_recall_answer:
+            opening_candidates = _get_contextual_topic_openers(
+                state.topic,
+                session_records,
+                state.latest_text,
+                opening_candidates,
+            )
         opener_question = _pick_non_repeated_question(
             candidates=opening_candidates,
             used_questions=used_questions,
             previous_questions=previous_questions,
-            start_index=cycle_index,
+            start_index=0,
         )
 
         if opener_question:
@@ -2507,11 +2707,16 @@ def _get_next_normal_question(
             return opener_question
 
     if decision.action == ConversationAction.CHANGE_TOPIC:
+        topic_change_openers = _get_contextual_topic_openers(
+            followup_topic,
+            session_records,
+            followup_latest_text,
+        )
         opener_question = _pick_non_repeated_question(
-            candidates=_get_topic_change_openers(followup_topic),
+            candidates=topic_change_openers,
             used_questions=used_questions,
             previous_questions=previous_questions,
-            start_index=cycle_index + candidate_count,
+            start_index=0,
         )
 
         if opener_question:
@@ -2528,11 +2733,16 @@ def _get_next_normal_question(
         previous_question,
     )
     if followup_topic is not None and not topic_aware_candidates:
+        topic_change_openers = _get_contextual_topic_openers(
+            followup_topic,
+            session_records,
+            followup_latest_text,
+        )
         opener_question = _pick_non_repeated_question(
-            candidates=_get_topic_change_openers(followup_topic),
+            candidates=topic_change_openers,
             used_questions=used_questions,
             previous_questions=previous_questions,
-            start_index=cycle_index + candidate_count,
+            start_index=0,
         )
 
         if opener_question:
@@ -2573,11 +2783,16 @@ def _get_next_normal_question(
         )
 
         if generated_question.get("shouldChangeTopic"):
+            topic_change_openers = _get_contextual_topic_openers(
+                followup_topic,
+                session_records,
+                followup_latest_text,
+            )
             opener_question = _pick_non_repeated_question(
-                candidates=_get_topic_change_openers(followup_topic),
+                candidates=topic_change_openers,
                 used_questions=used_questions,
                 previous_questions=previous_questions,
-                start_index=cycle_index + 1,
+                start_index=0,
             )
 
             if opener_question:
@@ -2589,10 +2804,14 @@ def _get_next_normal_question(
         return generated_question["nextQuestion"]
 
     opener_question = _pick_non_repeated_question(
-        candidates=_get_topic_openers(),
+        candidates=_get_contextual_topic_openers(
+            followup_topic,
+            session_records,
+            followup_latest_text,
+        ),
         used_questions=used_questions,
         previous_questions=previous_questions,
-        start_index=question_index,
+        start_index=0,
     )
 
     if opener_question:

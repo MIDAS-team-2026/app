@@ -187,6 +187,313 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual("DEEPEN", detailed.stage)
         self.assertEqual("ANCHOR", incomplete.stage)
 
+    def test_conversation_policy_changes_topic_after_enough_same_topic_turns(self):
+        continue_topic = conversation_policy.decide_conversation_action(
+            candidate_count=1,
+            after_recall_answer=False,
+            should_change_topic=False,
+            has_followup_context=True,
+            consecutive_topic_turns=2,
+        )
+        change_topic = conversation_policy.decide_conversation_action(
+            candidate_count=1,
+            after_recall_answer=False,
+            should_change_topic=False,
+            has_followup_context=True,
+            consecutive_topic_turns=3,
+        )
+
+        self.assertEqual(
+            conversation_policy.ConversationAction.FOLLOW_UP,
+            continue_topic.action,
+        )
+        self.assertEqual(
+            conversation_policy.ConversationAction.CHANGE_TOPIC,
+            change_topic.action,
+        )
+        self.assertEqual(
+            "current_topic_has_enough_detail",
+            change_topic.reason,
+        )
+
+    def test_conversation_turn_state_keeps_analysis_separate_from_action(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "오후에 통화했어",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        state = handler._analyze_conversation_turn(
+            records,
+            "오후에 통화했어",
+        )
+        decision = handler._decide_next_conversation_action(
+            state,
+            candidate_count=1,
+        )
+
+        self.assertEqual("PERSON", state.topic)
+        self.assertEqual(2, state.consecutive_topic_turns)
+        self.assertTrue(state.is_memory_candidate)
+        self.assertEqual(
+            conversation_policy.ConversationAction.FOLLOW_UP,
+            decision.action,
+        )
+
+    def test_topic_openers_prioritize_topics_not_used_recently(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "김치찌개를 먹었어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            },
+            {
+                "recordId": 3,
+                "turnOrder": 3,
+                "transcriptText": "뉴스를 봤어",
+                "aiReplyText": "그 방송에서 기억나는 내용이 있으세요?",
+            },
+        ]
+
+        questions = handler._get_contextual_topic_openers(
+            "MEDIA",
+            records,
+            "뉴스가 재미있었어",
+        )
+        first_topic = handler._detect_topic_from_question(questions[0])
+
+        self.assertNotIn(first_topic, {"PERSON", "FOOD", "MEDIA"})
+
+    def test_topic_opener_order_depends_on_session_context(self):
+        person_history = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+            }
+        ]
+        food_history = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "김치찌개를 먹었어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            }
+        ]
+
+        person_questions = handler._get_contextual_topic_openers(
+            "PERSON",
+            person_history,
+            "통화가 즐거웠어",
+        )
+        food_questions = handler._get_contextual_topic_openers(
+            "FOOD",
+            food_history,
+            "찌개가 맛있었어",
+        )
+
+        self.assertNotEqual(person_questions, food_questions)
+        self.assertNotEqual(
+            "PERSON",
+            handler._detect_topic_from_question(person_questions[0]),
+        )
+        self.assertNotEqual(
+            "FOOD",
+            handler._detect_topic_from_question(food_questions[0]),
+        )
+
+    def test_consecutive_topic_turns_reset_when_user_changes_topic(self):
+        self.assertEqual(
+            3,
+            handler._count_consecutive_topic_turns(
+                [
+                    "아들과 통화했어",
+                    "손주 학교 이야기를 들었어",
+                    "좋았지",
+                ],
+                "PERSON",
+                "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
+            ),
+        )
+        self.assertEqual(
+            1,
+            handler._count_consecutive_topic_turns(
+                [
+                    "아들과 통화했어",
+                    "손주 학교 이야기를 들었어",
+                    "저녁에는 뉴스를 봤어",
+                ],
+                "MEDIA",
+                "오늘 재미있게 보신 방송이 있으세요?",
+            ),
+        )
+
+    def test_third_same_topic_answer_moves_to_a_different_topic(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "아드님과 어떤 이야기를 나누셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "손주 학교 이야기를 들었어",
+                "aiReplyText": "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 3,
+                "turnOrder": 3,
+                "transcriptText": "좋았지",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        question = handler._get_next_normal_question(
+            candidate_count=2,
+            session_records=records,
+            latest_text="좋았지",
+        )
+
+        self.assertTrue(question.startswith("좋으셨겠어요."))
+        self.assertNotIn("사람", question)
+        self.assertNotIn("그분", question)
+        self.assertNotIn("누구", question)
+
+    def test_person_story_detail_is_not_requested_twice(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "손주 학교 이야기를 들었어",
+            [
+                "아들과 통화했어",
+                "손주 학교 이야기를 들었어",
+            ],
+            "아드님과 무슨 이야기를 나누셨어요?",
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(
+            all("어떤 이야기를" not in question for question in questions)
+        )
+
+    def test_future_wish_does_not_receive_past_positive_acknowledgement(self):
+        answer = "아들이 왔으면 좋겠어"
+
+        self.assertFalse(handler._is_positive_response(answer))
+        reply = free_talk_generator.build_fallback_with_empathy(
+            "그분은 언제쯤 만나실 예정이세요?",
+            [answer],
+        )
+        self.assertFalse(reply.startswith("좋으셨겠어요."))
+
+    def test_unspecified_food_wish_asks_which_food_first(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "같이 밥 먹고 싶어",
+            ["아들이 다음 주에 온대", "같이 밥 먹고 싶어"],
+            "그분은 언제쯤 만나실 예정이세요?",
+        )
+
+        self.assertEqual(
+            ["어떤 음식이 가장 먼저 떠오르세요?"],
+            questions,
+        )
+
+    def test_unlisted_specific_food_wish_does_not_reask_which_food(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "갈비를 먹고 싶어",
+            ["같이 밥 먹고 싶어", "갈비를 먹고 싶어"],
+            "어떤 음식이 가장 먼저 떠오르세요?",
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(
+            all("어떤 음식" not in question for question in questions)
+        )
+
+    def test_pain_answer_checks_current_condition_before_memory_detail(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "무릎이 아팠어",
+            ["무릎이 아팠어"],
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(all("지금" in question for question in questions))
+
+    def test_negative_answer_receives_empathy_before_topic_change(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "무릎이 아팠어",
+                "aiReplyText": "그러셨군요. 지금은 조금 괜찮으세요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "걷기가 힘들었어",
+                "aiReplyText": "",
+                "answerRole": None,
+            }
+        ]
+
+        with patch.object(
+            free_talk_generator,
+            "_get_client",
+            side_effect=RuntimeError("offline simulation"),
+        ):
+            question = handler._get_next_normal_question(
+                candidate_count=0,
+                session_records=records,
+                latest_text="걷기가 힘들었어",
+            )
+
+        self.assertTrue(question.startswith("그러셨군요."))
+        self.assertIn("움직이실 때", question)
+        self.assertNotIn("보고 싶은 사람", question)
+
+    def test_refreshed_answer_receives_positive_acknowledgement(self):
+        answer = "낮잠 자고 나니 개운했어"
+
+        self.assertTrue(handler._is_positive_response(answer))
+        reply = free_talk_generator.build_fallback_with_empathy(
+            "오늘 집 밖에 다녀오신 곳이 있으세요?",
+            [answer],
+        )
+        self.assertTrue(reply.startswith("좋으셨겠어요."))
+
+        improved_reply = free_talk_generator.build_fallback_with_empathy(
+            "오늘 집 밖에 다녀오신 곳이 있으세요?",
+            ["지금은 괜찮아"],
+        )
+        self.assertTrue(improved_reply.startswith("다행이네요."))
+
     def test_recall_timing_uses_memory_count_and_latest_conversation_state(self):
         cases = (
             (
@@ -4057,25 +4364,19 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             {
                 "recordId": 1,
                 "turnOrder": 1,
-                "transcriptText": "동생을 만났어",
-                "aiReplyText": "그분이 생각날 때 가장 먼저 떠오르는 모습이 있으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
                 "transcriptText": "친구를 만났어",
                 "aiReplyText": "그분과 함께했던 일 중에 기억나는 장면이 있으세요?",
             },
             {
-                "recordId": 3,
-                "turnOrder": 3,
+                "recordId": 2,
+                "turnOrder": 2,
                 "transcriptText": "공원에서 만났어",
                 "aiReplyText": "",
             },
         ]
 
         question = handler._get_next_normal_question(
-            3,
+            2,
             records,
             latest_text="공원에서 만났어",
         )
