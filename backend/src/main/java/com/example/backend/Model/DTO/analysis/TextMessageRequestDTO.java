@@ -9,7 +9,10 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class SttUpdateRequestDTO {
-    private Long recordId;
-    private String transcriptText;
+public class TextMessageRequestDTO {
+    private Integer userId;
+    private Long sessionId;
+    private String text;
+    private Long recallQuestionId;
+    private String answerRole;
 }

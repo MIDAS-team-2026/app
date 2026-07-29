@@ -16,13 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,26 +27,19 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class VoiceService {
     private static final String ANSWER_ROLE_RECALL = "RECALL";
-    private final S3Service s3Service;
     private final AudioRecordRepository audioRecordRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
 
-    private final STTService sttService;
-
     private final AiProcessTriggerService aiProcessTriggerService;
 
-
     @Transactional
-
-    public VoiceResponseDTO uploadAndSave(
+    public VoiceResponseDTO saveTextAndTrigger(
             Integer userId,
             Long sessionId,
             Long recallQuestionId,
             String answerRole,
-            MultipartFile file) throws IOException {
-
-        String fileUrl = s3Service.uploadFile(file);
+            String text) {
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
@@ -60,7 +50,7 @@ public class VoiceService {
         AudioRecord record = new AudioRecord();
         record.setUser(user);
         record.setChatSession(session);
-        record.setAudioFilePath(fileUrl);
+        record.setTranscriptText(text);
         record.setSpeaker(1); // 1: USER, 2: AI
         record.setTurnOrder(nextTurn);
         record.setRecordedAt(LocalDateTime.now());
@@ -69,7 +59,6 @@ public class VoiceService {
         record.setParentRecord(null);
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
-        STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
         Long recordId = savedRecord.getId();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 
@@ -83,23 +72,11 @@ public class VoiceService {
 
         return VoiceResponseDTO.builder()
                 .audioRecordId(savedRecord.getId())
-                .audioFilePath(savedRecord.getAudioFilePath())
-                .transcriptText(sttResult.getTranscriptText())
+                .audioFilePath(null)
+                .transcriptText(savedRecord.getTranscriptText())
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
-    }
-    @Transactional
-    public void updateTranscript(Long recordId, String transcriptText) {
-        AudioRecord record = audioRecordRepository.findById(recordId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
-        record.setTranscriptText(transcriptText);
-        audioRecordRepository.save(record);
-    }
-
-    @Transactional
-    public String transcribeRecord(Long recordId) {
-        return sttService.transcribeAndSave(recordId).getTranscriptText();
     }
 
     @Transactional

@@ -9,14 +9,11 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.RetrofitClient
+import com.midas26.mobileapp.network.TextMessageRequest
 import com.midas26.mobileapp.util.PrefsManager
-import com.midas26.mobileapp.util.WavRecorder
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.RequestBody.Companion.asRequestBody
 
 /** 채팅 메시지 보낸 사람. */
 enum class Sender { AI, USER }
@@ -38,8 +35,7 @@ data class ChatMessage(
  */
 sealed interface VoiceChatState {
     data object Idle       : VoiceChatState
-    data object Recording  : VoiceChatState
-    data object Processing : VoiceChatState   // 업로드 + 서버 STT/AI 대기
+    data object Processing : VoiceChatState   // 전송 + 서버 AI 응답 대기
     data object Playing    : VoiceChatState
 }
 
@@ -47,22 +43,21 @@ sealed interface VoiceChatState {
  * 음성 대화 ViewModel.
  *
  * - 화면 진입 시 대화 세션을 서버에서 생성한다.
- * - 녹음 중지 → WAV 파일 → 서버 업로드 → Processing 유지
+ * - 텍스트 전송 → 서버 저장 → Processing 유지
  * - AI 응답 수신 엔드포인트는 미구현 → [dispatchAiReply]로 나중에 연결
  */
 class VoiceChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs       = PrefsManager.from(application)
-    private val wavRecorder = WavRecorder(application)
-    private val api         = RetrofitClient.voiceChat
+    private val prefs = PrefsManager.from(application)
+    private val api    = RetrofitClient.voiceChat
 
     private val userId: Int  get() = prefs.getUserId()
     private var sessionId: Long    = -1L
     private var sessionEnded       = false
-    private var voiceUploaded      = false
+    private var messageSent        = false
     private var pendingRecallQuestionId: Long? = null
 
-    fun hasUploadedVoice(): Boolean = voiceUploaded
+    fun hasSentMessage(): Boolean = messageSent
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
 
@@ -71,9 +66,6 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _messages: SnapshotStateList<ChatMessage> = listOf<ChatMessage>().toMutableStateList()
     val messages: List<ChatMessage> get() = _messages
-
-    private var _recordingSeconds by mutableStateOf(0)
-    val recordingSeconds: Int get() = _recordingSeconds
 
     private var _speakTrigger by mutableStateOf(0)
     val speakTrigger: Int get() = _speakTrigger
@@ -100,8 +92,6 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         text.split(Regex("(?<=[.!?~。])\\s*"))
             .map { it.trim() }
             .filter { it.isNotBlank() }
-
-    private var timerJob: Job? = null
 
     // ── 초기화: 세션 시작 ─────────────────────────────────────────────────────
 
@@ -134,51 +124,34 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    // ── 녹음 ──────────────────────────────────────────────────────────────────
+    // ── 텍스트 전송 ────────────────────────────────────────────────────────────
 
-    fun startRecording() {
+    fun sendText(text: String) {
+        if (text.isBlank()) return
         if (_state !is VoiceChatState.Idle) return
-        _state = VoiceChatState.Recording
-        _recordingSeconds = 0
-        wavRecorder.start()
-        timerJob = viewModelScope.launch {
-            while (true) {
-                delay(1000)
-                _recordingSeconds += 1
-            }
-        }
-    }
-
-    fun stopRecording() {
-        if (_state !is VoiceChatState.Recording) return
-        timerJob?.cancel()
-        timerJob = null
-
-        val file = wavRecorder.stop()
         _state = VoiceChatState.Processing
 
         viewModelScope.launch {
             var recordId = -1L
 
-            // 업로드 — 성공하면 recordId 확보
-            if (file != null && sessionId > 0) {
+            if (sessionId > 0) {
                 runCatching {
-                    val body = file.asRequestBody("audio/wav".toMediaType())
-                    val part = MultipartBody.Part.createFormData("file", file.name, body)
                     val recallQuestionId = pendingRecallQuestionId
                     val answerRole = if (recallQuestionId != null) "RECALL" else "INITIAL"
 
-                    api.uploadVoice(
-                        userId = userId,
-                        sessionId = sessionId,
-                        file = part,
-                        recallQuestionId = recallQuestionId,
-                        answerRole = answerRole
+                    api.sendText(
+                        TextMessageRequest(
+                            userId = userId,
+                            sessionId = sessionId,
+                            text = text,
+                            recallQuestionId = recallQuestionId,
+                            answerRole = answerRole
+                        )
                     )
                 }.onSuccess { resp ->
                     resp.body()?.data?.audioRecordId?.let {
                         recordId = it
-                        voiceUploaded = true
+                        messageSent = true
                     }
                 }
             }
@@ -186,7 +159,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
             if (recordId > 0) {
                 pollForReply(recordId)
             } else {
-                dispatchAiReply("음성 전송에 실패했어요. 다시 시도해주세요.")
+                dispatchAiReply("메시지 전송에 실패했어요. 다시 시도해주세요.")
             }
         }
     }
@@ -320,9 +293,7 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     override fun onCleared() {
-        timerJob?.cancel()
         advanceSentenceJob?.cancel()
-        wavRecorder.stop()
         super.onCleared()
     }
 }

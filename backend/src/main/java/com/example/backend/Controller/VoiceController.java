@@ -5,16 +5,13 @@ import com.example.backend.Model.DTO.analysis.RecallRecordLinkDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyRequestDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
-import com.example.backend.Model.DTO.analysis.SttResponseDTO;
-import com.example.backend.Model.DTO.analysis.SttUpdateRequestDTO;
+import com.example.backend.Model.DTO.analysis.TextMessageRequestDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
 import com.example.backend.Service.VoiceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -25,77 +22,34 @@ public class VoiceController {
     private final VoiceService voiceService;
 
     /**
-     * 환자의 음성 답변 파일 업로드 및 DB 기록 생성
-     * @param userId 환자 ID
-     * @param sessionId 현재 진행 중인 대화 세션 ID
-     * @param recallQuestionId 회상 질문 ID (선택)
-     * @param answerRole 답변 역할 (INITIAL: 최초 기준 답변 / RECALL: 회상 답변)
-     * @param file 음성 파일
+     * 사용자가 입력한 텍스트 메시지를 저장하고 AI 응답 생성을 트리거한다.
+     * (stt_debug: 녹음/STT 업로드 대신 텍스트를 바로 전송받는 경로)
+     * @param request userId, sessionId, text, recallQuestionId(선택), answerRole(선택)
      * @return 생성된 AudioRecord의 ID (recordId)
      */
-    @PostMapping("/upload")
-    public ResponseEntity<ApiResponse<VoiceResponseDTO>> uploadVoice(
-            @RequestParam("userId") Integer userId,
-            @RequestParam("sessionId") Long sessionId,
-            @RequestParam(value = "recallQuestionId", required = false) Long recallQuestionId,
-            @RequestParam(value = "answerRole", required = false) String answerRole,
-            @RequestParam("file") MultipartFile file) {
-
-        if (file == null || file.isEmpty()) {
+    @PostMapping("/text")
+    public ResponseEntity<ApiResponse<VoiceResponseDTO>> sendText(@RequestBody TextMessageRequestDTO request) {
+        if (request.getUserId() == null || request.getSessionId() == null) {
             return ResponseEntity.status(400)
-                    .body(ApiResponse.fail(400, "파일이 비어있습니다."));
+                    .body(ApiResponse.fail(400, "userId와 sessionId는 필수입니다."));
+        }
+        if (request.getText() == null || request.getText().isBlank()) {
+            return ResponseEntity.status(400)
+                    .body(ApiResponse.fail(400, "text는 필수입니다."));
         }
 
         try {
-            VoiceResponseDTO response = voiceService.uploadAndSave(
-                    userId, sessionId, recallQuestionId, answerRole, file);
+            VoiceResponseDTO response = voiceService.saveTextAndTrigger(
+                    request.getUserId(),
+                    request.getSessionId(),
+                    request.getRecallQuestionId(),
+                    request.getAnswerRole(),
+                    request.getText());
 
             return ResponseEntity.ok(ApiResponse.success(response));
-
-        } catch (IOException e) {
-            return ResponseEntity.status(500)
-                    .body(ApiResponse.fail(500, "파일 업로드 중 오류가 발생했습니다: " + e.getMessage()));
-        }
-    }
-
-    /**
-     * STT 결과 텍스트를 해당 AudioRecord에 반영
-     * 요청 본문: { "recordId": Long, "transcriptText": String }
-     */
-    @PostMapping("/stt")
-    public ResponseEntity<ApiResponse<Void>> updateStt(@RequestBody SttUpdateRequestDTO request) {
-        if (request.getRecordId() == null) {
-            return ResponseEntity.status(400)
-                    .body(ApiResponse.fail(400, "recordId는 필수입니다."));
-        }
-        if (request.getTranscriptText() == null) {
-            return ResponseEntity.status(400)
-                    .body(ApiResponse.fail(400, "transcriptText는 필수입니다."));
-        }
-
-        try {
-            voiceService.updateTranscript(request.getRecordId(), request.getTranscriptText());
-            return ResponseEntity.ok(ApiResponse.success());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404)
                     .body(ApiResponse.fail(404, e.getMessage()));
-        }
-    }
-
-    /**
-     * 특정 recordId에 대해 수동으로 STT 변환 수행
-     */
-    @PostMapping("/stt/{recordId}")
-    public ResponseEntity<ApiResponse<SttResponseDTO>> performStt(@PathVariable Long recordId) {
-        try {
-            String transcriptText = voiceService.transcribeRecord(recordId);
-            return ResponseEntity.ok(ApiResponse.success(new SttResponseDTO(recordId, transcriptText)));
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404)
-                    .body(ApiResponse.fail(404, e.getMessage()));
-        } catch (IllegalStateException e) {
-            return ResponseEntity.status(502)
-                    .body(ApiResponse.fail(502, e.getMessage()));
         }
     }
 

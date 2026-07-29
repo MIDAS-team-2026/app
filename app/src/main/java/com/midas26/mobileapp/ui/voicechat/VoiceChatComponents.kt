@@ -18,6 +18,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,8 +36,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,10 +52,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
@@ -351,216 +354,72 @@ private fun Modifier.circleGlow(
 }
 
 /**
- * 마이크 버튼 — 110dp 원형.
- * - recording = false : 그린(#2d7d31) 배경 + 흰 마이크 아이콘
- * - recording = true  : 레드(#ef4444) 배경 + 흰 정지 사각형 + 2겹 ripple
+ * 텍스트 입력 행 — 텍스트필드 + 전송 버튼.
+ * 기존 마이크 녹음 버튼을 대체한다 (stt_debug: 녹음/STT 제거, 텍스트 채팅으로 대체).
  */
 @Composable
-fun BigActionButton(
-    mode: BigActionMode,
-    onClick: () -> Unit,
-    enabled: Boolean = true
+fun TextInputRow(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSend: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    val recording = mode == BigActionMode.Stop
-    val bgColor   = if (recording) AppColor.errorPrimary else if (enabled) AppColor.accentDark else AppColor.textTertiary
+    val canSend = enabled && value.isNotBlank()
 
-    val animatedBgColor by animateColorAsState(
-        targetValue = bgColor,
-        animationSpec = tween(durationMillis = 250),
-        label = "btnColor"
-    )
-    val animatedGlowColor by animateColorAsState(
-        targetValue = if (recording) Color(0xFFEF4444).copy(alpha = 0.55f) else Color(0xFF2D7D31).copy(alpha = 0.55f),
-        animationSpec = tween(durationMillis = 250),
-        label = "glowColor"
-    )
-
-    val btnInteractionSource = remember { MutableInteractionSource() }
-    val isBtnPressed by btnInteractionSource.collectIsPressedAsState()
-    val btnPressScale by animateFloatAsState(
-        targetValue = if (isBtnPressed) 1.08f else 1f,
-        animationSpec = spring(dampingRatio = 0.6f, stiffness = 400f),
-        label = "btnPressScale"
-    )
-
-    Box(
-        modifier = Modifier
-            .size(170.dp)
-            .graphicsLayer { scaleX = btnPressScale; scaleY = btnPressScale },
-        contentAlignment = Alignment.Center
-    ) {
-        // ripple 링 2겹 — recording 중에만 표시
-        if (recording) {
-            val transition = rememberInfiniteTransition(label = "ripple")
-            repeat(2) { i ->
-                val delayMs = i * 600
-                val scale by transition.animateFloat(
-                    initialValue = 0.82f,
-                    targetValue  = 1.35f,
-                    animationSpec = infiniteRepeatable(
-                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "ripple_scale_$i"
-                )
-                val alpha by transition.animateFloat(
-                    initialValue = 1f,
-                    targetValue  = 0f,
-                    animationSpec = infiniteRepeatable(
-                        animation  = tween(durationMillis = 1200, delayMillis = delayMs, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "ripple_alpha_$i"
-                )
-                Box(
-                    modifier = Modifier
-                        .size(110.dp)
-                        .graphicsLayer { scaleX = scale; scaleY = scale; this.alpha = alpha }
-                        .clip(CircleShape)
-                        .border(3.dp, Color(0xFFEF4444).copy(alpha = 0.45f), CircleShape)
-                )
-            }
-        }
-
-        // 버튼 본체
-        Box(
-            modifier = Modifier
-                .size(110.dp)
-                .circleGlow(color = animatedGlowColor, blur = 28.dp, offsetY = 12.dp)
-                .clip(CircleShape)
-                .background(animatedBgColor)
-                .clickable(enabled = enabled, interactionSource = btnInteractionSource, indication = null, onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Crossfade(targetState = recording, animationSpec = tween(250), label = "btnIcon") { isRec ->
-                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(40.dp)) {
-                    if (isRec) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(RoundedCornerShape(7.dp))
-                                .background(BrandWhite)
-                        )
-                    } else {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = BrandWhite,
-                            modifier = Modifier.size(40.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-enum class BigActionMode { Mic, Stop }
-
-/** @Deprecated 새 BigActionButton에 ripple이 내장됨. 하위 호환용으로 유지. */
-@Composable
-fun RecordingPulse(modifier: Modifier = Modifier) {
-    Box(modifier = modifier.size(220.dp))
-}
-
-/** 녹음 타이머 표시 — 00:07 형식. */
-@Composable
-fun RecordingTimer(seconds: Int) {
-    val mm = (seconds / 60).toString().padStart(2, '0')
-    val ss = (seconds % 60).toString().padStart(2, '0')
-    Text(
-        text = "$mm:$ss",
-        fontSize = 48.sp,
-        fontWeight = FontWeight.Bold,
-        color = AppColor.textPrimary
-    )
-}
-
-/** STT 결과 인용 카드 — ❝ + 본문. */
-@Composable
-fun SttQuoteCard(text: String) {
-    Surface(
-        modifier = Modifier
+    Row(
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp),
-        shape = RoundedCornerShape(20.dp),
-        color = AppColor.greenSurface
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = AppColor.greenSurface,
+            modifier = Modifier.weight(1f)
         ) {
-            Text(text = "❝", fontSize = 26.sp, color = AppColor.greenPrimary, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.width(10.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleLarge,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                enabled = enabled,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(color = AppColor.textPrimary),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
+                cursorBrush = SolidColor(AppColor.accentDark),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = "메시지를 입력하세요",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = AppColor.textTertiary
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
             )
         }
-    }
-}
 
-/** STT 보조 액션 (다시 듣기 / 수정하기). */
-@Composable
-fun SttSecondaryButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    leadingIcon: ImageVector? = null
-) {
-    Surface(
-        modifier = modifier
-            .height(56.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        color = BrandWhite,
-        border = androidx.compose.foundation.BorderStroke(1.5.dp, AppColor.divider)
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (leadingIcon != null) {
-                    Icon(
-                        imageVector = leadingIcon,
-                        contentDescription = null,
-                        tint = AppColor.textTertiary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.size(6.dp))
-                }
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
+        Spacer(modifier = Modifier.width(10.dp))
 
-/** "다시 녹음하기" 보조 와이드 버튼. */
-@Composable
-fun WideSecondaryButton(
-    label: String,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(16.dp),
-        color = AppColor.surfaceElevated
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = AppColor.textTertiary,
-                fontWeight = FontWeight.SemiBold
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(if (canSend) AppColor.accentDark else AppColor.textTertiary)
+                .clickable(enabled = canSend, onClick = onSend),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = "전송",
+                tint = BrandWhite,
+                modifier = Modifier.size(24.dp)
             )
         }
     }
@@ -703,7 +562,6 @@ fun AiSpeechBubble(
  *
  * Idle / Processing  : float (위아래) + blink (눈 깜빡)
  * Playing            : float + blink + talk (입 움직임)
- * Recording          : pulse (확대/축소) + blink, float 없음
  *
  * [onClick] 이 있으면 탭 시 콜백을 호출한다 (AI 다시 말하기 등).
  */
@@ -715,7 +573,6 @@ fun CharacterImage(
 ) {
     val isFloating  = state is VoiceChatState.Idle || state is VoiceChatState.Processing || state is VoiceChatState.Playing
     val isTalking   = state is VoiceChatState.Playing
-    val isListening = state is VoiceChatState.Recording
 
     val transition = rememberInfiniteTransition(label = "char")
 
@@ -766,19 +623,7 @@ fun CharacterImage(
         label = "talk"
     )
 
-    // ── pulse: 1 → 1.06 → 1 (1.1 s, FastOutSlowIn, Reverse) ────────────
-    val pulseScale by transition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.06f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 550, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
-
     // 눈: blink 진행 중(>0.5)이면 감은 눈, 아니면 뜬 눈
-    //     Recording에서는 기본 뜬 눈 + blink 적용
     val eyeClosed  = blinkProgress > 0.5f
     val eyeRes     = if (eyeClosed) R.drawable.char_eye_closed else R.drawable.char_eye_open
 
@@ -798,7 +643,7 @@ fun CharacterImage(
         label = "pressScale"
     )
 
-    val scale = if (isListening) pulseScale else pressScale
+    val scale = pressScale
 
     val res = LocalContext.current.resources
     val bodyBitmap   = remember { ImageBitmap.imageResource(res, R.drawable.char_body) }
@@ -851,37 +696,6 @@ fun CharacterImage(
             modifier = Modifier.requiredSize(340.dp),
             contentScale = ContentScale.Fit,
             filterQuality = FilterQuality.High
-        )
-    }
-}
-
-/**
- * 원형 마이크 버튼 — Figma 하단 마이크 영역.
- *
- * 연두색(#F0FAE8) 원형 배경에 마이크 아이콘을 표시한다.
- * [enabled] = false 면 회색으로 비활성화된다.
- */
-@Composable
-fun MicCircleButton(
-    onClick: () -> Unit,
-    enabled: Boolean = true
-) {
-    val bgColor = if (enabled) AppColor.greenSurface else AppColor.divider
-    val iconTint = if (enabled) AppColor.accentDark else AppColor.textTertiary
-
-    Box(
-        modifier = Modifier
-            .size(130.dp)
-            .clip(CircleShape)
-            .background(bgColor)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Mic,
-            contentDescription = "마이크",
-            tint = iconTint,
-            modifier = Modifier.size(64.dp)
         )
     }
 }

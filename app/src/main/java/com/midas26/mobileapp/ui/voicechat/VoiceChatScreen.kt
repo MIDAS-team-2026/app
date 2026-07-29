@@ -76,6 +76,11 @@ fun VoiceChatScreen(
         mutableStateOf(false)
     }
 
+    // 텍스트 입력창 내용
+    var inputText by remember {
+        mutableStateOf("")
+    }
+
     /*
      * 대화 종료 버튼 클릭 후 2초 뒤 홈 화면으로 이동한다.
      *
@@ -118,13 +123,6 @@ fun VoiceChatScreen(
         }
     }
 
-    // 녹음이 시작되면 기존 TTS를 즉시 중단한다.
-    LaunchedEffect(state) {
-        if (state is VoiceChatState.Recording) {
-            ttsManager?.stop()
-        }
-    }
-
     /*
      * 화면에서 벗어날 때:
      * 1. TTS 중단
@@ -136,7 +134,7 @@ fun VoiceChatScreen(
             ttsManager?.stop()
             viewModel.finishPlaying()
 
-            if (viewModel.hasUploadedVoice()) {
+            if (viewModel.hasSentMessage()) {
                 viewModel.endSession()
                 onSessionEnded()
             }
@@ -256,16 +254,11 @@ fun VoiceChatScreen(
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                /*
-                 * 마이크 버튼과 종료 버튼을 같은 220dp Box 안에 배치한다.
-                 *
-                 * 따라서 종료 버튼을 추가해도 기존 마이크 버튼의
-                 * 중심 위치는 변경되지 않는다.
-                 */
+                // 텍스트 입력창 / 전송 중 웨이브폼
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(220.dp),
+                        .height(140.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     if (
@@ -281,106 +274,73 @@ fun VoiceChatScreen(
                             animated = true
                         )
                     } else {
-                        /*
-                         * 종료 중에도 버튼 위치가 변하지 않도록
-                         * BigActionButton은 그대로 유지한다.
-                         *
-                         * 단, 종료 중에는 클릭 동작을 실행하지 않는다.
-                         */
-                        Box(
-                            modifier = Modifier.offset(y = (-18).dp)
-                        ) {
-                            BigActionButton(
-                                mode = if (
-                                    state is VoiceChatState.Recording
-                                ) {
-                                    BigActionMode.Stop
-                                } else {
-                                    BigActionMode.Mic
-                                },
-                                onClick = {
-                                    if (isEnding) {
-                                        return@BigActionButton
-                                    }
-
-                                    if (
-                                        state is VoiceChatState.Recording
-                                    ) {
-                                        viewModel.stopRecording()
-                                    } else {
-                                        if (
-                                            state is VoiceChatState.Playing
-                                        ) {
-                                            ttsManager?.stop()
-                                            viewModel.finishPlaying()
-                                        }
-
-                                        viewModel.startRecording()
-                                    }
+                        TextInputRow(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            onSend = {
+                                if (isEnding) {
+                                    return@TextInputRow
                                 }
-                            )
-                        }
+
+                                if (state is VoiceChatState.Playing) {
+                                    ttsManager?.stop()
+                                    viewModel.finishPlaying()
+                                }
+
+                                val text = inputText
+                                inputText = ""
+                                viewModel.sendText(text)
+                            },
+                            enabled = state is VoiceChatState.Idle && !isEnding
+                        )
                     }
-
-                    // 대화종료 버튼
-                    EndConversationButton(
-                        isEnding = isEnding,
-                        onClick = {
-                            if (isEnding) {
-                                return@EndConversationButton
-                            }
-
-                            /*
-                             * 녹음 중이라면 먼저 녹음을 중단한다.
-                             */
-                            if (
-                                state is VoiceChatState.Recording
-                            ) {
-                                viewModel.stopRecording()
-                            }
-
-                            /*
-                             * AI 음성이 재생 중이라면 기존 TTS와
-                             * Playing 상태를 종료한다.
-                             */
-                            if (
-                                state is VoiceChatState.Playing
-                            ) {
-                                ttsManager?.stop()
-                                viewModel.finishPlaying()
-                            } else {
-                                ttsManager?.stop()
-                            }
-
-                            // 다시 말하기 안내 카드가 떠 있다면 숨긴다.
-                            showReplayHint = false
-
-                            /*
-                             * 먼저 종료 상태를 true로 변경하여
-                             * 말풍선 문구를 바꾼다.
-                             */
-                            isEnding = true
-
-                            /*
-                             * 캐릭터가 종료 인사를 말하도록 TTS를 재생한다.
-                             * 화면은 2초 후 자동으로 홈으로 이동한다.
-                             */
-                            ttsManager?.speak(
-                                END_CONVERSATION_MESSAGE
-                            ) {
-                                // 종료 TTS 완료 후 별도 문장 이동 없음
-                            }
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(
-                                start = 24.dp,
-                                end = 24.dp,
-                                bottom = 0.dp
-                            )
-                            .offset(y = 12.dp)
-                    )
                 }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                EndConversationButton(
+                    isEnding = isEnding,
+                    onClick = {
+                        if (isEnding) {
+                            return@EndConversationButton
+                        }
+
+                        /*
+                         * AI 음성이 재생 중이라면 기존 TTS와
+                         * Playing 상태를 종료한다.
+                         */
+                        if (
+                            state is VoiceChatState.Playing
+                        ) {
+                            ttsManager?.stop()
+                            viewModel.finishPlaying()
+                        } else {
+                            ttsManager?.stop()
+                        }
+
+                        // 다시 말하기 안내 카드가 떠 있다면 숨긴다.
+                        showReplayHint = false
+
+                        /*
+                         * 먼저 종료 상태를 true로 변경하여
+                         * 말풍선 문구를 바꾼다.
+                         */
+                        isEnding = true
+
+                        /*
+                         * 캐릭터가 종료 인사를 말하도록 TTS를 재생한다.
+                         * 화면은 2초 후 자동으로 홈으로 이동한다.
+                         */
+                        ttsManager?.speak(
+                            END_CONVERSATION_MESSAGE
+                        ) {
+                            // 종료 TTS 완료 후 별도 문장 이동 없음
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
             }

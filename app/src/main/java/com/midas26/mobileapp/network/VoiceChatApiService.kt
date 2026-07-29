@@ -1,15 +1,13 @@
 package com.midas26.mobileapp.network
 
-import okhttp3.MultipartBody
 import retrofit2.Response
+import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.Multipart
 import retrofit2.http.POST
-import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-/** 음성 대화 세션 시작 + 녹음 파일 업로드 + AI 응답 폴링 API. */
+/** 음성 대화 세션 시작 + 텍스트 메시지 전송 + AI 응답 폴링 API. */
 interface VoiceChatApiService {
 
     /**
@@ -22,19 +20,14 @@ interface VoiceChatApiService {
     ): Response<ApiResponse<SessionStartResponse>>
 
     /**
-     * 녹음 WAV 파일 업로드.
-     * 서버 → Python으로 STT + AI 응답 생성을 비동기 트리거한다.
+     * 사용자가 입력한 텍스트 메시지 전송.
+     * 서버 → Python으로 AI 응답 생성을 비동기 트리거한다.
      * @return audioRecordId — 이후 폴링에 사용
      */
-    @Multipart
-    @POST("api/voice/upload")
-    suspend fun uploadVoice(
-        @Query("userId")    userId:    Int,
-        @Query("sessionId") sessionId: Long,
-        @Part file: MultipartBody.Part,
-        @Query("recallQuestionId") recallQuestionId: Long? = null,
-        @Query("answerRole") answerRole: String? = null
-    ): Response<ApiResponse<VoiceUploadResponse>>
+    @POST("api/voice/text")
+    suspend fun sendText(
+        @Body request: TextMessageRequest
+    ): Response<ApiResponse<TextSendResponse>>
 
     /**
      * AI 답변 폴링.
@@ -66,9 +59,16 @@ data class SessionStartResponse(
     val openingQuestionText: String?
 )
 
-data class VoiceUploadResponse(
+data class TextMessageRequest(
+    val userId: Int,
+    val sessionId: Long,
+    val text: String,
+    val recallQuestionId: Long? = null,
+    val answerRole: String? = null
+)
+
+data class TextSendResponse(
     val audioRecordId: Long,
-    val audioFilePath: String,
     val turnOrder: Int,
     val recordedAt: String
 )

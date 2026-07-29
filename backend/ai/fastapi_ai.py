@@ -5,18 +5,11 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 from typing import Optional
-from groq import Groq
 
-import requests
-import torch
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
-from transformers import pipeline
 
 from voice_reply_handler import process_voice_reply, FIXED_QUESTIONS
 from main import run_record_mode, run_full_dummy_mode
@@ -28,11 +21,9 @@ from recall.recall_score_calculator import calculate_final_recall_score
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_STT_MODEL = "openai/whisper-small"
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
 
 app = FastAPI(title="MIDAS AI Server")
-groq_client = Groq()
 
 # ==========================
 # Pydantic Schemas
@@ -45,15 +36,6 @@ class ProcessRequest(BaseModel):
     audioPath: str | None = None
     transcriptText: str | None = None
     durationSec: float | None = 0.0
-
-class SttRequest(BaseModel):
-    audioUrl: str
-    language: str = "ko"
-
-class SttResponse(BaseModel):
-    transcriptText: str
-    confidence: Optional[float] = None
-    modelName: str
 
 class RecallAnalysisRequest(BaseModel):
     recallQuestionId: int
@@ -95,24 +77,6 @@ class MainArgsMock:
     transcript_text: str
     duration_sec: float
     mode: str = "record"
-
-# ==========================
-# STT Utility
-# ==========================
-@lru_cache(maxsize=1)
-def get_stt_pipeline():
-    model_name = os.getenv("STT_MODEL_NAME", DEFAULT_STT_MODEL)
-    device = 0 if torch.cuda.is_available() else -1
-    return model_name, pipeline(task="automatic-speech-recognition", model=model_name, device=device)
-
-def download_audio(audio_url: str) -> Path:
-    suffix = Path(audio_url.split("?")[0]).suffix or ".wav"
-    response = requests.get(audio_url, timeout=60)
-    response.raise_for_status()
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    with temp:
-        temp.write(response.content)
-    return Path(temp.name)
 
 def run_session_batch_analysis(
     session_id: int,
@@ -239,76 +203,6 @@ def process(req: ProcessRequest, background_tasks: BackgroundTasks):
     )
 
     return {"status": "processing"}
-
-@app.post("/api/stt", response_model=SttResponse)
-def transcribe(request: SttRequest):
-    audio_path = None
-    try:
-        # 1. URL로부터 오디오 파일 다운로드
-        audio_path = download_audio(request.audioUrl)
-
-        # 2. Groq Whisper API로 STT 수행
-        with open(audio_path, "rb") as audio_file:
-            transcription = groq_client.audio.transcriptions.create(
-                file=(os.path.basename(audio_path), audio_file.read()),
-                model="whisper-large-v3",
-                language=request.language if request.language else "ko",
-                response_format="json"
-            )
-
-        raw_text = transcription.text.strip()
-
-        # 3. 만약 텍스트가 비어있다면 정제 패스
-        if not raw_text:
-            return SttResponse(transcriptText="", confidence=None, modelName="groq-whisper-large-v3")
-
-        # 4. Groq 무료 LLM(Llama 3)을 사용해 AI 텍스트 정제 수행
-        # (간투사 제거, 오타 교정, 핵심 정보 보존)
-        refine_prompt = f"""
-        당신은 텍스트 정제 전문 AI입니다. 
-        어르신의 음성을 STT로 변환한 날것의 문장이 주어집니다. 아래 규칙에 맞게 깔끔한 문장으로 교정해 주세요.
-
-        [규칙]
-        1. 의미 없는 말더듬이나 간투사('어...', '음...', '그...', '아니 그게')는 자연스럽게 삭제하세요.
-        2. STT 오인식으로 보이는 명백한 맞춤법 오타나 조사 오류를 문맥에 맞게 수정하세요. (예: "오늘 월루일이지?" -> "오늘 월요일이지?")
-        3. 어르신이 하신 말씀의 본래 의미나 핵심 데이터(날짜, 이름, 장소)는 절대로 왜곡하거나 생략하지 마세요.
-        4. 오직 정제된 최종 결과 문장만 출력하세요. 다른 설명이나 따옴표는 절대 붙이지 마세요.
-
-        입력된 날것의 문장: "{raw_text}"
-        정제된 문장:
-        """.strip()
-
-        # llama-3.3-70b-versatile 또는 llama3-8b-8192 모델 사용
-        llm_response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": refine_prompt}],
-            temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
-        )
-
-        clean_text = llm_response.choices[0].message.content.strip()
-
-        # 5. 스프링이 원하는 포맷에 맞춰 정제된 텍스트 리턴
-        return SttResponse(
-            transcriptText=clean_text,
-            confidence=None,
-            modelName="groq-whisper-large-v3 + llama3"
-        )
-
-    except requests.RequestException as exc:
-        logger.error(f"오디오 다운로드 실패: {exc}")
-        raise HTTPException(status_code=400, detail=f"audio download failed: {exc}")
-
-    except Exception as exc:
-        logger.exception("STT 및 정제 연산 중 에러 발생: %s", exc)
-        raise HTTPException(status_code=500, detail=f"stt processing failed: {str(exc)}")
-
-    finally:
-        # 임시 오디오 파일 삭제 정리
-        if audio_path is not None and audio_path.exists():
-            try:
-                audio_path.unlink(missing_ok=True)
-            except Exception as e:
-                logger.warning(f"임시 파일 삭제 실패: {e}")
 
 # @app.post("/api/analysis/record")
 # def analyze_single_record(req: RecordAnalysisRequest):
