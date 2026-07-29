@@ -16,6 +16,9 @@ class RecallTimingAction(str, Enum):
     ASK_RECALL = "ASK_RECALL"
 
 
+MAX_CONSECUTIVE_TOPIC_TURNS = 3
+
+
 @dataclass(frozen=True)
 class ConversationDecision:
     action: ConversationAction
@@ -36,6 +39,7 @@ def decide_conversation_action(
     should_change_topic: bool,
     needs_memory_detail: bool = False,
     has_followup_context: bool = False,
+    consecutive_topic_turns: int = 0,
 ) -> ConversationDecision:
     if after_recall_answer:
         return ConversationDecision(
@@ -49,6 +53,16 @@ def decide_conversation_action(
             action=ConversationAction.CHANGE_TOPIC,
             stage="OPEN",
             reason="latest_answer_cannot_support_a_followup",
+        )
+
+    if (
+        has_followup_context
+        and consecutive_topic_turns >= MAX_CONSECUTIVE_TOPIC_TURNS
+    ):
+        return ConversationDecision(
+            action=ConversationAction.CHANGE_TOPIC,
+            stage="OPEN",
+            reason="current_topic_has_enough_detail",
         )
 
     if candidate_count <= 0 and not has_followup_context:

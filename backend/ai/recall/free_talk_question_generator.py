@@ -115,6 +115,7 @@ POSITIVE_CUE_PATTERNS = [
     "즐거",
     "맛있",
     "상쾌",
+    "개운",
     "편안",
     "기쁘",
     "반가",
@@ -123,6 +124,8 @@ POSITIVE_CUE_PATTERNS = [
 
 IMPROVEMENT_CUE_PATTERNS = [
     "나아",
+    "지금은 괜찮",
+    "이제 괜찮",
     "괜찮아졌",
     "호전",
 ]
@@ -822,7 +825,11 @@ def build_fallback_with_empathy(
 
         return f"다행이네요. {question}"
 
-    if any(pattern in latest_text for pattern in POSITIVE_CUE_PATTERNS):
+    positive_evidence_text = latest_text
+    for pattern in ("좋겠", "좋을 것 같", "좋을것 같"):
+        positive_evidence_text = positive_evidence_text.replace(pattern, "")
+
+    if any(pattern in positive_evidence_text for pattern in POSITIVE_CUE_PATTERNS):
         if question.startswith(negative_prefixes):
             _prefix, separator, remainder = question.partition(".")
             question = remainder.strip() if separator and remainder.strip() else question
