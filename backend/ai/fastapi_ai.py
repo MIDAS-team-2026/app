@@ -114,7 +114,11 @@ def download_audio(audio_url: str) -> Path:
         temp.write(response.content)
     return Path(temp.name)
 
-def run_session_batch_analysis(session_id: int, user_id: int) -> None:
+def run_session_batch_analysis(
+    session_id: int,
+    user_id: int,
+    current_record_id: int | None = None,
+) -> None:
     """
     세션 종료 후 전체 record를 기준으로 회상 분석과 최종 위험도 저장을 실행한다.
     """
@@ -152,6 +156,8 @@ def run_session_batch_analysis(session_id: int, user_id: int) -> None:
         session_id=session_id,
         speech_risk_score=speech_risk_score,
         base_url=SPRING_BASE_URL,
+        target_recall_record_id=current_record_id,
+        send_all_recall_results=False,
     )
 
     logger.info(
@@ -194,7 +200,7 @@ def run_upload_analysis(
     )
     run_record_mode(mock_args)
 
-    run_session_batch_analysis(session_id, user_id)
+    run_session_batch_analysis(session_id, user_id, current_record_id=record_id)
     logger.info("upload-analysis 완료 recordId=%s sessionId=%s", record_id, session_id)
 
 # ==========================
