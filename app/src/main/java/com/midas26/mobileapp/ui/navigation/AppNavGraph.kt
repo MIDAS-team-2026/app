@@ -12,6 +12,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -59,9 +62,12 @@ import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
+import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
+import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
+import kotlinx.coroutines.delay
 
 private const val GuardianManagedUsersRoute = "guardian_managed_users"
 
@@ -105,9 +111,98 @@ fun AppNavHost(
         LocalActivity.current as ComponentActivity
     )
 
-    val role = PrefsManager.from(context).getUserRole()
+    val tutorialViewModel: TutorialViewModel = viewModel()
+    val tutorialState by tutorialViewModel.state.collectAsState()
+
+    val prefs = PrefsManager.from(context)
+    val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
+    val isPatient = role == PrefsManager.ROLE_USER
     val homeRoute = if (isGuardian) Routes.GuardianHome else Routes.UserHome
+
+    var hasAttemptedTutorialAutoStart by remember {
+        mutableStateOf(false)
+    }
+
+    /*
+     * 설정에서 사용자가 선택한 다시 보기 대상을 임시로 보관합니다.
+     *
+     * null이면 다시 보기 요청이 없는 상태입니다.
+     * 튜토리얼 완료 기록은 변경하지 않습니다.
+     */
+    var pendingReplayTarget by remember {
+        mutableStateOf<TutorialReplayTarget?>(null)
+    }
+
+    LaunchedEffect(
+        currentRoute,
+        isPatient,
+        tutorialState.isRunning
+    ) {
+        if (
+            isPatient &&
+            currentRoute == Routes.UserHome &&
+            !tutorialState.isRunning &&
+            !hasAttemptedTutorialAutoStart
+        ) {
+            hasAttemptedTutorialAutoStart = true
+
+            if (prefs.shouldStartTutorial()) {
+                tutorialViewModel.startFullTutorial()
+            }
+        }
+    }
+
+    /*
+     * 설정에서 선택한 화면으로 이동이 완료된 뒤 해당 튜토리얼을 시작합니다.
+     *
+     * 화면 전환 직후 바로 ViewModel 상태를 변경하면 대상 화면의 Composable과
+     * 하이라이트 Bounds가 아직 준비되지 않은 상태일 수 있으므로 잠시 기다립니다.
+     *
+     * 다시 보기에서는 PrefsManager의 최초 튜토리얼 완료 기록을 변경하지 않습니다.
+     */
+    LaunchedEffect(
+        currentRoute,
+        pendingReplayTarget,
+        isPatient
+    ) {
+        val target = pendingReplayTarget ?: return@LaunchedEffect
+
+        if (!isPatient) {
+            pendingReplayTarget = null
+            return@LaunchedEffect
+        }
+
+        val targetRoute = when (target) {
+            TutorialReplayTarget.FULL,
+            TutorialReplayTarget.HOME -> Routes.UserHome
+
+            TutorialReplayTarget.VOICE_CHAT -> Routes.VoiceChat
+            TutorialReplayTarget.ANALYSIS -> Routes.AnalysisResult
+            TutorialReplayTarget.SETTINGS -> Routes.Settings
+        }
+
+        if (currentRoute != targetRoute) {
+            return@LaunchedEffect
+        }
+
+        /*
+         * 대상 화면이 한 번 구성되고 onGloballyPositioned가 실행될 시간을 확보합니다.
+         * 이 지연은 화면만 이동하고 튜토리얼이 보이지 않는 현상을 줄여줍니다.
+         */
+        delay(180)
+
+        /*
+         * 대기 중 사용자가 다른 요청을 선택한 경우 오래된 요청을 실행하지 않습니다.
+         */
+        if (pendingReplayTarget != target || currentRoute != targetRoute) {
+            return@LaunchedEffect
+        }
+
+        pendingReplayTarget = null
+        hasAttemptedTutorialAutoStart = true
+        tutorialViewModel.startReplayTutorial(target)
+    }
 
     val selectedTab: TabId = when (currentRoute) {
         Routes.UserHome, Routes.GuardianHome ->
@@ -143,7 +238,21 @@ fun AppNavHost(
                     tabs = if (isGuardian) guardianTabs else userTabs,
                     selectedTab = selectedTab,
                     onTabClick = { tabId ->
-                        val dest = when (tabId) {
+                        /*
+                         * 사용자가 하단 탭을 직접 누른 경우:
+                         * 1. 대기 중인 다시 보기 요청을 취소하고
+                         * 2. 실행 중인 튜토리얼을 종료합니다.
+                         *
+                         * 튜토리얼 내부의 '다음' 버튼을 통한 화면 이동은
+                         * 이 하단 탭 콜백을 거치지 않으므로 영향을 받지 않습니다.
+                         */
+                        pendingReplayTarget = null
+
+                        if (tutorialState.isRunning) {
+                            tutorialViewModel.stopTutorial()
+                        }
+
+                        val destination = when (tabId) {
                             UserHomeTab.Home -> Routes.UserHome
                             UserHomeTab.Chat -> Routes.VoiceChat
                             UserHomeTab.Analysis -> Routes.AnalysisResult
@@ -153,15 +262,13 @@ fun AppNavHost(
                             GuardianHomeTab.Analysis -> Routes.AnalysisUserSelect
                             GuardianHomeTab.Location -> Routes.LocationList
                             GuardianHomeTab.Settings -> Routes.Settings
-
-                            else -> null
                         }
 
-                        dest?.let {
-                            navController.navigate(it) {
-                                popUpTo(homeRoute) { inclusive = false }
-                                launchSingleTop = true
+                        navController.navigate(destination) {
+                            popUpTo(homeRoute) {
+                                inclusive = false
                             }
+                            launchSingleTop = true
                         }
                     },
                     accent = if (isGuardian) AppColor.guardianDark else AppColor.greenSecondary
@@ -220,6 +327,8 @@ fun AppNavHost(
                     LoginFormScreen(
                         onNavigateToHome = {
                             analysisViewModel.refresh()
+                            hasAttemptedTutorialAutoStart = false
+
                             val home =
                                 if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
                                     Routes.GuardianHome
@@ -410,6 +519,7 @@ fun AppNavHost(
 
                 composable(Routes.UserHome) {
                     UserHomeScreen(
+                        tutorialViewModel = tutorialViewModel,
                         userName = PrefsManager.from(context).getUserName(),
                         streakDays = analysisViewModel.streakDays,
                         weeklyChecks = analysisViewModel.weeklyChecks,
@@ -572,13 +682,18 @@ fun AppNavHost(
                         )
                     } else {
                         SettingsScreen(
-                            userName = PrefsManager.from(context).getUserName(),
+                            tutorialViewModel = tutorialViewModel,
+                            userName = prefs.getUserName(),
                             weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
                             streakDays = analysisViewModel.streakDays,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.Settings)
                             },
                             onLogout = {
+                                pendingReplayTarget = null
+                                tutorialViewModel.stopTutorial()
+                                hasAttemptedTutorialAutoStart = false
+
                                 navController.navigate(Routes.Login) {
                                     popUpTo(0) { inclusive = true }
                                 }
@@ -591,6 +706,48 @@ fun AppNavHost(
                             },
                             onProfileEdit = {
                                 navController.navigate(Routes.ProfileEdit)
+                            },
+                            onReplayTutorial = { target ->
+                                /*
+                                 * 다시 보기 실행 전 기존 튜토리얼 상태를 정리합니다.
+                                 * 최초 완료 기록은 변경하지 않습니다.
+                                 */
+                                tutorialViewModel.stopTutorial()
+                                hasAttemptedTutorialAutoStart = true
+
+                                val destination = when (target) {
+                                    TutorialReplayTarget.FULL,
+                                    TutorialReplayTarget.HOME -> Routes.UserHome
+
+                                    TutorialReplayTarget.VOICE_CHAT -> Routes.VoiceChat
+                                    TutorialReplayTarget.ANALYSIS -> Routes.AnalysisResult
+                                    TutorialReplayTarget.SETTINGS -> Routes.Settings
+                                }
+
+                                if (currentRoute == destination) {
+                                    /*
+                                     * 현재 화면의 사용법을 선택한 경우에는 화면 이동이 없으므로
+                                     * pending 상태를 남기지 않고 즉시 시작합니다.
+                                     */
+                                    pendingReplayTarget = null
+                                    tutorialViewModel.startReplayTutorial(target)
+                                } else {
+                                    /*
+                                     * 다른 화면의 사용법을 선택한 경우:
+                                     * 1. 다시 보기 대상을 저장하고
+                                     * 2. 해당 화면으로 이동한 뒤
+                                     * 3. 상단 LaunchedEffect에서 화면 구성이 끝난 후 시작합니다.
+                                     */
+                                    pendingReplayTarget = target
+
+                                    navController.navigate(destination) {
+                                        popUpTo(Routes.UserHome) {
+                                            inclusive = false
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+                                }
                             }
                         )
                     }
@@ -699,6 +856,7 @@ fun AppNavHost(
 
                 composable(Routes.VoiceChat) {
                     VoiceChatScreen(
+                        tutorialViewModel = tutorialViewModel,
                         onBack = {
                             navController.popBackStackIfCurrent(Routes.VoiceChat)
                         },
@@ -718,6 +876,20 @@ fun AppNavHost(
                                 popUpTo(Routes.UserHome) {
                                     inclusive = false
                                 }
+                                launchSingleTop = true
+                            }
+                        },
+                        onNavigateAnalysis = {
+                            /*
+                             * 전체 튜토리얼의 음성 대화 단계가 끝나면
+                             * 분석 결과 화면으로 이동합니다.
+                             *
+                             * TutorialViewModel의 currentScreen은
+                             * VoiceChatScreen에서 ANALYSIS로 먼저 변경됩니다.
+                             */
+                            analysisViewModel.refresh()
+
+                            navController.navigate(Routes.AnalysisResult) {
                                 launchSingleTop = true
                             }
                         }
@@ -768,9 +940,22 @@ fun AppNavHost(
 
                 composable(Routes.AnalysisResult) {
                     AnalysisResultScreen(
+                        tutorialViewModel = tutorialViewModel,
                         onBack = {
                             analysisViewModel.resetToSelf()
                             navController.popBackStackIfCurrent(Routes.AnalysisResult)
+                        },
+                        onNavigateSettings = {
+                            /*
+                             * 전체 튜토리얼의 분석 결과 단계가 끝나면
+                             * 설정 화면으로 이동합니다.
+                             *
+                             * TutorialViewModel의 currentScreen은
+                             * AnalysisResultScreen에서 SETTINGS로 먼저 변경됩니다.
+                             */
+                            navController.navigate(Routes.Settings) {
+                                launchSingleTop = true
+                            }
                         },
                         viewModel = analysisViewModel
                     )
