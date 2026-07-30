@@ -10,10 +10,12 @@
 5. 회상 질문 답변은 RECALL로 저장하고, 이후 다시 자유대화로 복귀한다.
 """
 
+import hashlib
 import logging
 import os
 import re
 import requests
+from datetime import date
 
 from recall.free_talk_question_generator import (
     generate_safe_followup_question,
@@ -62,7 +64,7 @@ FIXED_QUESTIONS = [
         "expectedAnswer": "TODAY_WEEKDAY",
     },
     {
-        "questionText": "오늘 날짜도 기억나세요?",
+        "questionText": "오늘 날짜가 며칠인지 기억나세요?",
         "questionType": "ORIENTATION",
         "category": "INITIAL_FIXED",
         "expectedAnswer": "TODAY_DATE",
@@ -586,7 +588,44 @@ def _find_or_create_fixed_question(user_id: int, question_data: dict) -> dict | 
     )
 
 
-def _is_fixed_questions_done_today(user_id: int) -> bool:
+def _link_fixed_question_answer(
+    record_id: int,
+    user_id: int,
+    question_data: dict,
+) -> bool:
+    """고정 질문을 찾거나 만들고 현재 레코드에 FIXED로 연결한다."""
+    fixed_question = _find_or_create_fixed_question(
+        user_id=user_id,
+        question_data=question_data,
+    )
+    fixed_question_id = fixed_question.get("questionId") if fixed_question else None
+
+    if not fixed_question_id:
+        logger.error("고정 질문 ID 확인 실패로 다음 단계 중단: recordId=%s", record_id)
+        return False
+
+    linked = _link_recall_question(
+        record_id=record_id,
+        recall_question_id=fixed_question_id,
+        answer_role="FIXED",
+    )
+
+    if not linked:
+        logger.error(
+            "고정 질문 답변 연결 실패로 다음 단계 중단: recordId=%s questionId=%s",
+            record_id,
+            fixed_question_id,
+        )
+        return False
+
+    return True
+
+
+def _get_fixed_question_status(user_id: int) -> dict:
+    """
+    {"doneToday": bool, "onboardingDone": bool} 반환.
+    onboardingDone=False면 아직 최초 5문항 온보딩 중, True면 이후 하루 1문항 모드.
+    """
     for attempt in range(2):
         try:
             resp = requests.get(
@@ -594,26 +633,31 @@ def _is_fixed_questions_done_today(user_id: int) -> bool:
                 timeout=10,
             )
             resp.raise_for_status()
-            return bool(resp.json().get("data"))
+            data = resp.json().get("data") or {}
+            return {
+                "doneToday": bool(data.get("doneToday")),
+                "onboardingDone": bool(data.get("onboardingDone")),
+            }
         except Exception as e:
             if attempt == 0:
                 logger.warning(
-                    "고정질문 완료 여부 조회 재시도: userId=%s error=%s",
+                    "고정질문 상태 조회 재시도: userId=%s error=%s",
                     user_id,
                     e,
                 )
                 continue
 
-            logger.error("고정질문 완료 여부 조회 실패: userId=%s error=%s", user_id, e)
+            logger.error("고정질문 상태 조회 실패: userId=%s error=%s", user_id, e)
 
-    return False
+    return {"doneToday": False, "onboardingDone": False}
 
 
-def _mark_fixed_questions_done_today(user_id: int) -> bool:
+def _mark_fixed_questions_done_today(user_id: int, onboarding: bool = False) -> bool:
     for attempt in range(2):
         try:
             resp = requests.post(
                 f"{SPRING_BASE_URL}/api/voice/fixed-complete/{user_id}",
+                params={"onboarding": str(onboarding).lower()},
                 timeout=10,
             )
             resp.raise_for_status()
@@ -630,6 +674,18 @@ def _mark_fixed_questions_done_today(user_id: int) -> bool:
             logger.error("고정질문 완료 기록 실패: userId=%s error=%s", user_id, e)
 
     return False
+
+
+def _pick_daily_fixed_question_index(user_id: int, on_date: date | None = None) -> int:
+    """
+    userId + 날짜를 시드로 결정론적 인덱스를 뽑는다.
+    같은 유저가 같은 날 여러 번 호출해도(세션 시작 인사말 / 실제 답변 채점) 항상 같은 질문을 가리켜야
+    인사말에서 말한 질문과 실제로 채점하는 질문이 어긋나지 않는다.
+    """
+    on_date = on_date or date.today()
+    seed = f"{user_id}:{on_date.isoformat()}"
+    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    return int(digest, 16) % len(FIXED_QUESTIONS)
 
 
 def _count_fixed_answers(session_records: list[dict]) -> int:
@@ -2471,10 +2527,9 @@ def _get_next_normal_question(
         after_recall_answer=after_recall_answer,
         should_change_topic=should_change_topic,
         needs_memory_detail=needs_memory_detail,
-        has_followup_context=(
-            followup_topic is not None
-            and followup_topic not in {"LOW_INFO", "NEGATIVE"}
-        ),
+        # LOW_INFO/NEGATIVE도 "주제가 감지되긴 했다"로 취급한다.
+        # 완전히 주제가 없을 때(followup_topic is None)만 새 주제를 연다.
+        has_followup_context=followup_topic is not None,
     )
 
     if decision.action in {
@@ -2763,9 +2818,10 @@ def process_voice_reply(
             return
 
         if current_answer_role == "FIXED":
+            fixed_status = _get_fixed_question_status(user_id)
             fixed_answer_count = _count_fixed_answers(session_records)
 
-            if fixed_answer_count < len(FIXED_QUESTIONS):
+            if not fixed_status["onboardingDone"] and fixed_answer_count < len(FIXED_QUESTIONS):
                 _save_ai_reply(
                     record_id=record_id,
                     reply_text=FIXED_QUESTIONS[fixed_answer_count]["questionText"],
@@ -2777,12 +2833,17 @@ def process_voice_reply(
                 )
                 return
 
-            _mark_fixed_questions_done_today(user_id)
+            # 온보딩 중 5번째까지 다 왔거나, 온보딩 이후 하루 1문항을 이미 답한 경우 —
+            # 자유대화로 넘어간다.
+            _mark_fixed_questions_done_today(
+                user_id,
+                onboarding=not fixed_status["onboardingDone"],
+            )
             _save_ai_reply(
                 record_id=record_id,
                 reply_text=_get_next_normal_question(0, session_records),
             )
-            logger.info("마지막 고정 답변 이후 자유대화 질문 저장 재개: recordId=%s", record_id)
+            logger.info("고정 답변 이후 자유대화 질문 저장 재개: recordId=%s", record_id)
             return
 
         # 1. 직전 회상 질문에 대한 답변이면 RECALL로 연결하고 자유대화로 복귀한다.
@@ -2875,62 +2936,68 @@ def process_voice_reply(
             )
             return
 
-        # 2. 초기 고정 질문 답변 처리 (하루 1회만 노출)
-        fixed_answer_count = _count_fixed_answers(session_records)
-        already_done_today = (
-            fixed_answer_count == 0 and _is_fixed_questions_done_today(user_id)
-        )
+        # 2. 고정 질문 처리
+        #    - 온보딩(최초) 중이면 5개를 순서대로 다 물어본다.
+        #    - 온보딩이 끝났으면 그 이후로는 매일 5개 중 1개만(userId+날짜로 고정된 무작위) 물어본다.
+        #    - 오늘 이미 물어봤으면 바로 자유대화로 진입한다.
+        fixed_status = _get_fixed_question_status(user_id)
+        already_done_today = fixed_status["doneToday"]
 
         if already_done_today:
             logger.info("오늘 고정 질문을 이미 완료함. 현재 답변부터 자유대화로 처리.")
 
-        if not already_done_today and fixed_answer_count < len(FIXED_QUESTIONS):
-            current_question = FIXED_QUESTIONS[fixed_answer_count]
+        elif fixed_status["onboardingDone"]:
+            daily_index = _pick_daily_fixed_question_index(user_id)
 
-            fixed_question = _find_or_create_fixed_question(
-                user_id=user_id,
-                question_data=current_question,
-            )
-
-            fixed_question_id = fixed_question.get("questionId") if fixed_question else None
-
-            if not fixed_question_id:
-                logger.error("고정 질문 ID 확인 실패로 다음 단계 중단: recordId=%s", record_id)
-                return
-
-            linked = _link_recall_question(
+            if not _link_fixed_question_answer(
                 record_id=record_id,
-                recall_question_id=fixed_question_id,
-                answer_role="FIXED",
+                user_id=user_id,
+                question_data=FIXED_QUESTIONS[daily_index],
+            ):
+                return
+
+            logger.info(
+                "온보딩 이후 하루 1회 고정 질문 완료: index=%s. 자유대화 단계로 전환.",
+                daily_index,
             )
-
-            if not linked:
-                logger.error(
-                    "고정 질문 답변 연결 실패로 다음 단계 중단: recordId=%s questionId=%s",
-                    record_id,
-                    fixed_question_id,
-                )
-                return
-
-            next_index = fixed_answer_count + 1
-
-            if next_index < len(FIXED_QUESTIONS):
-                _save_ai_reply(
-                    record_id=record_id,
-                    reply_text=FIXED_QUESTIONS[next_index]["questionText"],
-                )
-
-                logger.info("초기 고정 질문 제공 완료: nextIndex=%s", next_index)
-                return
-
-            logger.info("초기 고정 질문 5개 완료. 자유대화 단계로 전환.")
-            _mark_fixed_questions_done_today(user_id)
+            _mark_fixed_questions_done_today(user_id, onboarding=False)
 
             _save_ai_reply(
                 record_id=record_id,
                 reply_text=_get_next_normal_question(0, session_records),
             )
             return
+
+        else:
+            fixed_answer_count = _count_fixed_answers(session_records)
+
+            if fixed_answer_count < len(FIXED_QUESTIONS):
+                if not _link_fixed_question_answer(
+                    record_id=record_id,
+                    user_id=user_id,
+                    question_data=FIXED_QUESTIONS[fixed_answer_count],
+                ):
+                    return
+
+                next_index = fixed_answer_count + 1
+
+                if next_index < len(FIXED_QUESTIONS):
+                    _save_ai_reply(
+                        record_id=record_id,
+                        reply_text=FIXED_QUESTIONS[next_index]["questionText"],
+                    )
+
+                    logger.info("초기 고정 질문 제공 완료: nextIndex=%s", next_index)
+                    return
+
+                logger.info("초기 고정 질문 5개(온보딩) 완료. 자유대화 단계로 전환.")
+                _mark_fixed_questions_done_today(user_id, onboarding=True)
+
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text=_get_next_normal_question(0, session_records),
+                )
+                return
 
         # 3. 충분히 축적되고 한 턴 이상 지난 memoryPoint가 있으면 회상 질문 생성
         updated_records = _fetch_session_records(session_id)

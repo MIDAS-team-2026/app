@@ -4,6 +4,7 @@ import com.example.backend.Model.DTO.ApiResponse;
 import com.example.backend.Model.DTO.analysis.RecallRecordLinkDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyRequestDTO;
 import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
+import com.example.backend.Model.DTO.analysis.FixedQuestionStatusDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.analysis.TextMessageRequestDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
@@ -115,12 +116,12 @@ public class VoiceController {
     }
 
     /**
-     * 오늘 고정질문(초기 5문항)을 이미 완료했는지 조회. Python AI가 호출한다.
+     * 오늘 고정질문을 이미 완료했는지 + 온보딩(최초 5문항)을 마쳤는지 조회. Python AI가 호출한다.
      */
     @GetMapping("/fixed-status/{userId}")
-    public ResponseEntity<ApiResponse<Boolean>> getFixedQuestionStatus(@PathVariable Integer userId) {
+    public ResponseEntity<ApiResponse<FixedQuestionStatusDTO>> getFixedQuestionStatus(@PathVariable Integer userId) {
         try {
-            return ResponseEntity.ok(ApiResponse.success(voiceService.isFixedQuestionsDoneToday(userId)));
+            return ResponseEntity.ok(ApiResponse.success(voiceService.getFixedQuestionStatus(userId)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404)
                     .body(ApiResponse.fail(404, e.getMessage()));
@@ -128,12 +129,15 @@ public class VoiceController {
     }
 
     /**
-     * 오늘 고정질문(초기 5문항)을 완료했다고 기록. Python AI가 5문항 완료 시 호출한다.
+     * 오늘 고정질문을 완료했다고 기록. Python AI가 호출한다.
+     * @param onboarding true면 최초 5문항 온보딩이 이번에 완료된 것 (onboarding 플래그도 함께 설정)
      */
     @PostMapping("/fixed-complete/{userId}")
-    public ResponseEntity<ApiResponse<Void>> markFixedQuestionsComplete(@PathVariable Integer userId) {
+    public ResponseEntity<ApiResponse<Void>> markFixedQuestionsComplete(
+            @PathVariable Integer userId,
+            @RequestParam(value = "onboarding", defaultValue = "false") boolean onboarding) {
         try {
-            voiceService.markFixedQuestionsDoneToday(userId);
+            voiceService.markFixedQuestionsDoneToday(userId, onboarding);
             return ResponseEntity.ok(ApiResponse.success());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404)
