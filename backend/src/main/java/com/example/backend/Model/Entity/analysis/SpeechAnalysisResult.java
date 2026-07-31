@@ -100,6 +100,42 @@ public class SpeechAnalysisResult {
     @Column(name = "filler_count")
     private Integer fillerCount;
 
+    @Column(name = "egemaps_available")
+    private Boolean egemapsAvailable;
+
+    @Column(name = "egemaps_error", length = 500)
+    private String egemapsError;
+
+    @Column(name = "f0_semitone_mean")
+    private Float f0SemitoneMean;
+
+    @Column(name = "f0_semitone_stddev_norm")
+    private Float f0SemitoneStddevNorm;
+
+    @Column(name = "jitter_local")
+    private Float jitterLocal;
+
+    @Column(name = "shimmer_local_db")
+    private Float shimmerLocalDb;
+
+    @Column(name = "hnr_db")
+    private Float hnrDb;
+
+    @Column(name = "voiced_segments_per_sec")
+    private Float voicedSegmentsPerSec;
+
+    @Column(name = "mean_voiced_segment_length")
+    private Float meanVoicedSegmentLength;
+
+    @Column(name = "mean_unvoiced_segment_length")
+    private Float meanUnvoicedSegmentLength;
+
+    @Column(name = "voice_break_count")
+    private Integer voiceBreakCount;
+
+    @Column(name = "voice_break_ratio")
+    private Float voiceBreakRatio;
+
     /** Python speech_abnormality_scoring: 참고군 대비 유사도 (0~1) */
     @Column(name = "dysarthria_similarity_score")
     private Float dysarthriaSimilarityScore;
