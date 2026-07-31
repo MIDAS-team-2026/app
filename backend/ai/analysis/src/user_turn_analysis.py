@@ -2,6 +2,7 @@ from pathlib import Path
 import os
 import pickle
 import tempfile
+import joblib
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import logging
@@ -47,8 +48,12 @@ def load_pickle_file(path: Path):
     if not path.exists():
         raise FileNotFoundError(f"필요한 reference 파일을 찾을 수 없습니다: {path}")
 
-    with open(path, "rb") as f:
-        data = pickle.load(f)
+    try:
+        data = joblib.load(path)
+    except Exception:
+        with open(path, "rb") as f:
+            data = pickle.load(f)
+
     logger.info("load_pickle_file loaded type=%s shape=%s",
                 type(data).__name__, getattr(data, 'shape', len(data) if hasattr(data, '__len__') else 'N/A'))
     return data
@@ -439,6 +444,31 @@ def analyze_user_turn(
         logger.info("analyze_user_turn_audio done available=%s error=%s",
                     audio_result.get("audio_analysis_available"),
                     audio_result.get("audio_analysis_error"))
+
+    effective_duration_sec = duration_sec or 0
+    try:
+        effective_duration_sec = float(effective_duration_sec)
+    except (TypeError, ValueError):
+        effective_duration_sec = 0
+
+    audio_duration = audio_result.get("audio_duration")
+    if effective_duration_sec <= 0 and audio_duration:
+        effective_duration_sec = float(audio_duration)
+
+    if effective_duration_sec > 0 and effective_duration_sec != baseline_result.get("record_time_float"):
+        baseline_result = analyze_user_turn_baseline(
+            record_id=record_id,
+            session_id=session_id,
+            transcript_text=transcript_text,
+            duration_sec=effective_duration_sec,
+        )
+
+    speech_duration = audio_result.get("speech_duration")
+    if speech_duration and speech_duration > 0:
+        audio_result["articulation_rate_word"] = round(
+            baseline_result.get("word_count", 0) / speech_duration,
+            3,
+        )
 
     # 4. raw score는 baseline + 음향 이상 점수의 합으로 정의
     raw_speech_score = (

@@ -254,21 +254,20 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
      */
     val graphHighlightIndex: Int
         get() {
-            // 드래그 중: 현재 호버 중인 날짜 우선
             val dragDate = dragHighlightDate
             if (dragDate != null) {
                 val idx = graphPoints.indexOfFirst { it.date?.startsWith(dragDate.take(10)) == true }
                 if (idx >= 0) return idx
             }
-            // 날짜 직접 선택 중
+
             val selDate = selectedDayScore?.date
             if (selDate != null) {
                 val idx = graphPoints.indexOfFirst { it.date?.startsWith(selDate.take(10)) == true }
                 return if (idx >= 0) idx else graphPoints.lastIndex
             }
-            // 오늘 데이터가 있으면 오늘(마지막) 강조
+
             if (hasTodayData) return graphPoints.lastIndex
-            // fallback: latest 날짜가 그래프 안에 있는지 확인
+
             val latestDate = analyzedAt?.take(10) ?: return -1
             val idx = graphPoints.indexOfFirst { it.date?.startsWith(latestDate) == true }
             return if (idx >= 0) idx else -1
@@ -295,7 +294,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val sel = selectedDayScore
             val dRisk       = sel?.riskLevel   ?: riskLevel
             val dSpeechRisk = sel?.speechScore ?: speechScore
-            val dTextRisk   = sel?.textScore   ?: textScore
+            val dTextScore  = sel?.textScore   ?: textScore
             val dRecall     = sel?.recallScore ?: recallScore
 
             return listOf(
@@ -323,7 +322,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.AutoMirrored.Filled.MenuBook,
                     label     = "텍스트 점수",
-                    valueText = formatHealthScoreFromRisk(dTextRisk),
+                    valueText = formatScore(dTextScore),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 )
@@ -338,13 +337,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     var streakDays by mutableIntStateOf(0)
         private set
 
-    // 포인트 탭 시 선택된 날짜 상세
     var selectedDayScore by mutableStateOf<DailyScoreResponse?>(null)
         private set
+
     var isDayLoading by mutableStateOf(false)
         private set
 
     private val dateFmtVm = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
     private fun parseDateVm(s: String): Calendar? = runCatching {
         Calendar.getInstance().also { it.time = dateFmtVm.parse(s)!! }
     }.getOrNull()
@@ -352,6 +352,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private suspend fun doLoadWeeklyScores() {
         val userId = resolveUserId()
         if (userId <= 0) return
+
         runCatching { api.getWeeklyScores(userId) }
             .onSuccess { resp ->
                 resp.body()?.data?.let { list ->
@@ -359,6 +360,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     graphPoints = list.map { d ->
                         val cal = d.date?.let { parseDateVm(it.take(10)) }
                         val label = cal?.let { dayNames[it.get(Calendar.DAY_OF_WEEK) - 1] } ?: ""
+
                         DailyScore(
                             dayLabel = label,
                             score    = displayHealthScore(d.finalRiskScore),
@@ -380,6 +382,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     fun onGraphPointTapped(dateStr: String?) {
         val userId = resolveUserId()
         if (userId <= 0 || dateStr == null) return
+
         viewModelScope.launch {
             isDayLoading = true
             runCatching { api.getDailyScore(userId, dateStr) }
@@ -388,7 +391,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun clearSelectedDay() { selectedDayScore = null }
+    fun clearSelectedDay() {
+        selectedDayScore = null
+    }
 
     // ── 그래프 롱프레스 드래그 ─────────────────────────────────────────────────
 
@@ -429,13 +434,20 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         return try {
             val d = parseDateVm(dateStr.take(10)) ?: return "분석 결과"
             val today = Calendar.getInstance()
-            val y = d.get(Calendar.YEAR); val m = d.get(Calendar.MONTH) + 1; val day = d.get(Calendar.DAY_OF_MONTH)
+            val y = d.get(Calendar.YEAR)
+            val m = d.get(Calendar.MONTH) + 1
+            val day = d.get(Calendar.DAY_OF_MONTH)
+
             when {
                 d.get(Calendar.YEAR) == today.get(Calendar.YEAR) &&
                         d.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) -> "오늘의 분석 결과"
+
                 y != today.get(Calendar.YEAR) -> "${y}년 ${m}월 ${day}일 분석 결과"
+
                 else -> "${m}월 ${day}일 분석 결과"
             }
-        } catch (_: Exception) { "분석 결과" }
+        } catch (_: Exception) {
+            "분석 결과"
+        }
     }
 }
