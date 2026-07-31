@@ -11,11 +11,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,11 +54,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -72,10 +84,15 @@ import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.tutorial.SettingsTutorialStep
+import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
+import com.midas26.mobileapp.ui.tutorial.TutorialScreen
+import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
 
 @Composable
 fun SettingsScreen(
+    tutorialViewModel: TutorialViewModel,
     userName: String = "홍길동",
     weeklyScore: Int = 75,
     streakDays: Int = 4,
@@ -84,10 +101,29 @@ fun SettingsScreen(
     onDeleteAccount: () -> Unit = {},
     onAccessibility: () -> Unit = {},
     onProfileEdit: () -> Unit = {},
+    onReplayTutorial: (TutorialReplayTarget) -> Unit = {},
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
+
+    val tutorialState by tutorialViewModel.state.collectAsState()
+
+    /*
+     * 현재 프로젝트의 Compose 버전에서 localBoundingBoxOf를 지원하지 않을 수 있으므로
+     * 최상위 화면의 boundsInRoot 값을 저장합니다.
+     *
+     * 각 강조 대상도 boundsInRoot로 측정한 뒤 루트 위치를 빼서
+     * SettingsScreen 내부 오버레이 좌표로 변환합니다.
+     */
+    var tutorialRootBounds by remember { mutableStateOf<Rect?>(null) }
+
+    // 튜토리얼에서 강조할 실제 UI 위치입니다.
+    var accessibilityBounds by remember { mutableStateOf<Rect?>(null) }
+    var locationSharingBounds by remember { mutableStateOf<Rect?>(null) }
+    var notificationBounds by remember { mutableStateOf<Rect?>(null) }
+    var notificationTimeBounds by remember { mutableStateOf<Rect?>(null) }
+    var supportBounds by remember { mutableStateOf<Rect?>(null) }
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
     val isPatient = role == PrefsManager.ROLE_USER
@@ -107,11 +143,13 @@ fun SettingsScreen(
     }
 
     var locationSharingEnabled by remember { mutableStateOf(prefs.getLocationSharingEnabled()) }
-    var notificationEnabled by remember { mutableStateOf(prefs.getNotificationEnabled()) }
+    val savedNotificationEnabled = remember { prefs.getNotificationEnabled() }
+    var notificationEnabled by remember { mutableStateOf(savedNotificationEnabled) }
     var notifHour by remember { mutableIntStateOf(prefs.getNotificationHour()) }
     var notifMinute by remember { mutableIntStateOf(prefs.getNotificationMinute()) }
     var showTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showTutorialSelectionDialog by remember { mutableStateOf(false) }
     var showLocationPermissionDialog by remember { mutableStateOf(false) }
     var locationPermissionPermanentlyDenied by remember { mutableStateOf(false) }
 
@@ -166,6 +204,46 @@ fun SettingsScreen(
     val rangePx = with(LocalDensity.current) { 180.dp.toPx() }
     val p = (scrollState.value / rangePx).coerceIn(0f, 1f)
 
+    LaunchedEffect(
+        tutorialState.isRunning,
+        tutorialState.currentScreen,
+        tutorialState.settingsStep
+    ) {
+        if (
+            tutorialState.isRunning &&
+            tutorialState.currentScreen == TutorialScreen.SETTINGS
+        ) {
+            when (tutorialState.settingsStep) {
+                SettingsTutorialStep.ACCESSIBILITY -> {
+                    scrollState.animateScrollTo(0)
+                }
+
+                SettingsTutorialStep.LOCATION_SHARING -> {
+                    scrollState.animateScrollTo(0)
+                }
+
+                SettingsTutorialStep.CHECK_NOTIFICATION -> {
+                    scrollState.animateScrollTo(90)
+                }
+
+                SettingsTutorialStep.NOTIFICATION_TIME -> {
+                    /*
+                     * 알림 시간이 화면에 보이도록 화면 표시 상태만 임시로 엽니다.
+                     * SharedPreferences의 실제 알림 설정 값은 변경하지 않습니다.
+                     */
+                    notificationEnabled = true
+                    scrollState.animateScrollTo(190)
+                }
+
+                SettingsTutorialStep.SUPPORT -> {
+                    scrollState.animateScrollTo(scrollState.maxValue)
+                }
+
+                SettingsTutorialStep.COMPLETED -> Unit
+            }
+        }
+    }
+
     if (showLogoutDialog) {
         ConfirmDialog(
             title = "로그아웃",
@@ -177,6 +255,18 @@ fun SettingsScreen(
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }
+        )
+    }
+
+    if (showTutorialSelectionDialog) {
+        TutorialSelectionDialog(
+            onDismiss = {
+                showTutorialSelectionDialog = false
+            },
+            onSelect = { target ->
+                showTutorialSelectionDialog = false
+                onReplayTutorial(target)
+            }
         )
     }
 
@@ -229,6 +319,9 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(BrandWhite)
+            .onGloballyPositioned { coordinates ->
+                tutorialRootBounds = coordinates.boundsInRoot()
+            }
     ) {
         Column(
             modifier = Modifier
@@ -238,8 +331,18 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(252.dp))
             Spacer(modifier = Modifier.height(10.dp))
 
-            SettingsSection(title = "접근성") {
-                SettingsRow(label = "접근성 설정", onClick = onAccessibility)
+            SettingsSection(
+                title = "접근성"
+            ) {
+                SettingsRow(
+                    label = "접근성 설정",
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        accessibilityBounds = coordinates
+                            .boundsInRoot()
+                            .relativeTo(tutorialRootBounds)
+                    },
+                    onClick = onAccessibility
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -248,6 +351,11 @@ fun SettingsScreen(
                 if (!isGuardian) {
                     SettingsToggleRow(
                         label = "보호자에게 위치 정보 제공",
+                        modifier = Modifier.onGloballyPositioned { coordinates ->
+                            locationSharingBounds = coordinates
+                                .boundsInRoot()
+                                .relativeTo(tutorialRootBounds)
+                        },
                         description = "보호자가 내 위치를 확인할 수 있어요",
                         checked = locationSharingEnabled,
                         onCheckedChange = { enabled ->
@@ -286,6 +394,11 @@ fun SettingsScreen(
 
                 SettingsToggleRow(
                     label = "점검 알림",
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        notificationBounds = coordinates
+                            .boundsInRoot()
+                            .relativeTo(tutorialRootBounds)
+                    },
                     description = "매일 점검 시간에 알림을 받아요",
                     checked = notificationEnabled,
                     onCheckedChange = { enabled ->
@@ -315,6 +428,11 @@ fun SettingsScreen(
 
                         NotifTimeRow(
                             title = "알림 시간",
+                            modifier = Modifier.onGloballyPositioned { coordinates ->
+                                notificationTimeBounds = coordinates
+                                    .boundsInRoot()
+                                    .relativeTo(tutorialRootBounds)
+                            },
                             hour = notifHour,
                             minute = notifMinute,
                             onClick = { showTimePicker = true }
@@ -328,12 +446,36 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                SettingsRow(label = "앱 버전", trailingText = "1.0.0", onClick = null)
+                SettingsRow(
+                    label = "앱 사용법 다시 보기",
+                    onClick = {
+                        showTutorialSelectionDialog = true
+                    }
+                )
+
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsRow(
+                    label = "앱 버전",
+                    trailingText = "1.0.0",
+                    onClick = null
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsSection(title = "지원") {
+            SettingsSection(
+                title = "지원",
+                modifier = Modifier.onGloballyPositioned { coordinates ->
+                    supportBounds = coordinates
+                        .boundsInRoot()
+                        .relativeTo(tutorialRootBounds)
+                }
+            ) {
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
 
                 HorizontalDivider(
@@ -398,7 +540,428 @@ fun SettingsScreen(
             onBack = onBack,
             onProfileEdit = onProfileEdit
         )
+
+        if (
+            tutorialState.isRunning &&
+            tutorialState.currentScreen == TutorialScreen.SETTINGS
+        ) {
+            val targetBounds = when (tutorialState.settingsStep) {
+                SettingsTutorialStep.ACCESSIBILITY -> accessibilityBounds
+                SettingsTutorialStep.LOCATION_SHARING -> locationSharingBounds
+                SettingsTutorialStep.CHECK_NOTIFICATION -> notificationBounds
+                SettingsTutorialStep.NOTIFICATION_TIME -> notificationTimeBounds
+                SettingsTutorialStep.SUPPORT -> supportBounds
+                SettingsTutorialStep.COMPLETED -> null
+            }
+
+            /*
+             * 선택한 설정 항목의 위치가 측정된 뒤에만 오버레이를 표시합니다.
+             * 위치 정보 공유 단계에서 targetBounds가 null인 채 스크림만 보이는
+             * 현상을 방지합니다.
+             */
+            if (
+                targetBounds != null ||
+                tutorialState.settingsStep == SettingsTutorialStep.COMPLETED
+            ) {
+                SettingsTutorialOverlay(
+                    step = tutorialState.settingsStep,
+                    targetBounds = targetBounds,
+                    currentNumber = tutorialState.currentNumber,
+                    totalNumber = tutorialState.totalNumber,
+                    onNext = {
+                        when (tutorialState.settingsStep) {
+                            SettingsTutorialStep.ACCESSIBILITY -> {
+                                tutorialViewModel.moveSettingsStep(
+                                    SettingsTutorialStep.LOCATION_SHARING,
+                                    tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            SettingsTutorialStep.LOCATION_SHARING -> {
+                                tutorialViewModel.moveSettingsStep(
+                                    SettingsTutorialStep.CHECK_NOTIFICATION,
+                                    tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            SettingsTutorialStep.CHECK_NOTIFICATION -> {
+                                tutorialViewModel.moveSettingsStep(
+                                    SettingsTutorialStep.NOTIFICATION_TIME,
+                                    tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            SettingsTutorialStep.NOTIFICATION_TIME -> {
+                                tutorialViewModel.moveSettingsStep(
+                                    SettingsTutorialStep.SUPPORT,
+                                    tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            SettingsTutorialStep.SUPPORT,
+                            SettingsTutorialStep.COMPLETED -> {
+                                notificationEnabled = savedNotificationEnabled
+                                tutorialViewModel.completeTutorial()
+                            }
+                        }
+                    },
+                    onSkip = {
+                        notificationEnabled = savedNotificationEnabled
+                        tutorialViewModel.stopTutorial()
+                    }
+                )
+            }
+        }
     }
+}
+
+
+/**
+ * boundsInRoot()로 측정한 대상 영역을 SettingsScreen 최상위 Box 기준으로 변환합니다.
+ *
+ * 루트가 아직 측정되지 않은 최초 프레임에는 null을 반환하고,
+ * 이후 onGloballyPositioned가 다시 호출되면 정상 좌표가 저장됩니다.
+ */
+private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
+    val root = rootBounds ?: return null
+
+    return Rect(
+        left = left - root.left,
+        top = top - root.top,
+        right = right - root.left,
+        bottom = bottom - root.top
+    )
+}
+
+@Composable
+private fun SettingsTutorialOverlay(
+    step: SettingsTutorialStep,
+    targetBounds: Rect?,
+    currentNumber: Int,
+    totalNumber: Int,
+    onNext: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val density = LocalDensity.current
+
+    /*
+     * AppColor의 색상 값이 @Composable getter로 선언되어 있을 수 있으므로
+     * Canvas DrawScope 내부에서 직접 호출하지 않고 Composable 영역에서 미리 읽습니다.
+     */
+    val highlightColor = AppColor.greenPrimary
+
+    val title = when (step) {
+        SettingsTutorialStep.ACCESSIBILITY -> "접근성 설정"
+        SettingsTutorialStep.LOCATION_SHARING -> "위치 정보 공유"
+        SettingsTutorialStep.CHECK_NOTIFICATION -> "점검 알림"
+        SettingsTutorialStep.NOTIFICATION_TIME -> "알림 시간"
+        SettingsTutorialStep.SUPPORT -> "지원 메뉴"
+        SettingsTutorialStep.COMPLETED -> "설정 사용법 완료"
+    }
+
+    val description = when (step) {
+        SettingsTutorialStep.ACCESSIBILITY ->
+            "글자 크기와 화면 표시 방식을 편하게 조절할 수 있어요."
+
+        SettingsTutorialStep.LOCATION_SHARING ->
+            "이 기능을 켜면 보호자가 내 위치를 확인할 수 있어요."
+
+        SettingsTutorialStep.CHECK_NOTIFICATION ->
+            "매일 정해진 시간에 점검 알림을 받을 수 있어요."
+
+        SettingsTutorialStep.NOTIFICATION_TIME ->
+            "알림을 받고 싶은 시간을 직접 선택할 수 있어요."
+
+        SettingsTutorialStep.SUPPORT ->
+            "개인정보 처리방침, 이용 약관과 문의 메뉴를 확인할 수 있어요."
+
+        SettingsTutorialStep.COMPLETED ->
+            "설정 화면의 주요 기능을 모두 살펴봤어요."
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = {})
+    ) {
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+
+        /*
+         * 강조 대상이 화면 아래쪽에 있으면 안내창을 위로,
+         * 강조 대상이 화면 위쪽에 있으면 안내창을 아래로 배치합니다.
+         */
+        val showPopupAtTop = targetBounds?.let { bounds ->
+            bounds.center.y > screenHeightPx * 0.52f
+        } ?: false
+
+        val popupAlignment = if (showPopupAtTop) {
+            Alignment.TopCenter
+        } else {
+            Alignment.BottomCenter
+        }
+
+        /*
+         * 화면 전체를 어둡게 한 뒤 강조 대상 영역만 투명하게 뚫습니다.
+         * 따라서 강조 영역 내부는 원래 밝기로 보이고 바깥쪽만 어두워집니다.
+         */
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
+        ) {
+            drawRect(
+                color = Color.Black.copy(alpha = 0.58f)
+            )
+
+            targetBounds?.let { bounds ->
+                val padding = 4.dp.toPx()
+                val left = (bounds.left - padding).coerceAtLeast(0f)
+                val top = (bounds.top - padding).coerceAtLeast(0f)
+                val right = (bounds.right + padding).coerceAtMost(size.width)
+                val bottom = (bounds.bottom + padding).coerceAtMost(size.height)
+
+                val highlightTopLeft = Offset(left, top)
+                val highlightSize = Size(
+                    width = (right - left).coerceAtLeast(0f),
+                    height = (bottom - top).coerceAtLeast(0f)
+                )
+                val cornerRadius = CornerRadius(
+                    x = 18.dp.toPx(),
+                    y = 18.dp.toPx()
+                )
+
+                drawRoundRect(
+                    color = Color.Transparent,
+                    topLeft = highlightTopLeft,
+                    size = highlightSize,
+                    cornerRadius = cornerRadius,
+                    blendMode = BlendMode.Clear
+                )
+
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = highlightTopLeft,
+                    size = highlightSize,
+                    cornerRadius = cornerRadius,
+                    style = Stroke(width = 4.dp.toPx())
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(popupAlignment)
+                .fillMaxWidth()
+                .padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = if (showPopupAtTop) 24.dp else 20.dp,
+                    bottom = if (showPopupAtTop) 20.dp else 28.dp
+                ),
+            shape = RoundedCornerShape(24.dp),
+            color = BrandWhite,
+            shadowElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(22.dp)
+            ) {
+                Text(
+                    text = "$currentNumber / $totalNumber",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppColor.greenPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.ExtraBold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppColor.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = onSkip
+                    ) {
+                        Text(
+                            text = "건너뛰기",
+                            color = AppColor.textTertiary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    TextButton(
+                        onClick = onNext
+                    ) {
+                        Text(
+                            text = if (
+                                step == SettingsTutorialStep.SUPPORT ||
+                                step == SettingsTutorialStep.COMPLETED
+                            ) {
+                                "완료"
+                            } else {
+                                "다음"
+                            },
+                            color = AppColor.greenPrimary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TutorialSelectionDialog(
+    onDismiss: () -> Unit,
+    onSelect: (TutorialReplayTarget) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "어떤 사용법을 볼까요?",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = AppColor.textPrimary
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TutorialSelectionRow(
+                    title = "전체 사용법",
+                    description = "처음부터 모든 기능을 차례대로 알아봐요",
+                    onClick = {
+                        onSelect(TutorialReplayTarget.FULL)
+                    }
+                )
+
+                TutorialSelectionDivider()
+
+                TutorialSelectionRow(
+                    title = "홈 화면",
+                    description = "주간 점검과 주요 메뉴 사용법을 알아봐요",
+                    onClick = {
+                        onSelect(TutorialReplayTarget.HOME)
+                    }
+                )
+
+                TutorialSelectionDivider()
+
+                TutorialSelectionRow(
+                    title = "음성 대화",
+                    description = "대화 시작, 마이크, 종료 방법을 알아봐요",
+                    onClick = {
+                        onSelect(TutorialReplayTarget.VOICE_CHAT)
+                    }
+                )
+
+                TutorialSelectionDivider()
+
+                TutorialSelectionRow(
+                    title = "분석 결과",
+                    description = "인지 점수와 분석 결과 확인 방법을 알아봐요",
+                    onClick = {
+                        onSelect(TutorialReplayTarget.ANALYSIS)
+                    }
+                )
+
+                TutorialSelectionDivider()
+
+                TutorialSelectionRow(
+                    title = "설정",
+                    description = "접근성, 위치 공유, 알림 설정을 알아봐요",
+                    onClick = {
+                        onSelect(TutorialReplayTarget.SETTINGS)
+                    }
+                )
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text(
+                    text = "취소",
+                    color = AppColor.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        containerColor = BrandWhite,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+private fun TutorialSelectionRow(
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = AppColor.textPrimary
+            )
+
+            Spacer(modifier = Modifier.height(3.dp))
+
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColor.textTertiary
+            )
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = AppColor.textTertiary,
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun TutorialSelectionDivider() {
+    HorizontalDivider(
+        color = AppColor.divider,
+        thickness = 1.dp
+    )
 }
 
 @Composable
@@ -744,9 +1307,12 @@ private fun StatItem(
 @Composable
 private fun SettingsSection(
     title: String,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier = modifier.padding(horizontal = 16.dp)
+    ) {
         Text(
             text = title,
             style = MaterialTheme.typography.bodySmall,
@@ -773,10 +1339,11 @@ private fun SettingsRow(
     trailingText: String? = null,
     labelColor: Color = AppColor.textPrimary,
     showArrow: Boolean = trailingText == null,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)?
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 20.dp, vertical = 18.dp),
@@ -812,10 +1379,11 @@ private fun SettingsToggleRow(
     label: String,
     description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -855,10 +1423,11 @@ private fun NotifTimeRow(
     title: String,
     hour: Int,
     minute: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(horizontal = 20.dp, vertical = 18.dp),
@@ -962,6 +1531,13 @@ private fun formatNotifTime(hour: Int, minute: Int): String {
 }
 
 private fun startLocationService(context: Context) {
-    val intent = Intent(context, LocationForegroundService::class.java)
-    context.startForegroundService(intent)
+    val intent = Intent(
+        context,
+        LocationForegroundService::class.java
+    )
+
+    ContextCompat.startForegroundService(
+        context,
+        intent
+    )
 }

@@ -34,7 +34,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,15 +45,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -65,6 +74,9 @@ import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
+import com.midas26.mobileapp.ui.tutorial.AnalysisTutorialStep
+import com.midas26.mobileapp.ui.tutorial.TutorialScreen
+import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -72,14 +84,18 @@ import kotlin.math.abs
 
 @Composable
 fun AnalysisResultScreen(
+    tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
+    onNavigateSettings: () -> Unit = {},
     viewModel: AnalysisViewModel = viewModel()
 ) {
     val context = LocalContext.current
     val isGuardian = PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN
 
     UserAnalysisResultContent(
+        tutorialViewModel = tutorialViewModel,
         onBack = onBack,
+        onNavigateSettings = onNavigateSettings,
         viewModel = viewModel,
         isGuardian = isGuardian
     )
@@ -87,11 +103,25 @@ fun AnalysisResultScreen(
 
 @Composable
 private fun UserAnalysisResultContent(
+    tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
+    onNavigateSettings: () -> Unit,
     viewModel: AnalysisViewModel,
     isGuardian: Boolean = false
 ) {
     val fontScale = LocalFontSizeScale.current.scale
+    val tutorialState by tutorialViewModel.state.collectAsState()
+
+    /*
+     * boundsInRoot()로 최상위 화면과 각 강조 대상의 위치를 측정한 뒤,
+     * 루트 위치를 빼서 오버레이 내부 좌표로 변환합니다.
+     */
+    var tutorialRootBounds by remember { mutableStateOf<Rect?>(null) }
+
+    // TutorialOverlay에 전달할 실제 UI 위치입니다.
+    var mainScoreBounds by remember { mutableStateOf<Rect?>(null) }
+    var weeklyGraphBounds by remember { mutableStateOf<Rect?>(null) }
+    var detailScoresBounds by remember { mutableStateOf<Rect?>(null) }
 
     var minTimeElapsed by remember { mutableStateOf(!viewModel.showLoadingScreen) }
 
@@ -135,229 +165,499 @@ private fun UserAnalysisResultContent(
             label = "date_scale"
         )
 
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(BrandWhite)
+                .onGloballyPositioned { coordinates ->
+                    tutorialRootBounds = coordinates.boundsInRoot()
+                }
         ) {
-            val isToday = viewModel.isViewingToday && viewModel.hasTodayData
-
-            val animSpec = tween<Color>(durationMillis = 400)
-
-            val topColor by animateColorAsState(
-                targetValue = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
-                animationSpec = animSpec,
-                label = "top_color"
-            )
-
-            val botColor by animateColorAsState(
-                targetValue = if (isToday) (if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary) else AppColor.textTertiary,
-                animationSpec = animSpec,
-                label = "bottom_color"
-            )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .wrapContentHeight()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(topColor, botColor)
-                        )
-                    )
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                Column(modifier = Modifier.wrapContentHeight()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .height(56.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = {
-                                if (!isToday) viewModel.clearSelectedDay()
-                                else onBack()
-                            },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = if (isToday) "뒤로가기" else "오늘로 돌아가기",
-                                tint = BrandWhite,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        }
+                val isToday = viewModel.isViewingToday && viewModel.hasTodayData
 
-                        Text(
-                            text = "분석 결과",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = BrandWhite,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 4.dp)
-                        )
+                val animSpec = tween<Color>(durationMillis = 400)
 
-                        Spacer(modifier = Modifier.size(48.dp))
-                    }
+                val topColor by animateColorAsState(
+                    targetValue = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
+                    animationSpec = animSpec,
+                    label = "top_color"
+                )
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
-                    ) {
-                        Text(
-                            text = viewModel.displayDateLabel,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.Transparent
-                        )
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = viewModel.displayScore.toString(),
-                                fontSize = (56 * fontScale).sp,
-                                color = BrandWhite,
-                                fontWeight = FontWeight.Bold
-                            )
-
-                            Spacer(modifier = Modifier.size(4.dp))
-
-                            Text(
-                                text = "점",
-                                fontSize = (18 * fontScale).sp,
-                                color = BrandWhite,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-
-                            Spacer(modifier = Modifier.size(12.dp))
-
-                            Surface(
-                                shape = CircleShape,
-                                color = BrandWhite,
-                                modifier = Modifier.padding(bottom = 14.dp)
-                            ) {
-                                Text(
-                                    text = viewModel.displayRiskLevel,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                                )
-                            }
-                        }
-                    }
-                }
+                val botColor by animateColorAsState(
+                    targetValue = if (isToday) (if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary) else AppColor.textTertiary,
+                    animationSpec = animSpec,
+                    label = "bottom_color"
+                )
 
                 Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha))
-                )
-
-                Text(
-                    text = viewModel.displayDateLabel,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = BrandWhite.copy(alpha = 0.92f),
-                    fontWeight = if (isDragging) FontWeight.ExtraBold else FontWeight.Normal,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(start = 24.dp, bottom = (28 + 16 + 56 * fontScale).dp)
-                        .scale(dateLabelScale)
-                )
-            }
-
-            var graphCardHeightPx by remember { mutableStateOf(0) }
-            val density = LocalDensity.current
-            val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
-
-            Box(modifier = Modifier.fillMaxSize()) {
-                val items = viewModel.todayItems
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 12.dp + graphCardHeightDp)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    Spacer(modifier = Modifier.weight(2f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ItemCard(item = items[0], modifier = Modifier.weight(1f))
-                        ItemCard(item = items[1], modifier = Modifier.weight(1f))
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        ItemCard(item = items[2], modifier = Modifier.weight(1f))
-                        ItemCard(item = items[3], modifier = Modifier.weight(1f))
-                    }
-
-                    Spacer(modifier = Modifier.weight(2f))
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = scrimAlpha))
-                )
-
-                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(top = 12.dp)
-                        .onGloballyPositioned { coords ->
-                            graphCardHeightPx = coords.size.height
-                        },
-                    shape = RoundedCornerShape(20.dp),
-                    color = BrandWhite,
-                    border = BorderStroke(1.5.dp, AppColor.divider)
+                        .wrapContentHeight()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(topColor, botColor)
+                            )
+                        )
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
-                    ) {
-                        Text(
-                            text = "이번 주 추이",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = AppColor.textPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
+                    Column(modifier = Modifier.wrapContentHeight()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 8.dp, vertical = 8.dp)
+                                .height(56.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (!isToday) viewModel.clearSelectedDay()
+                                    else onBack()
+                                },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = if (isToday) "뒤로가기" else "오늘로 돌아가기",
+                                    tint = BrandWhite,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "분석 결과",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = BrandWhite,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(start = 4.dp)
+                            )
 
-                        Text(
-                            text = "최근 7일 · 길게 눌러 날짜 탐색",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = AppColor.textTertiary
-                        )
+                            Spacer(modifier = Modifier.size(48.dp))
+                        }
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        WeeklyLineChart(
-                            points = viewModel.graphPoints,
-                            highlightIndex = viewModel.graphHighlightIndex,
-                            isGuardian = isGuardian,
-                            onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
-                            onDragStart = { viewModel.onGraphDragStart() },
-                            onDragMove = { date -> viewModel.onGraphDragMove(date) },
-                            onDragEnd = { date -> viewModel.onGraphDragEnd(date) },
-                            onDragCancel = { viewModel.onGraphDragCancel() },
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(160.dp)
+                                .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
+                        ) {
+                            Text(
+                                text = viewModel.displayDateLabel,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color.Transparent
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.onGloballyPositioned { coordinates ->
+                                    mainScoreBounds = coordinates
+                                        .boundsInRoot()
+                                        .relativeTo(tutorialRootBounds)
+                                },
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Text(
+                                    text = viewModel.displayScore.toString(),
+                                    fontSize = (56 * fontScale).sp,
+                                    color = BrandWhite,
+                                    fontWeight = FontWeight.Bold
+                                )
+
+                                Spacer(modifier = Modifier.size(4.dp))
+
+                                Text(
+                                    text = "점",
+                                    fontSize = (18 * fontScale).sp,
+                                    color = BrandWhite,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(bottom = 12.dp)
+                                )
+
+                                Spacer(modifier = Modifier.size(12.dp))
+
+                                Surface(
+                                    shape = CircleShape,
+                                    color = BrandWhite,
+                                    modifier = Modifier.padding(bottom = 14.dp)
+                                ) {
+                                    Text(
+                                        text = viewModel.displayRiskLevel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = scrimAlpha))
+                    )
+
+                    Text(
+                        text = viewModel.displayDateLabel,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = BrandWhite.copy(alpha = 0.92f),
+                        fontWeight = if (isDragging) FontWeight.ExtraBold else FontWeight.Normal,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 24.dp, bottom = (28 + 16 + 56 * fontScale).dp)
+                            .scale(dateLabelScale)
+                    )
+                }
+
+                var graphCardHeightPx by remember { mutableStateOf(0) }
+                val density = LocalDensity.current
+                val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    val items = viewModel.todayItems
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 12.dp + graphCardHeightDp)
+                            .padding(horizontal = 16.dp)
+                    ) {
+                        Spacer(modifier = Modifier.weight(2f))
+
+                        /*
+                         * 세부 분석 카드 4개만 감싸는 영역에 좌표 측정을 적용합니다.
+                         * 위아래 Spacer는 하이라이트 영역에서 제외되므로
+                         * 기존보다 하이라이트 박스 높이가 작아집니다.
+                         */
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    detailScoresBounds = coordinates
+                                        .boundsInRoot()
+                                        .relativeTo(tutorialRootBounds)
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ItemCard(item = items[0], modifier = Modifier.weight(1f))
+                                ItemCard(item = items[1], modifier = Modifier.weight(1f))
+                            }
+
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ItemCard(item = items[2], modifier = Modifier.weight(1f))
+                                ItemCard(item = items[3], modifier = Modifier.weight(1f))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.weight(2f))
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = scrimAlpha))
+                    )
+
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .padding(top = 12.dp)
+                            .onGloballyPositioned { coordinates ->
+                                graphCardHeightPx = coordinates.size.height
+                                weeklyGraphBounds = coordinates
+                                    .boundsInRoot()
+                                    .relativeTo(tutorialRootBounds)
+                            },
+                        shape = RoundedCornerShape(20.dp),
+                        color = BrandWhite,
+                        border = BorderStroke(1.5.dp, AppColor.divider)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
+                        ) {
+                            Text(
+                                text = "이번 주 추이",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = AppColor.textPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = "최근 7일 · 길게 눌러 날짜 탐색",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = AppColor.textTertiary
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            WeeklyLineChart(
+                                points = viewModel.graphPoints,
+                                highlightIndex = viewModel.graphHighlightIndex,
+                                isGuardian = isGuardian,
+                                onPointTapped = { date -> viewModel.onGraphPointTapped(date) },
+                                onDragStart = { viewModel.onGraphDragStart() },
+                                onDragMove = { date -> viewModel.onGraphDragMove(date) },
+                                onDragEnd = { date -> viewModel.onGraphDragEnd(date) },
+                                onDragCancel = { viewModel.onGraphDragCancel() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (
+                !isGuardian &&
+                tutorialState.isRunning &&
+                tutorialState.currentScreen == TutorialScreen.ANALYSIS
+            ) {
+                val targetBounds = when (tutorialState.analysisStep) {
+                    AnalysisTutorialStep.MAIN_SCORE -> mainScoreBounds
+                    AnalysisTutorialStep.WEEKLY_GRAPH -> weeklyGraphBounds
+                    AnalysisTutorialStep.DETAIL_SCORES -> detailScoresBounds
+                    AnalysisTutorialStep.COMPLETED -> null
+                }
+
+                AnalysisTutorialOverlay(
+                    step = tutorialState.analysisStep,
+                    targetBounds = targetBounds,
+                    currentNumber = tutorialState.currentNumber,
+                    totalNumber = tutorialState.totalNumber,
+                    onNext = {
+                        when (tutorialState.analysisStep) {
+                            AnalysisTutorialStep.MAIN_SCORE -> {
+                                tutorialViewModel.moveAnalysisStep(
+                                    step = AnalysisTutorialStep.WEEKLY_GRAPH,
+                                    number = tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            AnalysisTutorialStep.WEEKLY_GRAPH -> {
+                                tutorialViewModel.moveAnalysisStep(
+                                    step = AnalysisTutorialStep.DETAIL_SCORES,
+                                    number = tutorialState.currentNumber + 1
+                                )
+                            }
+
+                            AnalysisTutorialStep.DETAIL_SCORES -> {
+                                if (tutorialViewModel.isFullTutorial()) {
+                                    tutorialViewModel.moveToSettings()
+                                    onNavigateSettings()
+                                } else {
+                                    tutorialViewModel.completeTutorial()
+                                }
+                            }
+
+                            AnalysisTutorialStep.COMPLETED -> {
+                                tutorialViewModel.completeTutorial()
+                            }
+                        }
+                    },
+                    onSkip = {
+                        tutorialViewModel.stopTutorial()
+                    }
+                )
+            }
+        }
+    }
+
+    /*
+     * UserAnalysisResultContent 종료
+     *
+     * 위의 세 중괄호는 각각:
+     * 1. 최상위 Box
+     * 2. Crossfade content lambda
+     * 3. UserAnalysisResultContent 함수
+     * 를 닫습니다.
+     */
+}
+
+private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
+    val root = rootBounds ?: return null
+
+    return Rect(
+        left = left - root.left,
+        top = top - root.top,
+        right = right - root.left,
+        bottom = bottom - root.top
+    )
+}
+
+@Composable
+private fun AnalysisTutorialOverlay(
+    step: AnalysisTutorialStep,
+    targetBounds: Rect?,
+    currentNumber: Int,
+    totalNumber: Int,
+    onNext: () -> Unit,
+    onSkip: () -> Unit
+) {
+    val density = LocalDensity.current
+    val highlightColor = AppColor.greenPrimary
+
+    val title = when (step) {
+        AnalysisTutorialStep.MAIN_SCORE -> "오늘의 인지 점수"
+        AnalysisTutorialStep.WEEKLY_GRAPH -> "이번 주 점수 추이"
+        AnalysisTutorialStep.DETAIL_SCORES -> "세부 분석 결과"
+        AnalysisTutorialStep.COMPLETED -> "분석 결과 사용법 완료"
+    }
+
+    val description = when (step) {
+        AnalysisTutorialStep.MAIN_SCORE ->
+            "오늘 진행한 음성 대화를 바탕으로 계산된 인지 점수와 위험 수준을 확인할 수 있어요.\n\n분석 첫 주에는 결과가 정확하지 않을 수 있습니다!"
+
+        AnalysisTutorialStep.WEEKLY_GRAPH ->
+            "최근 7일 동안 점수가 어떻게 변했는지 그래프로 확인할 수 있어요. 그래프를 길게 누르면 날짜별 결과를 볼 수 있어요."
+
+        AnalysisTutorialStep.DETAIL_SCORES ->
+            "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+
+        AnalysisTutorialStep.COMPLETED ->
+            "분석 결과 화면의 주요 기능을 모두 살펴봤어요."
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = {})
+    ) {
+        val screenHeightPx = with(density) { maxHeight.toPx() }
+        val showPopupAtTop = targetBounds?.center?.y?.let {
+            it > screenHeightPx * 0.52f
+        } ?: false
+
+        val popupAlignment = if (showPopupAtTop) {
+            Alignment.TopCenter
+        } else {
+            Alignment.BottomCenter
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    compositingStrategy = CompositingStrategy.Offscreen
+                }
+        ) {
+            drawRect(Color.Black.copy(alpha = 0.58f))
+
+            targetBounds?.let { bounds ->
+                val padding = 5.dp.toPx()
+                val left = (bounds.left - padding).coerceAtLeast(0f)
+                val top = (bounds.top - padding).coerceAtLeast(0f)
+                val right = (bounds.right + padding).coerceAtMost(size.width)
+                val bottom = (bounds.bottom + padding).coerceAtMost(size.height)
+
+                val topLeft = Offset(left, top)
+                val highlightSize = Size(
+                    width = (right - left).coerceAtLeast(0f),
+                    height = (bottom - top).coerceAtLeast(0f)
+                )
+                val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
+
+                drawRoundRect(
+                    color = Color.Transparent,
+                    topLeft = topLeft,
+                    size = highlightSize,
+                    cornerRadius = cornerRadius,
+                    blendMode = BlendMode.Clear
+                )
+
+                drawRoundRect(
+                    color = highlightColor,
+                    topLeft = topLeft,
+                    size = highlightSize,
+                    cornerRadius = cornerRadius,
+                    style = Stroke(width = 4.dp.toPx())
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier
+                .align(popupAlignment)
+                .fillMaxWidth()
+                .padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = if (showPopupAtTop) 24.dp else 20.dp,
+                    bottom = if (showPopupAtTop) 20.dp else 28.dp
+                ),
+            shape = RoundedCornerShape(24.dp),
+            color = BrandWhite,
+            shadowElevation = 12.dp
+        ) {
+            Column(modifier = Modifier.padding(22.dp)) {
+                Text(
+                    text = "$currentNumber / $totalNumber",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = AppColor.greenPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.ExtraBold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = AppColor.textSecondary
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onSkip) {
+                        Text(
+                            text = "건너뛰기",
+                            color = AppColor.textTertiary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    TextButton(onClick = onNext) {
+                        Text(
+                            text = if (
+                                step == AnalysisTutorialStep.DETAIL_SCORES ||
+                                step == AnalysisTutorialStep.COMPLETED
+                            ) {
+                                if (totalNumber == 3) "완료" else "다음"
+                            } else {
+                                "다음"
+                            },
+                            color = AppColor.greenPrimary,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
