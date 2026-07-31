@@ -66,6 +66,11 @@ public class User {
     @Column(name = "last_fixed_question_date")
     private LocalDate lastFixedQuestionDate;
 
+    // 고정질문 5개(온보딩)를 최초로 다 마쳤는지 여부.
+    // true가 되면 이후로는 매일 5개 중 1개만 무작위로 노출한다.
+    @Column(name = "fixed_onboarding_done", nullable = false)
+    private boolean fixedOnboardingDone = false;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<ChatSession> chatSessions = new ArrayList<>();
 

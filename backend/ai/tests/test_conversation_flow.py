@@ -26,13 +26,6 @@ if "openai" not in sys.modules:
         sys.modules["openai"] = openai_stub
 
 
-if "sentence_transformers" not in sys.modules:
-    sentence_transformers_stub = types.ModuleType("sentence_transformers")
-    sentence_transformers_stub.SentenceTransformer = lambda *_args, **_kwargs: object()
-    sentence_transformers_stub.util = SimpleNamespace()
-    sys.modules["sentence_transformers"] = sentence_transformers_stub
-
-
 recall_api_stub = types.ModuleType("recall.recall_api_client")
 recall_api_stub.analyze_session_recall = lambda **_kwargs: None
 sys.modules.setdefault("recall.recall_api_client", recall_api_stub)
@@ -128,19 +121,34 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 conversation_policy.ConversationAction.OPEN_TOPIC,
             ),
             (
+                # 이전 답변이 몇 개 쌓였어도(candidate_count>0), 방금 답변에서
+                # 감지된 주제가 전혀 없으면(has_followup_context 미지정=False)
+                # 이어갈 게 없으므로 새 주제를 연다 ("그래안녕" 같은 무의미한 답변).
                 {
                     "candidate_count": 1,
                     "after_recall_answer": False,
                     "should_change_topic": False,
                     "needs_memory_detail": False,
                 },
-                conversation_policy.ConversationAction.FOLLOW_UP,
+                conversation_policy.ConversationAction.OPEN_TOPIC,
             ),
             (
                 {
                     "candidate_count": 0,
                     "after_recall_answer": False,
                     "should_change_topic": False,
+                    "has_followup_context": True,
+                },
+                conversation_policy.ConversationAction.FOLLOW_UP,
+            ),
+            (
+                # candidate_count가 1 이상이어도 실제로 이어갈 주제가 감지되면
+                # 계속 FOLLOW_UP으로 이어간다.
+                {
+                    "candidate_count": 1,
+                    "after_recall_answer": False,
+                    "should_change_topic": False,
+                    "needs_memory_detail": False,
                     "has_followup_context": True,
                 },
                 conversation_policy.ConversationAction.FOLLOW_UP,
@@ -1637,7 +1645,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", return_value=records),
-            patch.object(handler, "_is_fixed_questions_done_today", return_value=True),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
             patch.object(handler, "_save_ai_reply", side_effect=lambda **kwargs: saved_replies.append(kwargs)),
             patch.object(
                 handler,
@@ -3012,7 +3024,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", side_effect=fetch_records),
-            patch.object(handler, "_is_fixed_questions_done_today", return_value=True),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
             patch.object(handler, "_save_ai_reply", side_effect=save_reply),
             patch.object(handler, "_link_recall_question", side_effect=link_question),
             patch.object(
@@ -3099,7 +3115,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", side_effect=fetch_records),
-            patch.object(handler, "_is_fixed_questions_done_today", return_value=True),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
             patch.object(handler, "_save_ai_reply", side_effect=save_reply),
             patch.object(handler, "_link_recall_question", side_effect=link_question),
             patch.object(
@@ -3419,7 +3439,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
     def test_fixed_daily_status_retries_once_after_transient_failure(self):
         successful_response = SimpleNamespace(
             raise_for_status=lambda: None,
-            json=lambda: {"data": True},
+            json=lambda: {"data": {"doneToday": True, "onboardingDone": True}},
         )
 
         with patch.object(
@@ -3428,9 +3448,10 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             side_effect=[TimeoutError("temporary timeout"), successful_response],
             create=True,
         ) as get_mock:
-            completed = handler._is_fixed_questions_done_today(user_id=2)
+            status = handler._get_fixed_question_status(user_id=2)
 
-        self.assertTrue(completed)
+        self.assertTrue(status["doneToday"])
+        self.assertTrue(status["onboardingDone"])
         self.assertEqual(2, get_mock.call_count)
 
     def test_fixed_daily_completion_retries_once_after_transient_failure(self):
@@ -3462,7 +3483,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", return_value=records),
-            patch.object(handler, "_is_fixed_questions_done_today", return_value=False),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": False, "onboardingDone": False},
+            ),
             patch.object(
                 handler,
                 "_find_or_create_fixed_question",
@@ -3876,6 +3901,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             patch.object(handler, "_fetch_session_records", return_value=records),
             patch.object(
                 handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": False, "onboardingDone": False},
+            ),
+            patch.object(
+                handler,
                 "_link_recall_question",
                 side_effect=AssertionError("linked fixed answer must not be relinked"),
             ),
@@ -3893,7 +3923,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 transcript_text="6월 10일입니다",
             )
 
-        mark_mock.assert_called_once_with(2)
+        mark_mock.assert_called_once_with(2, onboarding=True)
         self.assertEqual(1, len(saved))
         self.assertIn(saved[0]["reply_text"], handler.SAFE_OPENING_QUESTIONS)
 
@@ -3920,7 +3950,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", return_value=records),
-            patch.object(handler, "_is_fixed_questions_done_today", return_value=True),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
             patch.object(
                 handler,
                 "_link_recall_question",

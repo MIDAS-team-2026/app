@@ -18,7 +18,12 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from transformers import pipeline
 
-from voice_reply_handler import process_voice_reply, FIXED_QUESTIONS
+from voice_reply_handler import (
+    process_voice_reply,
+    FIXED_QUESTIONS,
+    _get_fixed_question_status,
+    _pick_daily_fixed_question_index,
+)
 from main import run_record_mode, run_full_dummy_mode
 from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
@@ -211,9 +216,27 @@ def health():
     return {"status": "ok"}
 
 @app.get("/opening-question")
-def opening_question():
-    """세션 시작 인사말 뒤에 이어질 첫 고정 질문 텍스트. Spring이 세션 시작 시 조회한다."""
-    return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
+def opening_question(userId: int | None = None):
+    """
+    세션 시작 인사말 뒤에 이어질 고정 질문 텍스트. Spring이 세션 시작 시 조회한다.
+    - 온보딩(최초 5개) 전: 첫 고정 질문
+    - 온보딩 후, 오늘 아직 안 물어봤으면: userId+오늘 날짜로 고정된 무작위 질문 1개
+      (process_voice_reply가 실제 답변을 채점할 때도 같은 방식으로 골라서 서로 어긋나지 않는다)
+    - 오늘 이미 물어봤으면: 없음
+    """
+    if userId is None:
+        return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
+
+    status = _get_fixed_question_status(userId)
+
+    if status["doneToday"]:
+        return {"questionText": None}
+
+    if not status["onboardingDone"]:
+        return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
+
+    daily_index = _pick_daily_fixed_question_index(userId)
+    return {"questionText": FIXED_QUESTIONS[daily_index]["questionText"]}
 
 @app.post("/process")
 def process(req: ProcessRequest, background_tasks: BackgroundTasks):

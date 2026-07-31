@@ -16,4 +16,5 @@ public class SessionRecordsResponseDTO {
     private String answerRole; // INITIAL, RECALL
     private Long recallQuestionId;
     private Long parentRecordId;
+    private String aiReplyText;
 }

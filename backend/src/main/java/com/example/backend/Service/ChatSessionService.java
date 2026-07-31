@@ -44,19 +44,20 @@ public class ChatSessionService {
         return SessionStartResponseDTO.builder()
                 .sessionId(sessionId)
                 .fixedQuestionsDoneToday(fixedQuestionsDoneToday)
-                .openingQuestionText(fixedQuestionsDoneToday ? null : fetchOpeningQuestionText())
+                .openingQuestionText(fixedQuestionsDoneToday ? null : fetchOpeningQuestionText(userId))
                 .build();
     }
 
-    // 인사말 뒤에 이어질 첫 고정 질문 텍스트를 Python AI 서버에서 조회 (FIXED_QUESTIONS[0]이 단일 출처)
-    private String fetchOpeningQuestionText() {
+    // 인사말 뒤에 이어질 고정 질문 텍스트를 Python AI 서버에서 조회.
+    // 온보딩 전/후에 따라 어떤 질문을 낼지는 Python(FIXED_QUESTIONS가 단일 출처)이 userId 기준으로 결정한다.
+    private String fetchOpeningQuestionText(Integer userId) {
         try {
             Map<?, ?> response = restTemplate.getForObject(
-                    pythonBaseUrl + "/opening-question", Map.class);
+                    pythonBaseUrl + "/opening-question?userId={userId}", Map.class, userId);
             Object questionText = response != null ? response.get("questionText") : null;
             return questionText != null ? questionText.toString() : null;
         } catch (Exception e) {
-            log.warn("첫 고정 질문 텍스트 조회 실패: {}", e.getMessage());
+            log.warn("고정 질문 텍스트 조회 실패: {}", e.getMessage());
             return null;
         }
     }
