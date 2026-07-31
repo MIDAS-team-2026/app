@@ -732,8 +732,10 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
             boundary_record_id = max(boundary_record_id, record_id)
 
     # 고정 질문이 0개인 세션은 오늘 고정 질문을 이미 마친 뒤 다시 시작한
-    # 자유대화 세션일 수 있다. 일부(1~4개)만 있으면 고정 질문 진행 중이다.
-    if 0 < fixed_count < len(FIXED_QUESTIONS):
+    # 자유대화 세션이다. 온보딩 이후에는 하루 1개만 노출되므로 1개는 항상
+    # "오늘의 고정 질문을 마치고 자유대화로 넘어간" 정상 상태다.
+    # 2~4개가 있으면(온보딩 5개 순차 진행 중) 아직 고정 질문이 끝나지 않은 것이다.
+    if 1 < fixed_count < len(FIXED_QUESTIONS):
         return []
 
     for record in sorted_records:
