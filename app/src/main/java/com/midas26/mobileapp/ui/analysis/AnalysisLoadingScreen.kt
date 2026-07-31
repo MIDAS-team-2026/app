@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -35,14 +34,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.ui.theme.BrandWhite
 import kotlinx.coroutines.delay
 
 @Composable
@@ -68,55 +65,97 @@ fun AnalysisLoadingScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BrandWhite)
-            .padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+            .padding(horizontal = 24.dp)
     ) {
-        SpinningRing(isGuardian = isGuardian)
-        Spacer(modifier = Modifier.height(28.dp))
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            SpinningRing(isGuardian = isGuardian)
+
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Text(
+                text = "분석 결과를\n불러오는 중이에요",
+                fontSize = 28.sp,
+                color = AppColor.textPrimary,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                lineHeight = 38.sp
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "오늘의 인지 건강 점수를\n가져오고 있어요",
+                style = MaterialTheme.typography.bodyMedium,
+                color = AppColor.textTertiary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(36.dp))
+
+            ProgressItem(
+                label = "서버 연결 완료",
+                done = step1,
+                isGuardian = isGuardian
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProgressItem(
+                label = "분석 데이터 수신 완료",
+                done = step2,
+                isGuardian = isGuardian
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            ProgressItem(
+                label = "결과 화면 준비 완료",
+                done = step3,
+                isGuardian = isGuardian
+            )
+        }
 
         Text(
-            text = "분석 결과를\n불러오는 중이에요",
-            fontSize = 28.sp,
-            color = AppColor.textPrimary,
-            fontWeight = FontWeight.Bold,
+            text = "첫 주 동안은 결과가 정확하지 않을 수 있습니다",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppColor.textTertiary.copy(alpha = 0.65f),
             textAlign = TextAlign.Center,
-            lineHeight = 38.sp
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(
-            text = "오늘의 인지 건강 점수를\n가져오고 있어요",
-            style = MaterialTheme.typography.bodyMedium,
-            color = AppColor.textTertiary,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(36.dp))
-
-        ProgressItem(label = "서버 연결 완료",       done = step1, isGuardian = isGuardian)
-        Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "분석 데이터 수신 완료", done = step2, isGuardian = isGuardian)
-        Spacer(modifier = Modifier.height(10.dp))
-        ProgressItem(label = "결과 화면 준비 완료",   done = step3, isGuardian = isGuardian)
     }
 }
 
 @Composable
 private fun SpinningRing(isGuardian: Boolean = false) {
     val transition = rememberInfiniteTransition(label = "ring")
+
     val rotation by transition.animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing)),
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1500,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
         label = "rot"
     )
+
     Box(
         modifier = Modifier.size(140.dp),
         contentAlignment = Alignment.Center
     ) {
-        // 회전하는 그라디언트 링
         Box(
             modifier = Modifier
                 .size(140.dp)
@@ -125,13 +164,24 @@ private fun SpinningRing(isGuardian: Boolean = false) {
                 .background(
                     brush = Brush.sweepGradient(
                         run {
-                            val c = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
-                            listOf(c.copy(alpha = 0f), c.copy(alpha = 0.2f), c, c.copy(alpha = 0.2f), c.copy(alpha = 0f))
+                            val c = if (isGuardian) {
+                                AppColor.guardianPrimary
+                            } else {
+                                AppColor.greenPrimary
+                            }
+
+                            listOf(
+                                c.copy(alpha = 0f),
+                                c.copy(alpha = 0.2f),
+                                c,
+                                c.copy(alpha = 0.2f),
+                                c.copy(alpha = 0f)
+                            )
                         }
                     )
                 )
         )
-        // 가운데 흰 원
+
         Box(
             modifier = Modifier
                 .size(120.dp)
@@ -150,13 +200,23 @@ private fun SpinningRing(isGuardian: Boolean = false) {
 }
 
 @Composable
-private fun ProgressItem(label: String, done: Boolean, isGuardian: Boolean = false) {
+private fun ProgressItem(
+    label: String,
+    done: Boolean,
+    isGuardian: Boolean = false
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(20.dp)
                 .clip(CircleShape)
-                .background(if (done) (if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary) else AppColor.divider),
+                .background(
+                    if (done) {
+                        if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
+                    } else {
+                        AppColor.divider
+                    }
+                ),
             contentAlignment = Alignment.Center
         ) {
             if (done) {
@@ -168,7 +228,9 @@ private fun ProgressItem(label: String, done: Boolean, isGuardian: Boolean = fal
                 )
             }
         }
+
         Spacer(modifier = Modifier.size(10.dp))
+
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
