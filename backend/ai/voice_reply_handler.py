@@ -1739,7 +1739,7 @@ def _detect_topic_in_text(text: str) -> str | None:
             "배우자",
             "가족",
             "친구",
-            "사람",
+            "그분",
             "연락",
             "통화",
             "만났",
