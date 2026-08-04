@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import sys
 import pickle
 import tempfile
 import joblib
@@ -7,33 +8,95 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 import logging
 import requests
+import librosa
+import soundfile as sf
+from typing import Optional, Dict, Any
+
+import numpy as np
+import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
 logger = logging.getLogger(__name__)
 
-from typing import Optional, Dict, Any
-
 from text_features import extract_text_features, calculate_basic_speech_features
 from baseline_speech_scoring import analyze_baseline_from_features
-
 from audio_features import extract_audio_features
 from speech_abnormality_scoring import (
     calculate_dysarthria_similarity,
     convert_similarity_to_reference_score,
 )
 
+# =========================
+# 0. 추론용 전처리기 및 예측 함수 정의 (독립 실행)
+# =========================
+
+class FeaturePreprocessor:
+    def __init__(self, skew_threshold=0.75):
+        self.skew_threshold = skew_threshold
+        self.imputer = None
+        self.scaler = None
+        self.log_cols = []
+        self.shift_values = {}
+        self.feature_names_ = []
+
+    def fit(self, X: pd.DataFrame):
+        self.feature_names_ = list(X.columns)
+        self.imputer = SimpleImputer(strategy="median")
+        X_imputed = pd.DataFrame(self.imputer.fit_transform(X), columns=self.feature_names_, index=X.index)
+
+        skews = X_imputed.skew()
+        acoustic_log_keywords = ['f0', 'hz', 'energy', 'amplitude', 'loudness']
+        domain_log_cols = [c for c in self.feature_names_ if any(k in c.lower() for k in acoustic_log_keywords)]
+        skew_log_cols = [c for c in self.feature_names_ if abs(skews[c]) > self.skew_threshold]
+
+        self.log_cols = list(set(skew_log_cols + domain_log_cols))
+
+        X_logged = X_imputed.copy()
+        for c in self.log_cols:
+            shift = max(0.0, -X_imputed[c].min()) + 1e-6
+            self.shift_values[c] = shift
+            X_logged[c] = np.log1p(X_imputed[c] + shift)
+
+        self.scaler = StandardScaler()
+        X_scaled = pd.DataFrame(self.scaler.fit_transform(X_logged), columns=self.feature_names_, index=X.index)
+        return X_scaled
+
+    def transform(self, X: pd.DataFrame):
+        X = X[self.feature_names_]
+        X_imputed = pd.DataFrame(self.imputer.transform(X), columns=self.feature_names_, index=X.index)
+        X_logged = X_imputed.copy()
+        for c in self.log_cols:
+            X_logged[c] = np.log1p(X_imputed[c] + self.shift_values[c])
+        X_scaled = pd.DataFrame(self.scaler.transform(X_logged), columns=self.feature_names_, index=X.index)
+        return X_scaled
+
+def predict_from_feature_dict(feature_dict: dict, model, preprocessor: FeaturePreprocessor):
+    """
+    추출된 피처 딕셔너리를 받아 RF 모델로부터 비정상 확률을 예측합니다.
+    """
+    row = pd.DataFrame([feature_dict])
+    missing = [c for c in preprocessor.feature_names_ if c not in row.columns]
+    for c in missing:
+        row[c] = np.nan
+    X_processed = preprocessor.transform(row)
+    proba_abnormal = model.predict_proba(X_processed)[0, 1]
+    pred_label = int(proba_abnormal >= 0.5)
+    return {
+        "predicted_label": pred_label,
+        "abnormal_probability": float(proba_abnormal),
+    }
+
 
 # =========================
 # 경로 설정
 # =========================
-# 실제 reference profile 파일은 GitHub에 올리지 않고 로컬에만 둔다.
-# build_reference_model.py 또는 build_reference_features.py 실행 후 생성되는 파일을 기준으로 사용한다.
 
 AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
-MODEL_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "model"))
+MODEL_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "artifacts"))
 
-REFERENCE_MEAN_PATH = MODEL_DIR / "reference_mean.pkl"
-REFERENCE_STD_PATH = MODEL_DIR / "reference_std.pkl"
-THRESHOLDS_PATH = MODEL_DIR / "thresholds.pkl"
+RF_MODEL_PATH = MODEL_DIR / "random_forest_model.joblib"
+PREPROCESSOR_PATH = MODEL_DIR / "preprocessor.joblib"
 
 
 # =========================
@@ -41,9 +104,6 @@ THRESHOLDS_PATH = MODEL_DIR / "thresholds.pkl"
 # =========================
 
 def load_pickle_file(path: Path):
-    """
-    pickle 파일을 로드한다.
-    """
     logger.info("load_pickle_file path=%s exists=%s", path, path.exists())
     if not path.exists():
         raise FileNotFoundError(f"필요한 reference 파일을 찾을 수 없습니다: {path}")
@@ -54,67 +114,43 @@ def load_pickle_file(path: Path):
         with open(path, "rb") as f:
             data = pickle.load(f)
 
-    logger.info("load_pickle_file loaded type=%s shape=%s",
-                type(data).__name__, getattr(data, 'shape', len(data) if hasattr(data, '__len__') else 'N/A'))
     return data
 
 
 def load_speech_abnormality_reference():
     """
-    구음장애/발화 이상 참고군 profile을 로드한다.
-
-    반환:
-    - reference_mean
-    - reference_std
-    - thresholds
-
-    thresholds는 없을 경우 기본값을 사용한다.
+    구음장애/발화 이상 Random Forest 모델과 전처리기(FeaturePreprocessor)를 로드한다.
     """
-    logger.info("load_speech_abnormality_reference REFERENCE_MEAN_PATH=%s exists=%s",
-                REFERENCE_MEAN_PATH, REFERENCE_MEAN_PATH.exists())
-    logger.info("load_speech_abnormality_reference REFERENCE_STD_PATH=%s exists=%s",
-                REFERENCE_STD_PATH, REFERENCE_STD_PATH.exists())
-    logger.info("load_speech_abnormality_reference THRESHOLDS_PATH=%s exists=%s",
-                THRESHOLDS_PATH, THRESHOLDS_PATH.exists())
+    logger.info("load_speech_abnormality_reference RF_MODEL_PATH=%s exists=%s",
+                RF_MODEL_PATH, RF_MODEL_PATH.exists())
+    logger.info("load_speech_abnormality_reference PREPROCESSOR_PATH=%s exists=%s",
+                PREPROCESSOR_PATH, PREPROCESSOR_PATH.exists())
 
-    reference_mean = load_pickle_file(REFERENCE_MEAN_PATH)
-    reference_std = load_pickle_file(REFERENCE_STD_PATH)
+    if not RF_MODEL_PATH.exists():
+        raise FileNotFoundError(f"필요한 RF 모델 파일을 찾을 수 없습니다: {RF_MODEL_PATH}")
 
-    if THRESHOLDS_PATH.exists():
-        thresholds = load_pickle_file(THRESHOLDS_PATH)
-    else:
-        # demo용 기본값
-        # 실제 프로젝트에서는 reference 내부 분포 기반 threshold를 사용하는 것이 좋다.
-        thresholds = {
-            "low_threshold": 0.49,
-            "high_threshold": 0.52,
-        }
+    if not PREPROCESSOR_PATH.exists():
+        raise FileNotFoundError(f"필요한 preprocessor 파일을 찾을 수 없습니다: {PREPROCESSOR_PATH}")
 
-    logger.info("load_speech_abnormality_reference done mean_shape=%s std_shape=%s",
-                getattr(reference_mean, 'shape', len(reference_mean) if reference_mean is not None else 0),
-                getattr(reference_std, 'shape', len(reference_std) if reference_std is not None else 0))
-    return reference_mean, reference_std, thresholds
+    sys.modules['__main__'].FeaturePreprocessor = FeaturePreprocessor
+
+    model = joblib.load(RF_MODEL_PATH)
+    preprocessor = joblib.load(PREPROCESSOR_PATH)
+
+    logger.info("load_speech_abnormality_reference done model_type=%s preprocessor_type=%s",
+                type(model).__name__, type(preprocessor).__name__)
+
+    return model, preprocessor
+
 
 # =========================
 # URL 경로 처리 함수
 # =========================
 
 def resolve_audio_input(
-    audio_path: Optional[str] = None,
-    audio_url: Optional[str] = None,
+        audio_path: Optional[str] = None,
+        audio_url: Optional[str] = None,
 ) -> Optional[str]:
-    """
-    audio_path 또는 audio_url을 받아서 음향 분석에 사용할 로컬 파일 경로를 반환한다.
-
-    - audio_path가 로컬 경로이면 해당 파일을 사용한다.
-    - audio_path가 URL(http/https)이면 다운로드 후 임시 파일 경로를 반환한다.
-    - audio_url이 있으면 임시 폴더에 다운로드한 뒤 그 파일 경로를 반환한다.
-    - 둘 다 없으면 None을 반환한다.
-
-    주의:
-    audio_url이 private S3 URL이면 presigned URL처럼 Python에서 접근 가능한 URL이어야 한다.
-    """
-    import os
     logger.info("resolve_audio_input audio_path=%s audio_url=%s", audio_path, audio_url)
 
     def _is_url(s: str) -> bool:
@@ -130,37 +166,22 @@ def resolve_audio_input(
         temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix, dir=temp_dir)
         with temp:
             temp.write(response.content)
-        logger.info("download done temp_path=%s size=%s exists=%s",
-                    temp.name, len(response.content), Path(temp.name).exists())
         return temp.name
 
-    # 1. audio_path 처리 (로컬 경로 또는 URL)
     if audio_path is not None and str(audio_path).strip() != "":
         path_str = str(audio_path).strip()
         if _is_url(path_str):
-            logger.info("audio_path is URL, downloading")
             return _download_to_temp(path_str)
 
-        # 로컬 경로인 경우
         path = Path(path_str)
-        logger.info("checking local audio_path exists=%s path=%s", path.exists(), path)
-
         if path.exists():
-            logger.info("using local audio_path=%s", path)
             return str(path)
 
-        logger.warning("local audio_path not found: %s", path_str)
-        # 로컬 파일이 없으면 audio_url 시도
-
-    # 2. audio_url 처리
     if audio_url is not None and str(audio_url).strip() != "":
         url_str = str(audio_url).strip()
         if _is_url(url_str):
             return _download_to_temp(url_str)
-        logger.warning("audio_url is not a valid URL: %s", url_str)
 
-    # 3. 둘 다 없는 경우
-    logger.warning("no audio_path or audio_url provided")
     return None
 
 
@@ -169,16 +190,6 @@ def resolve_audio_input(
 # =========================
 
 def normalize_speech_score(raw_score: float, max_score: float = 40.0) -> float:
-    """
-    record 단위 raw speech score를 0~100 점수로 변환한다.
-
-    현재 raw score 구성 예시:
-    - baseline_speech_score 최대 25
-    - speech_abnormality_score 최대 15
-    - 총 최대 40
-
-    최종 risk 계산에서 recall_score와 같은 0~100 범위로 맞추기 위해 사용한다.
-    """
     if max_score <= 0:
         return 0.0
 
@@ -189,9 +200,6 @@ def normalize_speech_score(raw_score: float, max_score: float = 40.0) -> float:
 
 
 def convert_score_to_level(score: float) -> str:
-    """
-    0~100 점수를 Low / Medium / High로 변환한다.
-    """
     if score >= 70:
         return "High"
     elif score >= 40:
@@ -205,38 +213,16 @@ def convert_score_to_level(score: float) -> str:
 # =========================
 
 def analyze_user_turn_baseline(
-    record_id: int,
-    session_id: Optional[int],
-    transcript_text: str,
-    duration_sec: float,
+        record_id: int,
+        session_id: Optional[int],
+        transcript_text: str,
+        duration_sec: float,
 ) -> Dict[str, Any]:
-    """
-    사용자 답변 1개를 노인 자유대화 baseline 기준으로 분석한다.
-
-    입력:
-    - record_id: AudioRecord ID
-    - session_id: 채팅 세션 ID
-    - transcript_text: STT 변환 텍스트
-    - duration_sec: 녹음 길이
-
-    출력:
-    - 텍스트 특징
-    - 발화 속도 특징
-    - baseline_speech_score
-    - baseline_speech_level
-    - baseline_reasons
-    """
-
-    # 1. STT 텍스트 기반 특징 추출
     text_features = extract_text_features(transcript_text)
-
-    # 2. 녹음 시간 기반 말속도 특징 추출
     speech_features = calculate_basic_speech_features(
         text_features,
         duration_sec
     )
-
-    # 3. 노인 자유대화 baseline 기준 점수화
     baseline_result = analyze_baseline_from_features(
         word_count=text_features["word_count"],
         speech_rate_word=speech_features["speech_rate_word"],
@@ -247,46 +233,57 @@ def analyze_user_turn_baseline(
         "recordId": record_id,
         "sessionId": session_id,
         "transcriptText": transcript_text,
-
         **text_features,
         **speech_features,
         **baseline_result,
     }
 
+# 구음 장애 데이터셋 문장 단위 잘랐을 때 정확도 낮으면 사용. 청크 단위 음성 나눈 후 추출, 분석
+# def get_vad_audio_chunks(audio_path: str, chunk_duration: float = 3.0):
+#     """
+#     오디오에서 묵음을 제거(VAD)한 뒤, 순수 발화 구간만 이어붙여
+#     3초 단위의 Chunk 배열로 반환합니다.
+#     """
+#     # 1. 오디오 로드 (16kHz 통일)
+#     y, sr = librosa.load(audio_path, sr=16000)
+#
+#     # 2. 묵음 제거 (VAD) - 30dB 기준으로 실제 발화 구간(intervals)만 추출
+#     intervals = librosa.effects.split(y, top_db=30)
+#     if len(intervals) == 0:
+#         return [], sr
+#
+#     # 3. 순수 발화 신호 결합
+#     active_y = np.concatenate([y[start:end] for start, end in intervals])
+#
+#     # 4. 3초(chunk_duration * sr) 단위로 자르기
+#     chunk_size = int(chunk_duration * sr)
+#     chunks = []
+#
+#     for i in range(0, len(active_y), chunk_size):
+#         chunk = active_y[i:i + chunk_size]
+#         # 마지막 조각이 너무 짧으면(1.5초 미만) 버리고, 길면 패딩하여 3초 규격 맞춤
+#         if len(chunk) >= chunk_size // 2:
+#             if len(chunk) < chunk_size:
+#                 chunk = np.pad(chunk, (0, chunk_size - len(chunk)), mode='constant')
+#             chunks.append(chunk)
+#
+#     return chunks, sr
 
 # =========================
 # 음향 이상 분석
 # =========================
 
 def analyze_user_turn_audio(
-    audio_path: str,
+        audio_path: str,
 ) -> Dict[str, Any]:
-    """
-    사용자 음성 파일을 구음장애/발화 이상 참고군과 비교하여
-    음향 이상 유사도 점수를 계산한다.
-
-    입력:
-    - audio_path: 사용자 음성 파일 경로
-
-    출력:
-    - audio feature
-    - dysarthria_similarity_score
-    - distance_from_reference
-    - speech_abnormality_level
-    - speech_abnormality_score
-    """
-
-    import os
     logger.info("analyze_user_turn_audio start audio_path=%s exists=%s",
                 audio_path, os.path.exists(audio_path) if audio_path else False)
 
     if audio_path is None or str(audio_path).strip() == "":
-        logger.warning("audio_path is empty")
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": "audio_path가 비어 있습니다.",
-            "dysarthria_similarity_score": None,
-            "distance_from_reference": None,
+            "abnormal_probability": None,
             "speech_abnormality_level": "Unknown",
             "speech_abnormality_score": 0,
         }
@@ -294,70 +291,55 @@ def analyze_user_turn_audio(
     audio_path_obj = Path(audio_path)
 
     if not audio_path_obj.exists():
-        logger.warning("audio file not found path=%s", audio_path)
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": f"음성 파일을 찾을 수 없습니다: {audio_path}",
-            "dysarthria_similarity_score": None,
-            "distance_from_reference": None,
+            "abnormal_probability": None,
             "speech_abnormality_level": "Unknown",
             "speech_abnormality_score": 0,
         }
 
-    # 1. 음향 특징 추출
-    logger.info("calling extract_audio_features path=%s", audio_path)
+    # 1. 파일에서 바로 eGeMAPS 피처 추출 (기존 원래 방식)
     audio_features = extract_audio_features(str(audio_path_obj))
-    logger.info("extract_audio_features done result=%s", audio_features is not None)
 
     if audio_features is None:
         return {
             "audio_analysis_available": False,
             "audio_analysis_error": "음향 특징 추출에 실패했습니다.",
-            "dysarthria_similarity_score": None,
-            "distance_from_reference": None,
+            "abnormal_probability": None,
             "speech_abnormality_level": "Unknown",
             "speech_abnormality_score": 0,
         }
 
     try:
-        # 2. 구음장애 참고군 profile 로드
-        logger.info("loading speech abnormality reference")
-        reference_mean, reference_std, thresholds = load_speech_abnormality_reference()
-        logger.info("reference loaded mean_keys=%s std_keys=%s thresholds=%s",
-                    len(reference_mean) if reference_mean is not None else 0,
-                    len(reference_std) if reference_std is not None else 0,
-                    thresholds)
+        # 2. 모델 및 전처리기 로드 후 바로 추론 (3초 루프 없이 단일 추론)
+        model, preprocessor = load_speech_abnormality_reference()
+        rf_result = predict_from_feature_dict(audio_features, model, preprocessor)
+        abnormal_prob = rf_result["abnormal_probability"]
 
-        # 3. 참고군 유사도 계산
-        logger.info("calculating dysarthria similarity")
-        similarity_result = calculate_dysarthria_similarity(
-            audio_features,
-            reference_mean,
-            reference_std,
-        )
-        logger.info("similarity_result=%s", similarity_result)
+        speech_abnormality_score = round(abnormal_prob * 15, 2)
 
-        # 4. 유사도를 점수/레벨로 변환
-        logger.info("converting similarity to score thresholds=%s", thresholds)
-        reference_score_result = convert_similarity_to_reference_score(
-            similarity_result["dysarthria_similarity_score"],
-            thresholds["low_threshold"],
-            thresholds["high_threshold"],
-)
+        if abnormal_prob >= 0.7:
+            speech_abnormality_level = "High"
+        elif abnormal_prob >= 0.4:
+            speech_abnormality_level = "Medium"
+        else:
+            speech_abnormality_level = "Low"
+
         score_result = {
-            "speech_abnormality_level": reference_score_result["reference_similarity_level"],
-            "speech_abnormality_score": reference_score_result["reference_similarity_score"],
-            "reference_similarity_level": reference_score_result["reference_similarity_level"],
-            "reference_similarity_score": reference_score_result["reference_similarity_score"],
-}
+            "abnormal_probability": round(abnormal_prob, 4),
+            "predicted_label": rf_result["predicted_label"],
+            "speech_abnormality_level": speech_abnormality_level,
+            "speech_abnormality_score": speech_abnormality_score,
+            "reference_similarity_level": speech_abnormality_level,
+            "reference_similarity_score": speech_abnormality_score,
+        }
 
         result = {
             "audio_analysis_available": True,
             **audio_features,
-            **similarity_result,
             **score_result,
         }
-        logger.info("analyze_user_turn_audio success keys=%s", list(result.keys()))
         return result
 
     except Exception as e:
@@ -366,8 +348,7 @@ def analyze_user_turn_audio(
             "audio_analysis_available": False,
             "audio_analysis_error": str(e),
             **audio_features,
-            "dysarthria_similarity_score": None,
-            "distance_from_reference": None,
+            "abnormal_probability": None,
             "speech_abnormality_level": "Unknown",
             "speech_abnormality_score": 0,
         }
@@ -378,37 +359,14 @@ def analyze_user_turn_audio(
 # =========================
 
 def analyze_user_turn(
-    record_id: int,
-    session_id: Optional[int],
-    audio_path: Optional[str] = None,
-    audio_url: Optional[str] = None,
-    transcript_text: str = "",
-    duration_sec: float = 0,
+        record_id: int,
+        session_id: Optional[int],
+        audio_path: Optional[str] = None,
+        audio_url: Optional[str] = None,
+        transcript_text: str = "",
+        duration_sec: float = 0,
 ) -> Dict[str, Any]:
-    """
-    사용자 답변 1개를 통합 분석한다.
 
-    입력:
-    - record_id: AudioRecord ID
-    - session_id: 세션 ID
-    - audio_path: 사용자 음성 파일 로컬 경로
-    - audio_url: 사용자 음성 파일 URL 또는 S3 presigned URL
-    - transcript_text: 백엔드 STT 결과 텍스트
-    - duration_sec: 녹음 길이
-
-    출력:
-    - baseline_speech_score
-    - speech_abnormality_score
-    - raw_speech_score
-    - speechRiskScore
-    - speechRiskLevel
-
-    주의:
-    이 결과는 의학적 진단이 아니라,
-    자유대화 기반 인지기능 저하 위험도 산출에 사용되는 보조 지표이다.
-    """
-
-    # 1. 텍스트/발화 시간 기반 baseline 분석
     baseline_result = analyze_user_turn_baseline(
         record_id=record_id,
         session_id=session_id,
@@ -416,17 +374,12 @@ def analyze_user_turn(
         duration_sec=duration_sec,
     )
 
-    # 2. audio_path 또는 audio_url을 로컬 파일 경로로 변환
-    logger.info("analyze_user_turn resolve_audio_input start audio_path=%s audio_url=%s",
-                audio_path, audio_url)
     try:
         resolved_audio_path = resolve_audio_input(
             audio_path=audio_path,
             audio_url=audio_url,
         )
-        logger.info("analyze_user_turn resolved_audio_path=%s", resolved_audio_path)
     except Exception as e:
-        logger.exception("resolve_audio_input failed recordId=%s", record_id)
         resolved_audio_path = None
         audio_result = {
             "audio_analysis_available": False,
@@ -437,13 +390,7 @@ def analyze_user_turn(
             "speech_abnormality_score": 0,
         }
     else:
-        # 3. 음성 파일 기반 발화 이상 분석
-        logger.info("analyze_user_turn calling analyze_user_turn_audio resolved_path=%s",
-                    resolved_audio_path)
         audio_result = analyze_user_turn_audio(resolved_audio_path)
-        logger.info("analyze_user_turn_audio done available=%s error=%s",
-                    audio_result.get("audio_analysis_available"),
-                    audio_result.get("audio_analysis_error"))
 
     effective_duration_sec = duration_sec or 0
     try:
@@ -468,44 +415,33 @@ def analyze_user_turn(
         audio_result["articulation_rate_word"] = round(
             baseline_result.get("word_count", 0) / speech_duration,
             3,
-        )
+            )
 
-    # 4. raw score는 baseline + 음향 이상 점수의 합으로 정의
     raw_speech_score = (
-        baseline_result.get("baseline_speech_score", 0)
-        + audio_result.get("speech_abnormality_score", 0)
+            baseline_result.get("baseline_speech_score", 0)
+            + audio_result.get("speech_abnormality_score", 0)
     )
 
-    # 5. recall_score와 합치기 위해 0~100 범위로 정규화
     speech_risk_score = normalize_speech_score(
         raw_score=raw_speech_score,
         max_score=40.0,
     )
 
     speech_risk_level = convert_score_to_level(speech_risk_score)
-
-    # 기존 회상 파트 calculate_final_risk_score()에 넣기 위한 점수
-    # speechRiskScore는 높을수록 위험, speechHealthScore는 높을수록 양호
     speech_health_score = round(100.0 - speech_risk_score, 2)
 
     return {
         **baseline_result,
         **audio_result,
-
         "audioPath": audio_path,
         "audioUrl": audio_url,
         "resolvedAudioPath": resolved_audio_path,
-
         "raw_speech_score": raw_speech_score,
         "speechRiskScore": speech_risk_score,
         "speechHealthScore": speech_health_score,
         "speechRiskLevel": speech_risk_level,
     }
 
-
-# =========================
-# 테스트 실행
-# =========================
 
 def main():
     result = analyze_user_turn(
@@ -516,7 +452,6 @@ def main():
         transcript_text="밥 먹었어요",
         duration_sec=7.0,
     )
-
     print("사용자 답변 통합 분석 결과")
     print(result)
 
