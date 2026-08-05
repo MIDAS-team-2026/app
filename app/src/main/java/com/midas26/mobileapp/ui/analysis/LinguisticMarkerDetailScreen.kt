@@ -68,7 +68,7 @@ fun LinguisticMarkerDetailScreen(
         }
 
         Text(
-            text = "최근 7일 · 점선은 평소 평균",
+            text = "최근 7일 · 점선은 내 검사 기록 평균",
             style = MaterialTheme.typography.bodySmall,
             color = AppColor.textTertiary,
             modifier = Modifier.padding(start = 56.dp, bottom = 8.dp)
@@ -118,12 +118,7 @@ fun LinguisticMarkerDetailScreen(
 
 @Composable
 private fun MarkerDetailCard(marker: LinguisticMarkerUi) {
-    val (badgeBg, badgeText, lineColor) = when (marker.status) {
-        MarkerStatus.GOOD -> Triple(AppColor.greenSurface, AppColor.accentDark, AppColor.accentDark)
-        MarkerStatus.WATCH -> Triple(AppColor.amberSurface, AppColor.amberDark, AppColor.amberDark)
-        MarkerStatus.DANGER -> Triple(AppColor.errorSurface, AppColor.errorPrimary, AppColor.errorPrimary)
-        MarkerStatus.INSUFFICIENT_DATA -> Triple(AppColor.surfaceElevated, AppColor.textTertiary, AppColor.textTertiary)
-    }
+    val markerColor = AppColor.accentDark
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -143,16 +138,6 @@ private fun MarkerDetailCard(marker: LinguisticMarkerUi) {
                     fontWeight = FontWeight.Bold,
                     color = AppColor.textPrimary
                 )
-
-                Surface(shape = RoundedCornerShape(999.dp), color = badgeBg) {
-                    Text(
-                        text = marker.status.label,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = badgeText,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -160,7 +145,7 @@ private fun MarkerDetailCard(marker: LinguisticMarkerUi) {
             MarkerLineChart(
                 points = marker.weeklyPoints,
                 baselineMean = marker.baselineMean,
-                lineColor = lineColor
+                lineColor = markerColor
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -170,7 +155,7 @@ private fun MarkerDetailCard(marker: LinguisticMarkerUi) {
                     text = marker.diffText,
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Bold,
-                    color = badgeText
+                    color = markerColor
                 )
 
                 Spacer(modifier = Modifier.size(6.dp))
