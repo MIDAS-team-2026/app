@@ -957,14 +957,22 @@ def _build_generation_history(cycle_texts: list[str], latest_text: str) -> list[
 
 _kiwi = Kiwi()
 
-# 기존 부분 문자열 매칭은 그대로 유지하되(활용형 조각·구 키워드가 워낙
-# 많아서 전부 형태소 단위로 바꾸면 오히려 불안정해진다), 그 매칭이
-# "형섭" 안의 "형"처럼 다른 단어 속에 우연히 낀 글자인지만 형태소
-# 분석으로 걸러낸다. keyword가 문장 어디에도 독립된 토큰으로 등장하지
-# 않으면서, 그보다 긴 명사 토큰 하나 안에만 부분 문자열로 들어있을
-# 때만 오탐으로 보고 제외한다.
-_NOUN_TAGS = {"NNG", "NNP"}
+# 키워드 리스트의 각 항목은 "드셨"/"다녀" 같은 활용 조각이 아니라
+# 사전형 어간("드시"/"다녀오")으로 관리한다. 조각을 혼자 떼어 분석하면
+# 형태소 분석기도 헷갈리지만("다녀"만 넣으면 "다니다"로 오분석),
+# 실제 문장 속에서는 정확한 어간이 나오기 때문이다("다녀왔어" 안에서는
+# 정확히 "다녀오"). 그래서 매칭은 부분 문자열이 아니라 완전히
+# 형태소(토큰) 단위로만 한다.
+_NOUN_TAGS = {"NNG", "NNP", "NNB", "NR", "NP"}
+_EXACT_MATCH_TAGS = _NOUN_TAGS | {"MAG", "XR", "SL", "SH", "SN", "IC"}
+# 동사/형용사는 접두사로 비교한다. "듣다/눕다/어렵다/덥다/춥다" 같은
+# 불규칙 활용 어간은 kiwi가 "VV-I"/"VA-I"처럼 -I가 붙은 태그를 쓴다.
+_PREDICATE_TAG_PREFIXES = ("VV", "VA", "VX", "XSA", "XSV")
 _tokenize_cache: dict[str, tuple] = {}
+
+
+def _is_match_tag(tag: str) -> bool:
+    return tag in _EXACT_MATCH_TAGS or tag.startswith(_PREDICATE_TAG_PREFIXES)
 
 
 def _tokenize_cached(text: str) -> tuple:
@@ -983,29 +991,67 @@ def _tokenize_cached(text: str) -> tuple:
     return tokens
 
 
-def _is_embedded_in_unrelated_noun(keyword: str, text: str) -> bool:
-    tokens = _tokenize_cached(text)
+def _match_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text) if _is_match_tag(token.tag)]
 
-    if any(token.form == keyword for token in tokens):
+
+def _full_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text)]
+
+
+def _is_contiguous_subsequence(needle: list[str], haystack: list[str]) -> bool:
+    if not needle:
         return False
 
+    span = len(needle)
+
     return any(
-        token.tag in _NOUN_TAGS and token.form != keyword and keyword in token.form
-        for token in tokens
+        haystack[start:start + span] == needle
+        for start in range(len(haystack) - span + 1)
     )
 
 
-def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    for keyword in keywords:
-        if keyword not in text:
-            continue
+# 조사(격조사/보조사/접속조사)는 의미를 가른다("집에만" vs "집을").
+# 어미(EP/EF/EC 등 활용형 꼬리)는 그냥 시제/문체 차이라 무시해도 된다.
+_PARTICLE_TAG_PREFIXES = ("JK", "JX", "JC")
 
-        if _is_embedded_in_unrelated_noun(keyword, text):
-            continue
 
-        return True
+def _keyword_has_meaningful_particle(word: str) -> bool:
+    return any(
+        token.tag.startswith(_PARTICLE_TAG_PREFIXES)
+        for token in _tokenize_cached(word)
+    )
 
-    return False
+
+def _keyword_occurs(keyword: str, text: str, strict: bool = False) -> bool:
+    """strict=True는 어미(시제/부정 등)까지 그대로 지켜야 하는 키워드용이다.
+    예: "안 좋"은 "안 좋아요"에는 맞아도 "좋아요"에는 맞으면 안 된다.
+    """
+    keyword_content_forms = _match_token_forms(keyword)
+
+    if not keyword_content_forms:
+        return False
+
+    if (
+        not strict
+        and len(keyword_content_forms) == 1
+        and not _keyword_has_meaningful_particle(keyword)
+    ):
+        # 단일 형태소 키워드("드셨"→"드시", "형")는 조사/어미와 무관하게
+        # 문장 안에 그 형태소가 등장하는지만 본다(활용형에 안정적).
+        return keyword_content_forms[0] in _match_token_forms(text)
+
+    # 조사·어미가 의미를 가르는 구 키워드("집에만", "안 좋")는 그걸 빼면
+    # 의미가 사라지거나("집에만"→"집") 반대 뜻이 될 수 있어서("안 좋"→"좋")
+    # 조사·어미를 포함한 전체 토큰 나열이 연속으로 등장하는지 확인한다.
+    return _is_contiguous_subsequence(
+        _full_token_forms(keyword),
+        _full_token_forms(text),
+    )
+
+
+def _contains_any(text: str, keywords: tuple[str, ...], strict: bool = False) -> bool:
+    return any(_keyword_occurs(keyword, text, strict=strict) for keyword in keywords)
 
 
 def _get_final_correction_segment(text: str) -> str:
@@ -1038,7 +1084,7 @@ def _get_final_correction_segment(text: str) -> str:
 QUALITATIVE_ABSENCE_PHRASES = (
     "맛이 없",
     "맛없",
-    "재미없",
+    "재미없다",
     "재미 없",
     "재미가 없",
     "기운이 없",
@@ -1174,7 +1220,7 @@ def _is_negative_response(text: str) -> bool:
             "아프",
             "아파",
             "우울",
-            "속상",
+            "속상하",
             "걱정",
             "불편",
             "무거웠",
@@ -1183,14 +1229,14 @@ def _is_negative_response(text: str) -> bool:
             "짜증",
             "슬프",
             "슬펐",
-            "외로",
-            "무서",
+            "외롭",
+            "무섭",
             "불안",
             "서운",
             "피곤",
             "기운이 없",
             "기운 없",
-            "재미없",
+            "재미없다",
             "재미 없",
             "맛없",
             "맛이 없",
@@ -1222,12 +1268,12 @@ def _is_positive_response(text: str) -> bool:
         (
             "좋",
             "재밌",
-            "즐거",
+            "즐겁",
             "맛있",
             "상쾌",
             "편안",
             "기쁘",
-            "반가",
+            "반갑",
         ),
     )
 
@@ -1244,7 +1290,7 @@ def _is_short_response(text: str) -> bool:
 def _is_recall_recovery_response(text: str) -> bool:
     return _contains_any(
         _normalize_text(text),
-        ("생각났", "기억났", "떠올랐"),
+        ("생각나다", "기억나다", "떠오르다"),
     )
 
 
@@ -1518,12 +1564,12 @@ def _is_future_response(text: str) -> bool:
             "쉴래",
             "살래",
             "올래",
-            "으면 좋",
-            "면 좋겠",
+            "좋겠",
             "오실 거",
             "올 거",
             "올거",
         ),
+        strict=True,
     )
 
 
@@ -1544,6 +1590,7 @@ def _is_wish_response(text: str) -> bool:
             "사고 싶",
             "듣고 싶",
         ),
+        strict=True,
     )
 
 
@@ -1633,7 +1680,7 @@ def _detect_topic_in_text(text: str) -> str | None:
     )
     has_health_symptom = _contains_any(
         health_text,
-        ("불편", "쑤", "삐끗", "저리", "안 좋", "통증"),
+        ("불편", "쑤시", "삐끗", "저리", "안 좋", "통증"),
     )
 
     if (
@@ -1664,7 +1711,7 @@ def _detect_topic_in_text(text: str) -> str | None:
 
     if has_explicit_media and _contains_any(
         text,
-        ("재미없", "재미 없", "재미가 없", "별로"),
+        ("재미없다", "재미 없", "재미가 없", "별로"),
     ):
         return "MEDIA"
 
@@ -1843,7 +1890,7 @@ def _detect_topic_in_text(text: str) -> str | None:
             "밖",
             "창밖",
             "어디",
-            "다녀",
+            "다녀오",
             "갔",
             "갔다",
         ),
@@ -2186,7 +2233,7 @@ def _get_topic_aware_fallback_candidates(
 
         if not _contains_any(
             context,
-            ("아프", "아팠", "다쳤", "불편", "쑤", "삐끗", "저리", "안 좋", "통증", "몸"),
+            ("아프", "아팠", "다쳤", "불편", "쑤시", "삐끗", "저리", "안 좋", "통증", "몸"),
         ):
             candidates = [
                 question
@@ -2249,7 +2296,7 @@ def _get_topic_aware_fallback_candidates(
                 if "어떤 방송이나 프로그램" not in question
             ]
 
-        if _contains_any(latest_text, ("재미없", "재미 없", "별로")):
+        if _contains_any(latest_text, ("재미없다", "재미 없", "별로")):
             candidates = [
                 question
                 for question in candidates
@@ -2283,7 +2330,7 @@ def _get_topic_aware_fallback_candidates(
                 if "사람" not in question and "노래" not in question
             ]
 
-        if _contains_any(latest_text, ("좋았", "재밌", "즐거")):
+        if _contains_any(latest_text, ("좋았", "재밌", "즐겁")):
             candidates = [
                 question
                 for question in candidates
