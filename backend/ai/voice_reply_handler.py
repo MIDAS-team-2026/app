@@ -17,6 +17,8 @@ import re
 import requests
 from datetime import date
 
+from kiwipiepy import Kiwi
+
 from recall.free_talk_question_generator import (
     generate_safe_followup_question,
     is_similar_to_previous_question,
@@ -953,8 +955,57 @@ def _build_generation_history(cycle_texts: list[str], latest_text: str) -> list[
     return history
 
 
+_kiwi = Kiwi()
+
+# 기존 부분 문자열 매칭은 그대로 유지하되(활용형 조각·구 키워드가 워낙
+# 많아서 전부 형태소 단위로 바꾸면 오히려 불안정해진다), 그 매칭이
+# "형섭" 안의 "형"처럼 다른 단어 속에 우연히 낀 글자인지만 형태소
+# 분석으로 걸러낸다. keyword가 문장 어디에도 독립된 토큰으로 등장하지
+# 않으면서, 그보다 긴 명사 토큰 하나 안에만 부분 문자열로 들어있을
+# 때만 오탐으로 보고 제외한다.
+_NOUN_TAGS = {"NNG", "NNP"}
+_tokenize_cache: dict[str, tuple] = {}
+
+
+def _tokenize_cached(text: str) -> tuple:
+    text = str(text or "")
+    cached = _tokenize_cache.get(text)
+
+    if cached is not None:
+        return cached
+
+    tokens = tuple(_kiwi.tokenize(text))
+
+    if len(_tokenize_cache) > 2000:
+        _tokenize_cache.clear()
+
+    _tokenize_cache[text] = tokens
+    return tokens
+
+
+def _is_embedded_in_unrelated_noun(keyword: str, text: str) -> bool:
+    tokens = _tokenize_cached(text)
+
+    if any(token.form == keyword for token in tokens):
+        return False
+
+    return any(
+        token.tag in _NOUN_TAGS and token.form != keyword and keyword in token.form
+        for token in tokens
+    )
+
+
 def _contains_any(text: str, keywords: tuple[str, ...]) -> bool:
-    return any(keyword in text for keyword in keywords)
+    for keyword in keywords:
+        if keyword not in text:
+            continue
+
+        if _is_embedded_in_unrelated_noun(keyword, text):
+            continue
+
+        return True
+
+    return False
 
 
 def _get_final_correction_segment(text: str) -> str:
