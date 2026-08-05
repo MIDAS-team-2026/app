@@ -31,17 +31,34 @@ class TutorialViewModel : ViewModel() {
     val state: StateFlow<TutorialState> = _state.asStateFlow()
 
     private companion object {
-        const val TOTAL_TUTORIAL_STEPS = 16
+        /*
+         * 기존 화면 설명 16단계에 하단 탭 안내 3단계를 추가합니다.
+         *
+         * 1     : 홈 탭 안내
+         * 2~6   : 홈 화면
+         * 7     : 대화 탭 안내
+         * 8~10  : 음성 대화
+         * 11    : 분석 탭 안내
+         * 12~14 : 분석 결과
+         * 15    : 설정 탭 안내
+         * 16~21 : 설정
+         */
+        const val TOTAL_TUTORIAL_STEPS = 21
 
+        // 화면별 다시 보기에는 하단 탭 이동 안내를 포함하지 않습니다.
         const val HOME_TUTORIAL_STEPS = 5
         const val VOICE_CHAT_TUTORIAL_STEPS = 3
         const val ANALYSIS_TUTORIAL_STEPS = 3
-        const val SETTINGS_TUTORIAL_STEPS = 5
+        const val SETTINGS_TUTORIAL_STEPS = 6
 
-        const val FULL_HOME_START_NUMBER = 1
-        const val FULL_VOICE_CHAT_START_NUMBER = 6
-        const val FULL_ANALYSIS_START_NUMBER = 9
-        const val FULL_SETTINGS_START_NUMBER = 12
+        const val FULL_MOVE_TO_HOME_TAB_NUMBER = 1
+        const val FULL_HOME_START_NUMBER = 2
+        const val FULL_MOVE_TO_VOICE_TAB_NUMBER = 7
+        const val FULL_VOICE_CHAT_START_NUMBER = 8
+        const val FULL_MOVE_TO_ANALYSIS_TAB_NUMBER = 11
+        const val FULL_ANALYSIS_START_NUMBER = 12
+        const val FULL_MOVE_TO_SETTINGS_TAB_NUMBER = 15
+        const val FULL_SETTINGS_START_NUMBER = 16
     }
 
     /**
@@ -63,12 +80,14 @@ class TutorialViewModel : ViewModel() {
             isRunning = true,
             currentScreen = TutorialScreen.HOME,
 
-            homeStep = HomeTutorialStep.WELCOME,
+            homeStep = HomeTutorialStep.MOVE_TO_HOME_TAB,
             voiceChatStep = VoiceChatTutorialStep.MESSAGE,
             analysisStep = AnalysisTutorialStep.MAIN_SCORE,
             settingsStep = SettingsTutorialStep.ACCESSIBILITY,
 
-            currentNumber = FULL_HOME_START_NUMBER,
+            highlightedBottomTab = TutorialBottomTab.HOME,
+
+            currentNumber = FULL_MOVE_TO_HOME_TAB_NUMBER,
             totalNumber = TOTAL_TUTORIAL_STEPS
         )
     }
@@ -89,6 +108,8 @@ class TutorialViewModel : ViewModel() {
             analysisStep = AnalysisTutorialStep.COMPLETED,
             settingsStep = SettingsTutorialStep.COMPLETED,
 
+            highlightedBottomTab = null,
+
             currentNumber = 1,
             totalNumber = HOME_TUTORIAL_STEPS
         )
@@ -106,6 +127,8 @@ class TutorialViewModel : ViewModel() {
             voiceChatStep = VoiceChatTutorialStep.MESSAGE,
             analysisStep = AnalysisTutorialStep.COMPLETED,
             settingsStep = SettingsTutorialStep.COMPLETED,
+
+            highlightedBottomTab = null,
 
             currentNumber = 1,
             totalNumber = VOICE_CHAT_TUTORIAL_STEPS
@@ -125,6 +148,8 @@ class TutorialViewModel : ViewModel() {
             analysisStep = AnalysisTutorialStep.MAIN_SCORE,
             settingsStep = SettingsTutorialStep.COMPLETED,
 
+            highlightedBottomTab = null,
+
             currentNumber = 1,
             totalNumber = ANALYSIS_TUTORIAL_STEPS
         )
@@ -142,6 +167,8 @@ class TutorialViewModel : ViewModel() {
             voiceChatStep = VoiceChatTutorialStep.COMPLETED,
             analysisStep = AnalysisTutorialStep.COMPLETED,
             settingsStep = SettingsTutorialStep.ACCESSIBILITY,
+
+            highlightedBottomTab = null,
 
             currentNumber = 1,
             totalNumber = SETTINGS_TUTORIAL_STEPS
@@ -223,7 +250,28 @@ class TutorialViewModel : ViewModel() {
      */
     fun stopTutorial() {
         _state.update { currentState ->
-            currentState.copy(isRunning = false)
+            currentState.copy(
+                isRunning = false,
+                highlightedBottomTab = null
+            )
+        }
+    }
+
+    /**
+     * 전체 튜토리얼 시작 시 하단 홈 탭을 안내합니다.
+     */
+    fun showHomeTabGuide(
+        number: Int = FULL_MOVE_TO_HOME_TAB_NUMBER
+    ) {
+        _state.update { currentState ->
+            currentState.copy(
+                isRunning = true,
+                currentScreen = TutorialScreen.HOME,
+                homeStep = HomeTutorialStep.MOVE_TO_HOME_TAB,
+                highlightedBottomTab = TutorialBottomTab.HOME,
+                currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
+                totalNumber = TOTAL_TUTORIAL_STEPS
+            )
         }
     }
 
@@ -239,6 +287,7 @@ class TutorialViewModel : ViewModel() {
                 isRunning = true,
                 currentScreen = TutorialScreen.HOME,
                 homeStep = step,
+                highlightedBottomTab = null,
                 currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
                 totalNumber = TOTAL_TUTORIAL_STEPS
             )
@@ -246,7 +295,25 @@ class TutorialViewModel : ViewModel() {
     }
 
     /**
-     * 전체 튜토리얼 진행 중 음성 대화 화면으로 이동합니다.
+     * 홈 화면 설명이 끝난 뒤 하단의 대화 탭을 안내합니다.
+     */
+    fun showVoiceTabGuide(
+        number: Int = FULL_MOVE_TO_VOICE_TAB_NUMBER
+    ) {
+        _state.update { currentState ->
+            currentState.copy(
+                isRunning = true,
+                currentScreen = TutorialScreen.HOME,
+                homeStep = HomeTutorialStep.MOVE_TO_VOICE_TAB,
+                highlightedBottomTab = TutorialBottomTab.VOICE_CHAT,
+                currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
+                totalNumber = TOTAL_TUTORIAL_STEPS
+            )
+        }
+    }
+
+    /**
+     * 하단 대화 탭을 누른 뒤 음성 대화 튜토리얼을 시작합니다.
      */
     fun moveToVoiceChat(
         step: VoiceChatTutorialStep = VoiceChatTutorialStep.MESSAGE,
@@ -258,6 +325,7 @@ class TutorialViewModel : ViewModel() {
                 currentScreen = TutorialScreen.VOICE_CHAT,
                 homeStep = HomeTutorialStep.COMPLETED,
                 voiceChatStep = step,
+                highlightedBottomTab = null,
                 currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
                 totalNumber = TOTAL_TUTORIAL_STEPS
             )
@@ -265,7 +333,25 @@ class TutorialViewModel : ViewModel() {
     }
 
     /**
-     * 전체 튜토리얼 진행 중 분석 결과 화면으로 이동합니다.
+     * 음성 대화 설명이 끝난 뒤 하단의 분석 탭을 안내합니다.
+     */
+    fun showAnalysisTabGuide(
+        number: Int = FULL_MOVE_TO_ANALYSIS_TAB_NUMBER
+    ) {
+        _state.update { currentState ->
+            currentState.copy(
+                isRunning = true,
+                currentScreen = TutorialScreen.VOICE_CHAT,
+                voiceChatStep = VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB,
+                highlightedBottomTab = TutorialBottomTab.ANALYSIS,
+                currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
+                totalNumber = TOTAL_TUTORIAL_STEPS
+            )
+        }
+    }
+
+    /**
+     * 하단 분석 탭을 누른 뒤 분석 결과 튜토리얼을 시작합니다.
      */
     fun moveToAnalysis(
         step: AnalysisTutorialStep = AnalysisTutorialStep.MAIN_SCORE,
@@ -278,6 +364,7 @@ class TutorialViewModel : ViewModel() {
                 homeStep = HomeTutorialStep.COMPLETED,
                 voiceChatStep = VoiceChatTutorialStep.COMPLETED,
                 analysisStep = step,
+                highlightedBottomTab = null,
                 currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
                 totalNumber = TOTAL_TUTORIAL_STEPS
             )
@@ -285,7 +372,25 @@ class TutorialViewModel : ViewModel() {
     }
 
     /**
-     * 전체 튜토리얼 진행 중 설정 화면으로 이동합니다.
+     * 분석 결과 설명이 끝난 뒤 하단의 설정 탭을 안내합니다.
+     */
+    fun showSettingsTabGuide(
+        number: Int = FULL_MOVE_TO_SETTINGS_TAB_NUMBER
+    ) {
+        _state.update { currentState ->
+            currentState.copy(
+                isRunning = true,
+                currentScreen = TutorialScreen.ANALYSIS,
+                analysisStep = AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB,
+                highlightedBottomTab = TutorialBottomTab.SETTINGS,
+                currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
+                totalNumber = TOTAL_TUTORIAL_STEPS
+            )
+        }
+    }
+
+    /**
+     * 하단 설정 탭을 누른 뒤 설정 튜토리얼을 시작합니다.
      */
     fun moveToSettings(
         step: SettingsTutorialStep = SettingsTutorialStep.ACCESSIBILITY,
@@ -299,6 +404,7 @@ class TutorialViewModel : ViewModel() {
                 voiceChatStep = VoiceChatTutorialStep.COMPLETED,
                 analysisStep = AnalysisTutorialStep.COMPLETED,
                 settingsStep = step,
+                highlightedBottomTab = null,
                 currentNumber = number.coerceIn(1, TOTAL_TUTORIAL_STEPS),
                 totalNumber = TOTAL_TUTORIAL_STEPS
             )
@@ -320,6 +426,15 @@ class TutorialViewModel : ViewModel() {
                 isRunning = true,
                 currentScreen = TutorialScreen.HOME,
                 homeStep = step,
+                highlightedBottomTab = when (step) {
+                    HomeTutorialStep.MOVE_TO_HOME_TAB ->
+                        TutorialBottomTab.HOME
+
+                    HomeTutorialStep.MOVE_TO_VOICE_TAB ->
+                        TutorialBottomTab.VOICE_CHAT
+
+                    else -> null
+                },
                 currentNumber = normalizeNumber(number, currentState.totalNumber)
             )
         }
@@ -337,6 +452,11 @@ class TutorialViewModel : ViewModel() {
                 isRunning = true,
                 currentScreen = TutorialScreen.VOICE_CHAT,
                 voiceChatStep = step,
+                highlightedBottomTab = when (step) {
+                    VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB ->
+                        TutorialBottomTab.ANALYSIS
+                    else -> null
+                },
                 currentNumber = normalizeNumber(number, currentState.totalNumber)
             )
         }
@@ -354,6 +474,11 @@ class TutorialViewModel : ViewModel() {
                 isRunning = true,
                 currentScreen = TutorialScreen.ANALYSIS,
                 analysisStep = step,
+                highlightedBottomTab = when (step) {
+                    AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
+                        TutorialBottomTab.SETTINGS
+                    else -> null
+                },
                 currentNumber = normalizeNumber(number, currentState.totalNumber)
             )
         }
@@ -371,6 +496,7 @@ class TutorialViewModel : ViewModel() {
                 isRunning = true,
                 currentScreen = TutorialScreen.SETTINGS,
                 settingsStep = step,
+                highlightedBottomTab = null,
                 currentNumber = normalizeNumber(number, currentState.totalNumber)
             )
         }
@@ -392,6 +518,8 @@ class TutorialViewModel : ViewModel() {
                 voiceChatStep = VoiceChatTutorialStep.COMPLETED,
                 analysisStep = AnalysisTutorialStep.COMPLETED,
                 settingsStep = SettingsTutorialStep.COMPLETED,
+
+                highlightedBottomTab = null,
 
                 currentNumber = currentState.totalNumber.coerceAtLeast(1)
             )

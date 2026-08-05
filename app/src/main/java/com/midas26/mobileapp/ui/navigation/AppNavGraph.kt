@@ -16,8 +16,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -62,6 +65,8 @@ import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
+import com.midas26.mobileapp.ui.tutorial.TutorialBottomTab
+import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
 import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
@@ -132,6 +137,16 @@ fun AppNavHost(
      */
     var pendingReplayTarget by remember {
         mutableStateOf<TutorialReplayTarget?>(null)
+    }
+
+    /*
+     * AppBottomBar에서 직접 측정한 각 사용자 탭의 실제 Bounds입니다.
+     *
+     * 전체 하단 바를 임의로 4등분하지 않고,
+     * 각 탭의 선택 표시선·아이콘·라벨 영역을 그대로 사용합니다.
+     */
+    var userBottomTabBounds by remember {
+        mutableStateOf<Map<TabId, Rect>>(emptyMap())
     }
 
     LaunchedEffect(
@@ -230,751 +245,899 @@ fun AppNavHost(
             if (isGuardian) GuardianHomeTab.Home else UserHomeTab.Home
     }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0),
-        bottomBar = {
-            if (currentRoute in mainRoutes && PrefsManager.from(context).isLoggedIn()) {
-                AppBottomBar(
-                    tabs = if (isGuardian) guardianTabs else userTabs,
-                    selectedTab = selectedTab,
-                    onTabClick = { tabId ->
-                        /*
-                         * 사용자가 하단 탭을 직접 누른 경우:
-                         * 1. 대기 중인 다시 보기 요청을 취소하고
-                         * 2. 실행 중인 튜토리얼을 종료합니다.
-                         *
-                         * 튜토리얼 내부의 '다음' 버튼을 통한 화면 이동은
-                         * 이 하단 탭 콜백을 거치지 않으므로 영향을 받지 않습니다.
-                         */
-                        pendingReplayTarget = null
+    val highlightedUserTab: UserHomeTab? = when (
+        tutorialState.highlightedBottomTab
+    ) {
+        TutorialBottomTab.HOME -> UserHomeTab.Home
+        TutorialBottomTab.VOICE_CHAT -> UserHomeTab.Chat
+        TutorialBottomTab.ANALYSIS -> UserHomeTab.Analysis
+        TutorialBottomTab.SETTINGS -> UserHomeTab.Settings
+        null -> null
+    }
 
-                        if (tutorialState.isRunning) {
-                            tutorialViewModel.stopTutorial()
-                        }
+    /*
+     * AppBottomBar에서 측정한 실제 선택 표시선·아이콘·라벨 Bounds를 기준으로
+     * 튜토리얼 테두리에 필요한 여백만 추가합니다.
+     *
+     * 위치는 실제 콘텐츠 좌표를 그대로 사용하고,
+     * 크기만 좌우 22dp, 위 8dp, 아래 8dp 확장합니다.
+     */
+    val highlightedBottomTabBounds: Rect? = run {
+        if (isGuardian) {
+            null
+        } else {
+            val measuredBounds = highlightedUserTab?.let { tab ->
+                userBottomTabBounds[tab]
+            }
 
-                        val destination = when (tabId) {
-                            UserHomeTab.Home -> Routes.UserHome
-                            UserHomeTab.Chat -> Routes.VoiceChat
-                            UserHomeTab.Analysis -> Routes.AnalysisResult
-                            UserHomeTab.Settings -> Routes.Settings
+            measuredBounds?.let { bounds ->
+                val density = LocalDensity.current
+                /*
+                 * 하이라이트 크기와 위치를 세밀하게 조정합니다.
+                 *
+                 * - 좌우 여백: 22dp → 18dp
+                 *   기존보다 전체 너비를 8dp 줄입니다.
+                 *
+                 * - 위아래 여백: 8dp → 10dp
+                 *   기존보다 전체 높이를 4dp 늘립니다.
+                 *
+                 * - 위쪽 이동: 6dp → 8dp
+                 *   하이라이트 전체를 2dp 더 위로 이동합니다.
+                 */
+                val horizontalPaddingPx = with(density) { 10.dp.toPx() }
+                val topPaddingPx = with(density) { 18.dp.toPx() }
+                val bottomPaddingPx = with(density) { 8.dp.toPx() }
+                val verticalOffsetPx = with(density) { 10.dp.toPx() }
 
-                            GuardianHomeTab.Home -> Routes.GuardianHome
-                            GuardianHomeTab.Analysis -> Routes.AnalysisUserSelect
-                            GuardianHomeTab.Location -> Routes.LocationList
-                            GuardianHomeTab.Settings -> Routes.Settings
-                        }
-
-                        navController.navigate(destination) {
-                            popUpTo(homeRoute) {
-                                inclusive = false
-                            }
-                            launchSingleTop = true
-                        }
-                    },
-                    accent = if (isGuardian) AppColor.guardianDark else AppColor.greenSecondary
+                Rect(
+                    left = bounds.left - horizontalPaddingPx,
+                    top = bounds.top - topPaddingPx - verticalOffsetPx,
+                    right = bounds.right + horizontalPaddingPx,
+                    bottom = bounds.bottom + bottomPaddingPx - verticalOffsetPx
                 )
             }
         }
-    ) { innerPadding ->
+    }
 
-        val visibleEntries by navController.visibleEntries.collectAsState()
-        val isTransitioning = visibleEntries.size > 1
+    val handleBottomTabClick: (TabId) -> Unit = { tabId ->
+        val isExpectedTutorialTab =
+            tutorialState.isRunning &&
+                    highlightedUserTab != null &&
+                    tabId == highlightedUserTab
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            NavHost(
-                navController = navController,
-                startDestination = startDestination
+        pendingReplayTarget = null
+
+        val shouldNavigate = when {
+            isExpectedTutorialTab -> {
+                when (tabId) {
+                    UserHomeTab.Home -> tutorialViewModel.moveToHome()
+                    UserHomeTab.Chat -> tutorialViewModel.moveToVoiceChat()
+
+                    UserHomeTab.Analysis -> {
+                        tutorialViewModel.moveToAnalysis()
+                        analysisViewModel.refresh()
+                    }
+
+                    UserHomeTab.Settings -> tutorialViewModel.moveToSettings()
+                    else -> Unit
+                }
+                true
+            }
+
+            tutorialState.isRunning &&
+                    tutorialState.highlightedBottomTab != null -> false
+
+            else -> {
+                if (tutorialState.isRunning) {
+                    tutorialViewModel.stopTutorial()
+                }
+                true
+            }
+        }
+
+        if (shouldNavigate) {
+            val destination = when (tabId) {
+                UserHomeTab.Home -> Routes.UserHome
+                UserHomeTab.Chat -> Routes.VoiceChat
+                UserHomeTab.Analysis -> Routes.AnalysisResult
+                UserHomeTab.Settings -> Routes.Settings
+                GuardianHomeTab.Home -> Routes.GuardianHome
+                GuardianHomeTab.Analysis -> Routes.AnalysisUserSelect
+                GuardianHomeTab.Location -> Routes.LocationList
+                GuardianHomeTab.Settings -> Routes.Settings
+            }
+
+            navController.navigate(destination) {
+                popUpTo(homeRoute) {
+                    inclusive = false
+                }
+                launchSingleTop = true
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0),
+            bottomBar = {
+                if (currentRoute in mainRoutes && PrefsManager.from(context).isLoggedIn()) {
+                    AppBottomBar(
+                        tabs = if (isGuardian) {
+                            guardianTabs
+                        } else {
+                            userTabs
+                        },
+                        selectedTab = selectedTab,
+                        onTabClick = handleBottomTabClick,
+                        accent = if (isGuardian) {
+                            AppColor.guardianDark
+                        } else {
+                            AppColor.greenSecondary
+                        },
+                        onTabBoundsChanged = { tabId, bounds ->
+                            if (!isGuardian) {
+                                userBottomTabBounds =
+                                    userBottomTabBounds + (tabId to bounds)
+                            }
+                        }
+                    )
+                }
+            }
+        ) { innerPadding ->
+
+            val visibleEntries by navController.visibleEntries.collectAsState()
+            val isTransitioning = visibleEntries.size > 1
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
-                composable(Routes.Onboarding) {
-                    OnboardingScreen(
-                        onFinish = {
-                            navController.navigate(Routes.OnboardingPermission) {
-                                popUpTo(Routes.Onboarding) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.OnboardingPermission) {
-                    PermissionScreen(
-                        onNext = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(Routes.OnboardingPermission) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.Login) {
-                    LoginScreen(
-                        onNavigateToLoginForm = {
-                            navController.navigate(Routes.LoginForm)
-                        },
-                        onNavigateToSignup = {
-                            navController.navigate(Routes.SignupRole)
-                        },
-                        onAccessibility = {
-                            navController.navigate(Routes.LoginAccessibilitySettings)
-                        }
-                    )
-                }
-
-                composable(Routes.LoginForm) {
-                    LoginFormScreen(
-                        onNavigateToHome = {
-                            analysisViewModel.refresh()
-                            hasAttemptedTutorialAutoStart = false
-
-                            val home =
-                                if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
-                                    Routes.GuardianHome
-                                } else {
-                                    Routes.UserHome
+                NavHost(
+                    navController = navController,
+                    startDestination = startDestination
+                ) {
+                    composable(Routes.Onboarding) {
+                        OnboardingScreen(
+                            onFinish = {
+                                navController.navigate(Routes.OnboardingPermission) {
+                                    popUpTo(Routes.Onboarding) { inclusive = true }
                                 }
-
-                            navController.navigate(home) {
-                                popUpTo(Routes.Login) { inclusive = true }
                             }
-                        },
-                        onBack = {
-                            navController.popBackStack()
-                        },
-                        onForgotPassword = {
-                            navController.navigate(Routes.ForgotPassword)
-                        }
-                    )
-                }
-
-                composable(Routes.ForgotPassword) {
-                    ForgotPasswordScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.ForgotPassword)
-                        },
-                        onCodeSent = { phone ->
-                            navController.navigate(Routes.forgotPasswordVerify(phone))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.ForgotPasswordVerify,
-                    arguments = listOf(
-                        navArgument(Routes.ForgotPasswordVerifyArgPhone) {
-                            type = NavType.StringType
-                        }
-                    )
-                ) { back ->
-                    val phone = back.arguments?.getString(Routes.ForgotPasswordVerifyArgPhone) ?: ""
-
-                    ForgotPasswordVerifyScreen(
-                        phone = phone,
-                        onBack = { navController.popBackStack() },
-                        onVerified = { verifiedPhone ->
-                            navController.navigate(Routes.resetPassword(verifiedPhone)) {
-                                popUpTo(Routes.ForgotPassword) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.ResetPassword,
-                    arguments = listOf(
-                        navArgument(Routes.ResetPasswordArgPhone) {
-                            type = NavType.StringType
-                        }
-                    )
-                ) { back ->
-                    val phone = back.arguments?.getString(Routes.ResetPasswordArgPhone) ?: ""
-
-                    ResetPasswordScreen(
-                        phone = phone,
-                        onBack = { navController.popBackStack() },
-                        onPasswordReset = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(Routes.Login) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.SignupRole) {
-                    SignupRoleScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.SignupRole)
-                        },
-                        onNext = { signupRole ->
-                            navController.navigate(Routes.signupInfo(signupRole))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.SignupInfo,
-                    arguments = listOf(
-                        navArgument(Routes.SignupInfoArgRole) {
-                            type = NavType.StringType
-                            defaultValue = PrefsManager.ROLE_USER
-                        }
-                    )
-                ) { back ->
-                    val signupRole = back.arguments?.getString(Routes.SignupInfoArgRole)
-                        ?: PrefsManager.ROLE_USER
-
-                    SignupInfoScreen(
-                        role = signupRole,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.SignupInfo)
-                        },
-                        onVerify = { phone ->
-                            navController.navigate(Routes.phoneVerification(phone, signupRole))
-                        },
-                        viewModel = authViewModel
-                    )
-                }
-
-                composable(
-                    route = Routes.PhoneVerification,
-                    arguments = listOf(
-                        navArgument(Routes.PhoneVerificationArgPhone) {
-                            type = NavType.StringType
-                        },
-                        navArgument(Routes.PhoneVerificationArgRole) {
-                            type = NavType.StringType
-                            defaultValue = PrefsManager.ROLE_USER
-                        }
-                    )
-                ) { back ->
-                    val phone = back.arguments?.getString(Routes.PhoneVerificationArgPhone) ?: ""
-                    val signupRole = back.arguments?.getString(Routes.PhoneVerificationArgRole)
-                        ?: PrefsManager.ROLE_USER
-
-                    PhoneVerificationScreen(
-                        phone = phone,
-                        authViewModel = authViewModel,
-                        onBack = { navController.popBackStack() },
-                        onVerified = {
-                            authViewModel.clearCodeSent()
-                            navController.navigate(Routes.privacy(signupRole)) {
-                                popUpTo(Routes.SignupRole) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.Permission,
-                    arguments = listOf(
-                        navArgument(Routes.PermissionArgRole) {
-                            type = NavType.StringType
-                            defaultValue = PrefsManager.ROLE_USER
-                        }
-                    )
-                ) { back ->
-                    val permissionRole = back.arguments?.getString(Routes.PermissionArgRole)
-                        ?: PrefsManager.ROLE_USER
-
-                    PermissionScreen(
-                        onNext = {
-                            navController.navigate(Routes.privacy(permissionRole))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.Privacy,
-                    arguments = listOf(
-                        navArgument(Routes.PrivacyArgRole) {
-                            type = NavType.StringType
-                            defaultValue = PrefsManager.ROLE_USER
-                        }
-                    )
-                ) { back ->
-                    val privacyRole = back.arguments?.getString(Routes.PrivacyArgRole)
-                        ?: PrefsManager.ROLE_USER
-
-                    PrivacyScreen(
-                        onAgreeAndStart = {
-                            navController.navigate(Routes.SignupComplete) {
-                                popUpTo(Routes.Login) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.SignupComplete) {
-                    SignupCompleteScreen(
-                        viewModel = authViewModel,
-                        onGoHome = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.UserHome) {
-                    UserHomeScreen(
-                        tutorialViewModel = tutorialViewModel,
-                        userName = PrefsManager.from(context).getUserName(),
-                        streakDays = analysisViewModel.streakDays,
-                        weeklyChecks = analysisViewModel.weeklyChecks,
-                        weeklyDayLabels = analysisViewModel.weeklyDayLabels,
-                        todayIndex = analysisViewModel.todayDayIndex,
-                        onMenuClick = { menu ->
-                            when (menu) {
-                                UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
-                                UserMenu.Recall -> { /* 미구현 */ }
-                                UserMenu.Analysis -> navController.navigate(Routes.AnalysisResult)
-                                UserMenu.Settings -> navController.navigate(Routes.Settings)
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.GuardianHome) {
-                    val prefs = PrefsManager.from(context)
-                    val guardianId = prefs.getUserId()
-                    val guardianName = prefs.getUserName()
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
-                    val patientScores by guardianViewModel.patientScores.collectAsState()
-
-                    LaunchedEffect(guardianId) {
-                        guardianViewModel.loadPatients(guardianId)
+                        )
                     }
 
-                    LaunchedEffect(patients) {
-                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                    composable(Routes.OnboardingPermission) {
+                        PermissionScreen(
+                            onNext = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(Routes.OnboardingPermission) { inclusive = true }
+                                }
+                            }
+                        )
                     }
 
-                    GuardianHomeScreen(
-                        guardianName = guardianName,
-                        patients = patients,
-                        isLoading = isLoadingPatients,
-                        patientScores = patientScores,
-                        onMenuClick = { menu ->
-                            when (menu) {
-                                GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
+                    composable(Routes.Login) {
+                        LoginScreen(
+                            onNavigateToLoginForm = {
+                                navController.navigate(Routes.LoginForm)
+                            },
+                            onNavigateToSignup = {
+                                navController.navigate(Routes.SignupRole)
+                            },
+                            onAccessibility = {
+                                navController.navigate(Routes.LoginAccessibilitySettings)
+                            }
+                        )
+                    }
 
-                                GuardianMenu.Location -> {
-                                    navController.navigate(Routes.LocationList) {
-                                        launchSingleTop = true
+                    composable(Routes.LoginForm) {
+                        LoginFormScreen(
+                            onNavigateToHome = {
+                                analysisViewModel.refresh()
+                                hasAttemptedTutorialAutoStart = false
+
+                                val home =
+                                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                                        Routes.GuardianHome
+                                    } else {
+                                        Routes.UserHome
+                                    }
+
+                                navController.navigate(home) {
+                                    popUpTo(Routes.Login) { inclusive = true }
+                                }
+                            },
+                            onBack = {
+                                navController.popBackStack()
+                            },
+                            onForgotPassword = {
+                                navController.navigate(Routes.ForgotPassword)
+                            }
+                        )
+                    }
+
+                    composable(Routes.ForgotPassword) {
+                        ForgotPasswordScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.ForgotPassword)
+                            },
+                            onCodeSent = { phone ->
+                                navController.navigate(Routes.forgotPasswordVerify(phone))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.ForgotPasswordVerify,
+                        arguments = listOf(
+                            navArgument(Routes.ForgotPasswordVerifyArgPhone) {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { back ->
+                        val phone = back.arguments?.getString(Routes.ForgotPasswordVerifyArgPhone) ?: ""
+
+                        ForgotPasswordVerifyScreen(
+                            phone = phone,
+                            onBack = { navController.popBackStack() },
+                            onVerified = { verifiedPhone ->
+                                navController.navigate(Routes.resetPassword(verifiedPhone)) {
+                                    popUpTo(Routes.ForgotPassword) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.ResetPassword,
+                        arguments = listOf(
+                            navArgument(Routes.ResetPasswordArgPhone) {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { back ->
+                        val phone = back.arguments?.getString(Routes.ResetPasswordArgPhone) ?: ""
+
+                        ResetPasswordScreen(
+                            phone = phone,
+                            onBack = { navController.popBackStack() },
+                            onPasswordReset = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(Routes.Login) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.SignupRole) {
+                        SignupRoleScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.SignupRole)
+                            },
+                            onNext = { signupRole ->
+                                navController.navigate(Routes.signupInfo(signupRole))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.SignupInfo,
+                        arguments = listOf(
+                            navArgument(Routes.SignupInfoArgRole) {
+                                type = NavType.StringType
+                                defaultValue = PrefsManager.ROLE_USER
+                            }
+                        )
+                    ) { back ->
+                        val signupRole = back.arguments?.getString(Routes.SignupInfoArgRole)
+                            ?: PrefsManager.ROLE_USER
+
+                        SignupInfoScreen(
+                            role = signupRole,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.SignupInfo)
+                            },
+                            onVerify = { phone ->
+                                navController.navigate(Routes.phoneVerification(phone, signupRole))
+                            },
+                            viewModel = authViewModel
+                        )
+                    }
+
+                    composable(
+                        route = Routes.PhoneVerification,
+                        arguments = listOf(
+                            navArgument(Routes.PhoneVerificationArgPhone) {
+                                type = NavType.StringType
+                            },
+                            navArgument(Routes.PhoneVerificationArgRole) {
+                                type = NavType.StringType
+                                defaultValue = PrefsManager.ROLE_USER
+                            }
+                        )
+                    ) { back ->
+                        val phone = back.arguments?.getString(Routes.PhoneVerificationArgPhone) ?: ""
+                        val signupRole = back.arguments?.getString(Routes.PhoneVerificationArgRole)
+                            ?: PrefsManager.ROLE_USER
+
+                        PhoneVerificationScreen(
+                            phone = phone,
+                            authViewModel = authViewModel,
+                            onBack = { navController.popBackStack() },
+                            onVerified = {
+                                authViewModel.clearCodeSent()
+                                navController.navigate(Routes.privacy(signupRole)) {
+                                    popUpTo(Routes.SignupRole) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.Permission,
+                        arguments = listOf(
+                            navArgument(Routes.PermissionArgRole) {
+                                type = NavType.StringType
+                                defaultValue = PrefsManager.ROLE_USER
+                            }
+                        )
+                    ) { back ->
+                        val permissionRole = back.arguments?.getString(Routes.PermissionArgRole)
+                            ?: PrefsManager.ROLE_USER
+
+                        PermissionScreen(
+                            onNext = {
+                                navController.navigate(Routes.privacy(permissionRole))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.Privacy,
+                        arguments = listOf(
+                            navArgument(Routes.PrivacyArgRole) {
+                                type = NavType.StringType
+                                defaultValue = PrefsManager.ROLE_USER
+                            }
+                        )
+                    ) { back ->
+                        val privacyRole = back.arguments?.getString(Routes.PrivacyArgRole)
+                            ?: PrefsManager.ROLE_USER
+
+                        PrivacyScreen(
+                            onAgreeAndStart = {
+                                navController.navigate(Routes.SignupComplete) {
+                                    popUpTo(Routes.Login) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.SignupComplete) {
+                        SignupCompleteScreen(
+                            viewModel = authViewModel,
+                            onGoHome = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.UserHome) {
+                        UserHomeScreen(
+                            tutorialViewModel = tutorialViewModel,
+                            userName = PrefsManager.from(context).getUserName(),
+                            streakDays = analysisViewModel.streakDays,
+                            weeklyChecks = analysisViewModel.weeklyChecks,
+                            weeklyDayLabels = analysisViewModel.weeklyDayLabels,
+                            todayIndex = analysisViewModel.todayDayIndex,
+                            onMenuClick = { menu ->
+                                when (menu) {
+                                    UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
+                                    UserMenu.Recall -> { /* 미구현 */ }
+                                    UserMenu.Analysis -> navController.navigate(Routes.AnalysisResult)
+                                    UserMenu.Settings -> navController.navigate(Routes.Settings)
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.GuardianHome) {
+                        val prefs = PrefsManager.from(context)
+                        val guardianId = prefs.getUserId()
+                        val guardianName = prefs.getUserName()
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+                        val patientScores by guardianViewModel.patientScores.collectAsState()
+
+                        LaunchedEffect(guardianId) {
+                            guardianViewModel.loadPatients(guardianId)
+                        }
+
+                        LaunchedEffect(patients) {
+                            if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                        }
+
+                        GuardianHomeScreen(
+                            guardianName = guardianName,
+                            patients = patients,
+                            isLoading = isLoadingPatients,
+                            patientScores = patientScores,
+                            onMenuClick = { menu ->
+                                when (menu) {
+                                    GuardianMenu.Analysis -> navController.navigate(Routes.AnalysisUserSelect)
+
+                                    GuardianMenu.Location -> {
+                                        navController.navigate(Routes.LocationList) {
+                                            launchSingleTop = true
+                                        }
+                                    }
+
+                                    GuardianMenu.Settings -> navController.navigate(Routes.Settings)
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.LocationList) {
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val linkedUsers = patients.map { it.toLinkedUser() }
+
+                        LocationListScreen(
+                            users = linkedUsers,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.LocationList)
+                            },
+                            onUserClick = { user ->
+                                navController.navigate(Routes.locationDetail(user.id))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.LocationDetail,
+                        arguments = listOf(
+                            navArgument(Routes.LocationDetailArgUserId) {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { back ->
+                        val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val linkedUsers = patients.map { it.toLinkedUser() }
+                        val user = linkedUsers.find { it.id == userId }
+                            ?: linkedUsers.firstOrNull()
+                            ?: return@composable
+
+                        LocationDetailScreen(
+                            user = user,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.LocationDetail)
+                            },
+                            onRouteClick = {
+                                navController.navigate(Routes.locationRoute(user.id))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.LocationRoute,
+                        arguments = listOf(
+                            navArgument(Routes.LocationRouteArgUserId) {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { back ->
+                        val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val linkedUsers = patients.map { it.toLinkedUser() }
+                        val user = linkedUsers.find { it.id == userId }
+                            ?: linkedUsers.firstOrNull()
+                            ?: return@composable
+
+                        LocationRouteScreen(
+                            user = user,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.LocationRoute)
+                            }
+                        )
+                    }
+
+                    composable(Routes.Settings) {
+                        if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                            val patients by guardianViewModel.patients.collectAsState()
+                            val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
+
+                            LaunchedEffect(patients) {
+                                if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                            }
+
+                            val noResultCount = patientStatuses.values.count {
+                                it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NO_RESULT
+                            }
+
+                            val unviewedCount = patientStatuses.values.count {
+                                it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NEW_RESULT
+                            }
+
+                            GuardianSettingsScreen(
+                                userName = PrefsManager.from(context).getUserName(),
+                                patients = patients,
+                                noResultCount = noResultCount,
+                                unviewedCount = unviewedCount,
+                                onBack = {
+                                    navController.popBackStackIfCurrent(Routes.Settings)
+                                },
+                                onLogout = {
+                                    navController.navigate(Routes.Login) {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                },
+                                onDeleteAccount = {
+                                    navController.navigate(Routes.Withdraw)
+                                },
+                                onAccessibility = {
+                                    navController.navigate(Routes.AccessibilitySettings)
+                                },
+                                onManagedUsers = {
+                                    navController.navigate(GuardianManagedUsersRoute)
+                                },
+                                onProfileEdit = {
+                                    navController.navigate(Routes.ProfileEdit)
+                                }
+                            )
+                        } else {
+                            SettingsScreen(
+                                tutorialViewModel = tutorialViewModel,
+                                userName = prefs.getUserName(),
+                                weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
+                                streakDays = analysisViewModel.streakDays,
+                                onBack = {
+                                    navController.popBackStackIfCurrent(Routes.Settings)
+                                },
+                                onLogout = {
+                                    pendingReplayTarget = null
+                                    tutorialViewModel.stopTutorial()
+                                    hasAttemptedTutorialAutoStart = false
+
+                                    navController.navigate(Routes.Login) {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                },
+                                onDeleteAccount = {
+                                    navController.navigate(Routes.Withdraw)
+                                },
+                                onAccessibility = {
+                                    navController.navigate(Routes.AccessibilitySettings)
+                                },
+                                onProfileEdit = {
+                                    navController.navigate(Routes.ProfileEdit)
+                                },
+                                onReplayTutorial = { target ->
+                                    /*
+                                     * 다시 보기 실행 전 기존 튜토리얼 상태를 정리합니다.
+                                     * 최초 완료 기록은 변경하지 않습니다.
+                                     */
+                                    tutorialViewModel.stopTutorial()
+                                    hasAttemptedTutorialAutoStart = true
+
+                                    val destination = when (target) {
+                                        TutorialReplayTarget.FULL,
+                                        TutorialReplayTarget.HOME -> Routes.UserHome
+
+                                        TutorialReplayTarget.VOICE_CHAT -> Routes.VoiceChat
+                                        TutorialReplayTarget.ANALYSIS -> Routes.AnalysisResult
+                                        TutorialReplayTarget.SETTINGS -> Routes.Settings
+                                    }
+
+                                    if (currentRoute == destination) {
+                                        /*
+                                         * 현재 화면의 사용법을 선택한 경우에는 화면 이동이 없으므로
+                                         * pending 상태를 남기지 않고 즉시 시작합니다.
+                                         */
+                                        pendingReplayTarget = null
+                                        tutorialViewModel.startReplayTutorial(target)
+                                    } else {
+                                        /*
+                                         * 다른 화면의 사용법을 선택한 경우:
+                                         * 1. 다시 보기 대상을 저장하고
+                                         * 2. 해당 화면으로 이동한 뒤
+                                         * 3. 상단 LaunchedEffect에서 화면 구성이 끝난 후 시작합니다.
+                                         */
+                                        pendingReplayTarget = target
+
+                                        navController.navigate(destination) {
+                                            popUpTo(Routes.UserHome) {
+                                                inclusive = false
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
                                     }
                                 }
-
-                                GuardianMenu.Settings -> navController.navigate(Routes.Settings)
-                            }
+                            )
                         }
-                    )
-                }
+                    }
 
-                composable(Routes.LocationList) {
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val linkedUsers = patients.map { it.toLinkedUser() }
-
-                    LocationListScreen(
-                        users = linkedUsers,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.LocationList)
-                        },
-                        onUserClick = { user ->
-                            navController.navigate(Routes.locationDetail(user.id))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.LocationDetail,
-                    arguments = listOf(
-                        navArgument(Routes.LocationDetailArgUserId) {
-                            type = NavType.StringType
-                        }
-                    )
-                ) { back ->
-                    val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val linkedUsers = patients.map { it.toLinkedUser() }
-                    val user = linkedUsers.find { it.id == userId }
-                        ?: linkedUsers.firstOrNull()
-                        ?: return@composable
-
-                    LocationDetailScreen(
-                        user = user,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.LocationDetail)
-                        },
-                        onRouteClick = {
-                            navController.navigate(Routes.locationRoute(user.id))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.LocationRoute,
-                    arguments = listOf(
-                        navArgument(Routes.LocationRouteArgUserId) {
-                            type = NavType.StringType
-                        }
-                    )
-                ) { back ->
-                    val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val linkedUsers = patients.map { it.toLinkedUser() }
-                    val user = linkedUsers.find { it.id == userId }
-                        ?: linkedUsers.firstOrNull()
-                        ?: return@composable
-
-                    LocationRouteScreen(
-                        user = user,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.LocationRoute)
-                        }
-                    )
-                }
-
-                composable(Routes.Settings) {
-                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                    composable(GuardianManagedUsersRoute) {
                         val patients by guardianViewModel.patients.collectAsState()
+                        val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
+
+                        ManagedUserScreen(
+                            patients = patients,
+                            isLoading = isLoadingPatients,
+                            viewModel = guardianViewModel,
+                            onBack = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+
+                    composable(Routes.ProfileEdit) {
+                        val prefs = PrefsManager.from(context)
+                        val patients by guardianViewModel.patients.collectAsState()
+
+                        ProfileEditScreen(
+                            initialName = prefs.getUserName(),
+                            initialPhone = prefs.getUserPhone(),
+                            linkedPatients = if (prefs.getUserRole() == PrefsManager.ROLE_GUARDIAN) patients else null,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.ProfileEdit)
+                            }
+                        )
+                    }
+
+                    composable(Routes.Withdraw) {
+                        WithdrawScreen(
+                            phone = PrefsManager.from(context).getUserPhone(),
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.Withdraw)
+                            },
+                            onSendCode = {
+                                val phone = PrefsManager.from(context).getUserPhone()
+                                navController.navigate(Routes.withdrawVerify(phone))
+                            }
+                        )
+                    }
+
+                    composable(
+                        route = Routes.WithdrawVerify,
+                        arguments = listOf(
+                            navArgument(Routes.WithdrawVerifyArgPhone) {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { back ->
+                        val phone = back.arguments?.getString(Routes.WithdrawVerifyArgPhone) ?: ""
+
+                        WithdrawVerifyScreen(
+                            phone = phone,
+                            onBack = {
+                                navController.popBackStack()
+                            },
+                            onWithdrawn = {
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.AccessibilitySettings) {
+                        if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
+                            GuardianAccessibilitySettingsScreen(
+                                onBack = {
+                                    navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
+                                },
+                                onFontSizeChange = onFontSizeChange,
+                                onHighContrastChange = onHighContrastChange,
+                                onHapticChange = onHapticChange
+                            )
+                        } else {
+                            AccessibilitySettingsScreen(
+                                onBack = {
+                                    navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
+                                },
+                                onFontSizeChange = onFontSizeChange,
+                                onHighContrastChange = onHighContrastChange,
+                                onHapticChange = onHapticChange,
+                                onTapToReplayChange = onTapToReplayChange,
+                                onSpeedChange = onSpeedChange,
+                                onVoiceChatEnabledChange = onVoiceChatEnabledChange,
+                                onPreviewTts = onPreviewTts
+                            )
+                        }
+                    }
+
+                    composable(Routes.LoginAccessibilitySettings) {
+                        GuardianAccessibilitySettingsScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.LoginAccessibilitySettings)
+                            },
+                            onFontSizeChange = onFontSizeChange,
+                            onHighContrastChange = onHighContrastChange,
+                            onHapticChange = onHapticChange
+                        )
+                    }
+
+                    composable(Routes.VoiceChat) {
+                        VoiceChatScreen(
+                            tutorialViewModel = tutorialViewModel,
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.VoiceChat)
+                            },
+                            onDisconnected = {
+                                navController.navigate(Routes.VoiceChatDisconnected)
+                            },
+                            onNavigateToSettings = {
+                                navController.navigate(Routes.AccessibilitySettings)
+                            },
+                            onSessionEnded = {
+                                analysisViewModel.refresh()
+                            },
+                            onNavigateHome = {
+                                analysisViewModel.refresh()
+
+                                navController.navigate(Routes.UserHome) {
+                                    popUpTo(Routes.UserHome) {
+                                        inclusive = false
+                                    }
+                                    launchSingleTop = true
+                                }
+                            },
+                            onNavigateAnalysis = {
+                                /*
+                                 * 전체 튜토리얼의 음성 대화 단계가 끝나면
+                                 * 분석 결과 화면으로 이동합니다.
+                                 *
+                                 * TutorialViewModel의 currentScreen은
+                                 * VoiceChatScreen에서 ANALYSIS로 먼저 변경됩니다.
+                                 */
+                                analysisViewModel.refresh()
+
+                                navController.navigate(Routes.AnalysisResult) {
+                                    launchSingleTop = true
+                                }
+                            }
+                        )
+                    }
+
+                    composable(Routes.VoiceChatDisconnected) {
+                        VoiceChatDisconnectedScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
+                            },
+                            onGoHome = {
+                                navController.navigate(Routes.UserHome) {
+                                    popUpTo(Routes.UserHome) { inclusive = true }
+                                }
+                            },
+                            onRetry = {
+                                navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
+                            }
+                        )
+                    }
+
+                    composable(Routes.AnalysisUserSelect) {
+                        val patients by guardianViewModel.patients.collectAsState()
+                        val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
                         val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
 
                         LaunchedEffect(patients) {
                             if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
                         }
 
-                        val noResultCount = patientStatuses.values.count {
-                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NO_RESULT
-                        }
-
-                        val unviewedCount = patientStatuses.values.count {
-                            it == com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus.NEW_RESULT
-                        }
-
-                        GuardianSettingsScreen(
-                            userName = PrefsManager.from(context).getUserName(),
+                        AnalysisUserSelectScreen(
                             patients = patients,
-                            noResultCount = noResultCount,
-                            unviewedCount = unviewedCount,
+                            isLoading = isLoadingPatients,
+                            patientStatuses = patientStatuses,
                             onBack = {
-                                navController.popBackStackIfCurrent(Routes.Settings)
+                                navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                             },
-                            onLogout = {
-                                navController.navigate(Routes.Login) {
-                                    popUpTo(0) { inclusive = true }
+                            onUserClick = { patient ->
+                                patient.userId?.let { patientId ->
+                                    guardianViewModel.markPatientViewed(patientId)
+                                    analysisViewModel.loadForPatient(patientId)
+                                    navController.navigate(Routes.AnalysisResult)
                                 }
-                            },
-                            onDeleteAccount = {
-                                navController.navigate(Routes.Withdraw)
-                            },
-                            onAccessibility = {
-                                navController.navigate(Routes.AccessibilitySettings)
-                            },
-                            onManagedUsers = {
-                                navController.navigate(GuardianManagedUsersRoute)
-                            },
-                            onProfileEdit = {
-                                navController.navigate(Routes.ProfileEdit)
                             }
                         )
-                    } else {
-                        SettingsScreen(
+                    }
+
+                    composable(Routes.AnalysisResult) {
+                        AnalysisResultScreen(
                             tutorialViewModel = tutorialViewModel,
-                            userName = prefs.getUserName(),
-                            weeklyScore = if (analysisViewModel.hasTodayData) analysisViewModel.displayScore else 0,
-                            streakDays = analysisViewModel.streakDays,
                             onBack = {
-                                navController.popBackStackIfCurrent(Routes.Settings)
+                                analysisViewModel.resetToSelf()
+                                navController.popBackStackIfCurrent(Routes.AnalysisResult)
                             },
-                            onLogout = {
-                                pendingReplayTarget = null
-                                tutorialViewModel.stopTutorial()
-                                hasAttemptedTutorialAutoStart = false
-
-                                navController.navigate(Routes.Login) {
-                                    popUpTo(0) { inclusive = true }
-                                }
-                            },
-                            onDeleteAccount = {
-                                navController.navigate(Routes.Withdraw)
-                            },
-                            onAccessibility = {
-                                navController.navigate(Routes.AccessibilitySettings)
-                            },
-                            onProfileEdit = {
-                                navController.navigate(Routes.ProfileEdit)
-                            },
-                            onReplayTutorial = { target ->
+                            onNavigateSettings = {
                                 /*
-                                 * 다시 보기 실행 전 기존 튜토리얼 상태를 정리합니다.
-                                 * 최초 완료 기록은 변경하지 않습니다.
+                                 * 전체 튜토리얼의 분석 결과 단계가 끝나면
+                                 * 설정 화면으로 이동합니다.
+                                 *
+                                 * TutorialViewModel의 currentScreen은
+                                 * AnalysisResultScreen에서 SETTINGS로 먼저 변경됩니다.
                                  */
-                                tutorialViewModel.stopTutorial()
-                                hasAttemptedTutorialAutoStart = true
-
-                                val destination = when (target) {
-                                    TutorialReplayTarget.FULL,
-                                    TutorialReplayTarget.HOME -> Routes.UserHome
-
-                                    TutorialReplayTarget.VOICE_CHAT -> Routes.VoiceChat
-                                    TutorialReplayTarget.ANALYSIS -> Routes.AnalysisResult
-                                    TutorialReplayTarget.SETTINGS -> Routes.Settings
+                                navController.navigate(Routes.Settings) {
+                                    launchSingleTop = true
                                 }
+                            },
+                            viewModel = analysisViewModel
+                        )
+                    }
+                }
 
-                                if (currentRoute == destination) {
-                                    /*
-                                     * 현재 화면의 사용법을 선택한 경우에는 화면 이동이 없으므로
-                                     * pending 상태를 남기지 않고 즉시 시작합니다.
-                                     */
-                                    pendingReplayTarget = null
-                                    tutorialViewModel.startReplayTutorial(target)
-                                } else {
-                                    /*
-                                     * 다른 화면의 사용법을 선택한 경우:
-                                     * 1. 다시 보기 대상을 저장하고
-                                     * 2. 해당 화면으로 이동한 뒤
-                                     * 3. 상단 LaunchedEffect에서 화면 구성이 끝난 후 시작합니다.
-                                     */
-                                    pendingReplayTarget = target
-
-                                    navController.navigate(destination) {
-                                        popUpTo(Routes.UserHome) {
-                                            inclusive = false
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = false
+                if (isTransitioning) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent()
                                     }
                                 }
                             }
-                        )
-                    }
-                }
-
-                composable(GuardianManagedUsersRoute) {
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
-
-                    ManagedUserScreen(
-                        patients = patients,
-                        isLoading = isLoadingPatients,
-                        viewModel = guardianViewModel,
-                        onBack = {
-                            navController.popBackStack()
-                        }
-                    )
-                }
-
-                composable(Routes.ProfileEdit) {
-                    val prefs = PrefsManager.from(context)
-                    val patients by guardianViewModel.patients.collectAsState()
-
-                    ProfileEditScreen(
-                        initialName = prefs.getUserName(),
-                        initialPhone = prefs.getUserPhone(),
-                        linkedPatients = if (prefs.getUserRole() == PrefsManager.ROLE_GUARDIAN) patients else null,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.ProfileEdit)
-                        }
-                    )
-                }
-
-                composable(Routes.Withdraw) {
-                    WithdrawScreen(
-                        phone = PrefsManager.from(context).getUserPhone(),
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.Withdraw)
-                        },
-                        onSendCode = {
-                            val phone = PrefsManager.from(context).getUserPhone()
-                            navController.navigate(Routes.withdrawVerify(phone))
-                        }
-                    )
-                }
-
-                composable(
-                    route = Routes.WithdrawVerify,
-                    arguments = listOf(
-                        navArgument(Routes.WithdrawVerifyArgPhone) {
-                            type = NavType.StringType
-                        }
-                    )
-                ) { back ->
-                    val phone = back.arguments?.getString(Routes.WithdrawVerifyArgPhone) ?: ""
-
-                    WithdrawVerifyScreen(
-                        phone = phone,
-                        onBack = {
-                            navController.popBackStack()
-                        },
-                        onWithdrawn = {
-                            navController.navigate(Routes.Login) {
-                                popUpTo(0) { inclusive = true }
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.AccessibilitySettings) {
-                    if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
-                        GuardianAccessibilitySettingsScreen(
-                            onBack = {
-                                navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
-                            },
-                            onFontSizeChange = onFontSizeChange,
-                            onHighContrastChange = onHighContrastChange,
-                            onHapticChange = onHapticChange
-                        )
-                    } else {
-                        AccessibilitySettingsScreen(
-                            onBack = {
-                                navController.popBackStackIfCurrent(Routes.AccessibilitySettings)
-                            },
-                            onFontSizeChange = onFontSizeChange,
-                            onHighContrastChange = onHighContrastChange,
-                            onHapticChange = onHapticChange,
-                            onTapToReplayChange = onTapToReplayChange,
-                            onSpeedChange = onSpeedChange,
-                            onVoiceChatEnabledChange = onVoiceChatEnabledChange,
-                            onPreviewTts = onPreviewTts
-                        )
-                    }
-                }
-
-                composable(Routes.LoginAccessibilitySettings) {
-                    GuardianAccessibilitySettingsScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.LoginAccessibilitySettings)
-                        },
-                        onFontSizeChange = onFontSizeChange,
-                        onHighContrastChange = onHighContrastChange,
-                        onHapticChange = onHapticChange
-                    )
-                }
-
-                composable(Routes.VoiceChat) {
-                    VoiceChatScreen(
-                        tutorialViewModel = tutorialViewModel,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.VoiceChat)
-                        },
-                        onDisconnected = {
-                            navController.navigate(Routes.VoiceChatDisconnected)
-                        },
-                        onNavigateToSettings = {
-                            navController.navigate(Routes.AccessibilitySettings)
-                        },
-                        onSessionEnded = {
-                            analysisViewModel.refresh()
-                        },
-                        onNavigateHome = {
-                            analysisViewModel.refresh()
-
-                            navController.navigate(Routes.UserHome) {
-                                popUpTo(Routes.UserHome) {
-                                    inclusive = false
-                                }
-                                launchSingleTop = true
-                            }
-                        },
-                        onNavigateAnalysis = {
-                            /*
-                             * 전체 튜토리얼의 음성 대화 단계가 끝나면
-                             * 분석 결과 화면으로 이동합니다.
-                             *
-                             * TutorialViewModel의 currentScreen은
-                             * VoiceChatScreen에서 ANALYSIS로 먼저 변경됩니다.
-                             */
-                            analysisViewModel.refresh()
-
-                            navController.navigate(Routes.AnalysisResult) {
-                                launchSingleTop = true
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.VoiceChatDisconnected) {
-                    VoiceChatDisconnectedScreen(
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
-                        },
-                        onGoHome = {
-                            navController.navigate(Routes.UserHome) {
-                                popUpTo(Routes.UserHome) { inclusive = true }
-                            }
-                        },
-                        onRetry = {
-                            navController.popBackStackIfCurrent(Routes.VoiceChatDisconnected)
-                        }
-                    )
-                }
-
-                composable(Routes.AnalysisUserSelect) {
-                    val patients by guardianViewModel.patients.collectAsState()
-                    val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
-                    val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
-
-                    LaunchedEffect(patients) {
-                        if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
-                    }
-
-                    AnalysisUserSelectScreen(
-                        patients = patients,
-                        isLoading = isLoadingPatients,
-                        patientStatuses = patientStatuses,
-                        onBack = {
-                            navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
-                        },
-                        onUserClick = { patient ->
-                            patient.userId?.let { patientId ->
-                                guardianViewModel.markPatientViewed(patientId)
-                                analysisViewModel.loadForPatient(patientId)
-                                navController.navigate(Routes.AnalysisResult)
-                            }
-                        }
-                    )
-                }
-
-                composable(Routes.AnalysisResult) {
-                    AnalysisResultScreen(
-                        tutorialViewModel = tutorialViewModel,
-                        onBack = {
-                            analysisViewModel.resetToSelf()
-                            navController.popBackStackIfCurrent(Routes.AnalysisResult)
-                        },
-                        onNavigateSettings = {
-                            /*
-                             * 전체 튜토리얼의 분석 결과 단계가 끝나면
-                             * 설정 화면으로 이동합니다.
-                             *
-                             * TutorialViewModel의 currentScreen은
-                             * AnalysisResultScreen에서 SETTINGS로 먼저 변경됩니다.
-                             */
-                            navController.navigate(Routes.Settings) {
-                                launchSingleTop = true
-                            }
-                        },
-                        viewModel = analysisViewModel
                     )
                 }
             }
+        }
 
-            if (isTransitioning) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            awaitPointerEventScope {
-                                while (true) {
-                                    awaitPointerEvent()
-                                }
-                            }
-                        }
-                )
+        /*
+         * 하단 탭 튜토리얼은 Scaffold 바깥의 최상위 Box에 표시합니다.
+         *
+         * Scaffold content 안에 있으면 bottomBar가 오버레이 위에 그려져
+         * 강조 테두리와 안내창이 하단 탭에 가려질 수 있습니다.
+         */
+        if (
+            isPatient &&
+            tutorialState.isRunning &&
+            tutorialState.highlightedBottomTab != null &&
+            highlightedBottomTabBounds != null
+        ) {
+            val guideTitle = when (tutorialState.highlightedBottomTab) {
+                TutorialBottomTab.HOME -> "홈 화면으로 이동하기"
+                TutorialBottomTab.VOICE_CHAT -> "음성 대화 시작하기"
+                TutorialBottomTab.ANALYSIS -> "분석 결과 확인하기"
+                TutorialBottomTab.SETTINGS -> "앱 설정 살펴보기"
+                null -> ""
             }
+
+            val guideMessage = when (tutorialState.highlightedBottomTab) {
+                TutorialBottomTab.HOME ->
+                    "홈 탭에서는 오늘의 점검 상태와 주요 기능을 확인할 수 있어요."
+
+                TutorialBottomTab.VOICE_CHAT ->
+                    "대화 탭에서는 또바기와 음성으로 대화할 수 있어요."
+
+                TutorialBottomTab.ANALYSIS ->
+                    "분석 탭에서는 오늘의 인지 점수와 주간 변화를 확인할 수 있어요."
+
+                TutorialBottomTab.SETTINGS ->
+                    "설정 탭에서는 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
+
+                null -> ""
+            }
+
+            TutorialOverlay(
+                targetBounds = highlightedBottomTabBounds,
+                title = guideTitle,
+                message = guideMessage,
+                currentStep = tutorialState.currentNumber,
+                totalSteps = tutorialState.totalNumber,
+                onTargetClick = {
+                    highlightedUserTab?.let(handleBottomTabClick)
+                },
+                onSkip = {
+                    tutorialViewModel.stopTutorial()
+                },
+                isBottomTabGuide = true
+            )
         }
     }
 }
