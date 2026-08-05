@@ -47,8 +47,6 @@ enum class SettingsTutorialStep {
     LOCATION_SHARING,
     CHECK_NOTIFICATION,
     NOTIFICATION_TIME,
-    SUPPORT,
-
     /**
      * 전체 튜토리얼 마지막에 앱 사용법 다시 보기 메뉴를 안내합니다.
      */

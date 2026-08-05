@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -32,6 +33,7 @@ import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
+import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -69,10 +71,15 @@ import com.midas26.mobileapp.ui.tutorial.TutorialBottomTab
 import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
 import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianBottomTab
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialReplayTarget
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
 import com.midas26.mobileapp.ui.voicechat.VoiceChatScreen
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
+
+private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 private const val GuardianManagedUsersRoute = "guardian_managed_users"
 
@@ -119,13 +126,25 @@ fun AppNavHost(
     val tutorialViewModel: TutorialViewModel = viewModel()
     val tutorialState by tutorialViewModel.state.collectAsState()
 
+    /*
+     * 보호자 튜토리얼은 사용자 튜토리얼과 별도의 ViewModel로 관리합니다.
+     * 현재 단계에서는 보호자 화면 호출부에 전달하기 위해 생성합니다.
+     */
+    val guardianTutorialViewModel: GuardianTutorialViewModel = viewModel()
+    val guardianTutorialState by
+    guardianTutorialViewModel.state.collectAsState()
+
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
     val isPatient = role == PrefsManager.ROLE_USER
     val homeRoute = if (isGuardian) Routes.GuardianHome else Routes.UserHome
 
-    var hasAttemptedTutorialAutoStart by remember {
+    var hasAttemptedUserTutorialAutoStart by remember {
+        mutableStateOf(false)
+    }
+
+    var hasAttemptedGuardianTutorialAutoStart by remember {
         mutableStateOf(false)
     }
 
@@ -139,6 +158,10 @@ fun AppNavHost(
         mutableStateOf<TutorialReplayTarget?>(null)
     }
 
+    var pendingGuardianReplayTarget by remember {
+        mutableStateOf<GuardianTutorialReplayTarget?>(null)
+    }
+
     /*
      * AppBottomBar에서 직접 측정한 각 사용자 탭의 실제 Bounds입니다.
      *
@@ -149,21 +172,49 @@ fun AppNavHost(
         mutableStateOf<Map<TabId, Rect>>(emptyMap())
     }
 
+
+    var guardianBottomTabBounds by remember {
+        mutableStateOf<Map<TabId, Rect>>(emptyMap())
+    }
+
     LaunchedEffect(
         currentRoute,
-        isPatient,
-        tutorialState.isRunning
+        role,
+        tutorialState.isRunning,
+        guardianTutorialState.isRunning
     ) {
-        if (
+        when {
             isPatient &&
-            currentRoute == Routes.UserHome &&
-            !tutorialState.isRunning &&
-            !hasAttemptedTutorialAutoStart
-        ) {
-            hasAttemptedTutorialAutoStart = true
+                    currentRoute == Routes.UserHome &&
+                    !tutorialState.isRunning &&
+                    !hasAttemptedUserTutorialAutoStart -> {
+                hasAttemptedUserTutorialAutoStart = true
 
-            if (prefs.shouldStartTutorial()) {
-                tutorialViewModel.startFullTutorial()
+                if (prefs.shouldStartUserTutorial()) {
+                    /*
+                     * 자동 튜토리얼은 이 계정에서 최초 한 번만 실행합니다.
+                     * 시작 직전에 기록하므로 앱을 다시 실행하거나
+                     * 시뮬레이션을 재시작해도 자동으로 반복되지 않습니다.
+                     */
+                    prefs.setUserTutorialCompleted(true)
+                    tutorialViewModel.startFullTutorial()
+                }
+            }
+
+            isGuardian &&
+                    currentRoute == Routes.GuardianHome &&
+                    !guardianTutorialState.isRunning &&
+                    !hasAttemptedGuardianTutorialAutoStart -> {
+                hasAttemptedGuardianTutorialAutoStart = true
+
+                if (prefs.shouldStartGuardianTutorial()) {
+                    /*
+                     * 보호자 튜토리얼도 계정별 최초 한 번만
+                     * 자동으로 실행합니다.
+                     */
+                    prefs.setGuardianTutorialCompleted(true)
+                    guardianTutorialViewModel.startFullTutorial()
+                }
             }
         }
     }
@@ -210,13 +261,58 @@ fun AppNavHost(
         /*
          * 대기 중 사용자가 다른 요청을 선택한 경우 오래된 요청을 실행하지 않습니다.
          */
-        if (pendingReplayTarget != target || currentRoute != targetRoute) {
+        if (pendingReplayTarget != target) {
             return@LaunchedEffect
         }
 
         pendingReplayTarget = null
-        hasAttemptedTutorialAutoStart = true
+        hasAttemptedUserTutorialAutoStart = true
         tutorialViewModel.startReplayTutorial(target)
+    }
+
+    LaunchedEffect(
+        currentRoute,
+        pendingGuardianReplayTarget,
+        isGuardian
+    ) {
+        val target =
+            pendingGuardianReplayTarget
+                ?: return@LaunchedEffect
+
+        if (!isGuardian) {
+            pendingGuardianReplayTarget = null
+            return@LaunchedEffect
+        }
+
+        val targetRoute = when (target) {
+            GuardianTutorialReplayTarget.FULL,
+            GuardianTutorialReplayTarget.HOME ->
+                Routes.GuardianHome
+
+            GuardianTutorialReplayTarget.ANALYSIS ->
+                Routes.AnalysisResult
+
+            GuardianTutorialReplayTarget.LOCATION ->
+                Routes.LocationList
+
+            GuardianTutorialReplayTarget.SETTINGS ->
+                Routes.Settings
+        }
+
+        if (currentRoute != targetRoute) {
+            return@LaunchedEffect
+        }
+
+        delay(180)
+
+        if (pendingGuardianReplayTarget != target) {
+            return@LaunchedEffect
+        }
+
+        pendingGuardianReplayTarget = null
+        hasAttemptedGuardianTutorialAutoStart = true
+        guardianTutorialViewModel
+            .startReplayTutorial(target)
     }
 
     val selectedTab: TabId = when (currentRoute) {
@@ -255,82 +351,159 @@ fun AppNavHost(
         null -> null
     }
 
-    /*
-     * AppBottomBar에서 측정한 실제 선택 표시선·아이콘·라벨 Bounds를 기준으로
-     * 튜토리얼 테두리에 필요한 여백만 추가합니다.
-     *
-     * 위치는 실제 콘텐츠 좌표를 그대로 사용하고,
-     * 크기만 좌우 22dp, 위 8dp, 아래 8dp 확장합니다.
-     */
-    val highlightedBottomTabBounds: Rect? = run {
-        if (isGuardian) {
-            null
-        } else {
-            val measuredBounds = highlightedUserTab?.let { tab ->
-                userBottomTabBounds[tab]
-            }
 
-            measuredBounds?.let { bounds ->
-                val density = LocalDensity.current
-                /*
-                 * 하이라이트 크기와 위치를 세밀하게 조정합니다.
-                 *
-                 * - 좌우 여백: 22dp → 18dp
-                 *   기존보다 전체 너비를 8dp 줄입니다.
-                 *
-                 * - 위아래 여백: 8dp → 10dp
-                 *   기존보다 전체 높이를 4dp 늘립니다.
-                 *
-                 * - 위쪽 이동: 6dp → 8dp
-                 *   하이라이트 전체를 2dp 더 위로 이동합니다.
-                 */
-                val horizontalPaddingPx = with(density) { 10.dp.toPx() }
-                val topPaddingPx = with(density) { 18.dp.toPx() }
-                val bottomPaddingPx = with(density) { 8.dp.toPx() }
-                val verticalOffsetPx = with(density) { 10.dp.toPx() }
-
-                Rect(
-                    left = bounds.left - horizontalPaddingPx,
-                    top = bounds.top - topPaddingPx - verticalOffsetPx,
-                    right = bounds.right + horizontalPaddingPx,
-                    bottom = bounds.bottom + bottomPaddingPx - verticalOffsetPx
-                )
-            }
-        }
+    val highlightedGuardianTab: GuardianHomeTab? = when (
+        guardianTutorialState.highlightedBottomTab
+    ) {
+        GuardianBottomTab.HOME -> GuardianHomeTab.Home
+        GuardianBottomTab.ANALYSIS -> GuardianHomeTab.Analysis
+        GuardianBottomTab.LOCATION -> GuardianHomeTab.Location
+        GuardianBottomTab.SETTINGS -> GuardianHomeTab.Settings
+        null -> null
     }
 
+    /*
+     * LocalDensity.current는 @Composable 컨텍스트에서 한 번만 읽습니다.
+     * 아래 createBottomTabHighlightBounds 함수는 일반 함수이므로
+     * @Composable API를 직접 호출하지 않습니다.
+     */
+    val density = LocalDensity.current
+
+    val horizontalPaddingPx =
+        with(density) { 10.dp.toPx() }
+
+    val topPaddingPx =
+        with(density) { 18.dp.toPx() }
+
+    val bottomPaddingPx =
+        with(density) { 8.dp.toPx() }
+
+    val verticalOffsetPx =
+        with(density) { 10.dp.toPx() }
+
+    fun createBottomTabHighlightBounds(
+        bounds: Rect?
+    ): Rect? {
+        bounds ?: return null
+
+        return Rect(
+            left = bounds.left - horizontalPaddingPx,
+            top =
+                bounds.top -
+                        topPaddingPx -
+                        verticalOffsetPx,
+            right = bounds.right + horizontalPaddingPx,
+            bottom =
+                bounds.bottom +
+                        bottomPaddingPx -
+                        verticalOffsetPx
+        )
+    }
+
+    val highlightedUserBottomTabBounds =
+        createBottomTabHighlightBounds(
+            highlightedUserTab?.let {
+                userBottomTabBounds[it]
+            }
+        )
+
+    val highlightedGuardianBottomTabBounds =
+        createBottomTabHighlightBounds(
+            highlightedGuardianTab?.let {
+                guardianBottomTabBounds[it]
+            }
+        )
+
+
     val handleBottomTabClick: (TabId) -> Unit = { tabId ->
-        val isExpectedTutorialTab =
-            tutorialState.isRunning &&
+        pendingReplayTarget = null
+
+        val expectedUserTab =
+            isPatient &&
+                    tutorialState.isRunning &&
                     highlightedUserTab != null &&
                     tabId == highlightedUserTab
 
-        pendingReplayTarget = null
+        val expectedGuardianTab =
+            isGuardian &&
+                    guardianTutorialState.isRunning &&
+                    highlightedGuardianTab != null &&
+                    tabId == highlightedGuardianTab
 
         val shouldNavigate = when {
-            isExpectedTutorialTab -> {
+            expectedUserTab -> {
                 when (tabId) {
-                    UserHomeTab.Home -> tutorialViewModel.moveToHome()
-                    UserHomeTab.Chat -> tutorialViewModel.moveToVoiceChat()
+                    UserHomeTab.Home ->
+                        tutorialViewModel.moveToHome()
+
+                    UserHomeTab.Chat ->
+                        tutorialViewModel.moveToVoiceChat()
 
                     UserHomeTab.Analysis -> {
                         tutorialViewModel.moveToAnalysis()
                         analysisViewModel.refresh()
                     }
 
-                    UserHomeTab.Settings -> tutorialViewModel.moveToSettings()
+                    UserHomeTab.Settings ->
+                        tutorialViewModel.moveToSettings()
+
                     else -> Unit
                 }
                 true
             }
 
-            tutorialState.isRunning &&
-                    tutorialState.highlightedBottomTab != null -> false
+            expectedGuardianTab -> {
+                val nextNumber =
+                    guardianTutorialState.currentNumber + 1
+
+                when (tabId) {
+                    GuardianHomeTab.Home ->
+                        guardianTutorialViewModel.moveToHome(
+                            number = nextNumber
+                        )
+
+                    GuardianHomeTab.Analysis ->
+                        guardianTutorialViewModel.moveToAnalysis(
+                            number = nextNumber
+                        )
+
+                    GuardianHomeTab.Location ->
+                        guardianTutorialViewModel.moveToLocation(
+                            number = nextNumber
+                        )
+
+                    GuardianHomeTab.Settings ->
+                        guardianTutorialViewModel.moveToSettings(
+                            number = nextNumber
+                        )
+
+                    else -> Unit
+                }
+                true
+            }
+
+            isPatient &&
+                    tutorialState.isRunning &&
+                    tutorialState.highlightedBottomTab != null ->
+                false
+
+            isGuardian &&
+                    guardianTutorialState.isRunning &&
+                    guardianTutorialState.highlightedBottomTab != null ->
+                false
 
             else -> {
-                if (tutorialState.isRunning) {
+                if (isPatient && tutorialState.isRunning) {
                     tutorialViewModel.stopTutorial()
                 }
+
+                if (
+                    isGuardian &&
+                    guardianTutorialState.isRunning
+                ) {
+                    guardianTutorialViewModel.stopTutorial()
+                }
+
                 true
             }
         }
@@ -341,8 +514,11 @@ fun AppNavHost(
                 UserHomeTab.Chat -> Routes.VoiceChat
                 UserHomeTab.Analysis -> Routes.AnalysisResult
                 UserHomeTab.Settings -> Routes.Settings
+
                 GuardianHomeTab.Home -> Routes.GuardianHome
-                GuardianHomeTab.Analysis -> Routes.AnalysisUserSelect
+                GuardianHomeTab.Analysis ->
+                    Routes.AnalysisUserSelect
+
                 GuardianHomeTab.Location -> Routes.LocationList
                 GuardianHomeTab.Settings -> Routes.Settings
             }
@@ -377,9 +553,14 @@ fun AppNavHost(
                             AppColor.greenSecondary
                         },
                         onTabBoundsChanged = { tabId, bounds ->
-                            if (!isGuardian) {
+                            if (isGuardian) {
+                                guardianBottomTabBounds =
+                                    guardianBottomTabBounds +
+                                            (tabId to bounds)
+                            } else {
                                 userBottomTabBounds =
-                                    userBottomTabBounds + (tabId to bounds)
+                                    userBottomTabBounds +
+                                            (tabId to bounds)
                             }
                         }
                     )
@@ -437,7 +618,8 @@ fun AppNavHost(
                         LoginFormScreen(
                             onNavigateToHome = {
                                 analysisViewModel.refresh()
-                                hasAttemptedTutorialAutoStart = false
+                                hasAttemptedUserTutorialAutoStart = false
+                                hasAttemptedGuardianTutorialAutoStart = false
 
                                 val home =
                                     if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN) {
@@ -603,10 +785,7 @@ fun AppNavHost(
                                 defaultValue = PrefsManager.ROLE_USER
                             }
                         )
-                    ) { back ->
-                        val privacyRole = back.arguments?.getString(Routes.PrivacyArgRole)
-                            ?: PrefsManager.ROLE_USER
-
+                    ) {
                         PrivacyScreen(
                             onAgreeAndStart = {
                                 navController.navigate(Routes.SignupComplete) {
@@ -663,6 +842,8 @@ fun AppNavHost(
                         }
 
                         GuardianHomeScreen(
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             guardianName = guardianName,
                             patients = patients,
                             isLoading = isLoadingPatients,
@@ -688,6 +869,8 @@ fun AppNavHost(
                         val linkedUsers = patients.map { it.toLinkedUser() }
 
                         LocationListScreen(
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             users = linkedUsers,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.LocationList)
@@ -714,6 +897,8 @@ fun AppNavHost(
                             ?: return@composable
 
                         LocationDetailScreen(
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             user = user,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.LocationDetail)
@@ -740,6 +925,8 @@ fun AppNavHost(
                             ?: return@composable
 
                         LocationRouteScreen(
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             user = user,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.LocationRoute)
@@ -765,7 +952,10 @@ fun AppNavHost(
                             }
 
                             GuardianSettingsScreen(
-                                userName = PrefsManager.from(context).getUserName(),
+                                guardianTutorialViewModel =
+                                    guardianTutorialViewModel,
+                                userName =
+                                    PrefsManager.from(context).getUserName(),
                                 patients = patients,
                                 noResultCount = noResultCount,
                                 unviewedCount = unviewedCount,
@@ -773,6 +963,9 @@ fun AppNavHost(
                                     navController.popBackStackIfCurrent(Routes.Settings)
                                 },
                                 onLogout = {
+                                    guardianTutorialViewModel.stopTutorial()
+                                    hasAttemptedGuardianTutorialAutoStart = true
+
                                     navController.navigate(Routes.Login) {
                                         popUpTo(0) { inclusive = true }
                                     }
@@ -787,7 +980,46 @@ fun AppNavHost(
                                     navController.navigate(GuardianManagedUsersRoute)
                                 },
                                 onProfileEdit = {
-                                    navController.navigate(Routes.ProfileEdit)
+                                    navController.navigate(
+                                        Routes.ProfileEdit
+                                    )
+                                },
+                                onReplayTutorial = { target ->
+                                    guardianTutorialViewModel
+                                        .stopTutorial()
+                                    hasAttemptedGuardianTutorialAutoStart =
+                                        true
+
+                                    val destination = when (target) {
+                                        GuardianTutorialReplayTarget.FULL,
+                                        GuardianTutorialReplayTarget.HOME ->
+                                            Routes.GuardianHome
+
+                                        GuardianTutorialReplayTarget.ANALYSIS ->
+                                            Routes.AnalysisResult
+
+                                        GuardianTutorialReplayTarget.LOCATION ->
+                                            Routes.LocationList
+
+                                        GuardianTutorialReplayTarget.SETTINGS ->
+                                            Routes.Settings
+                                    }
+
+                                    if (currentRoute == destination) {
+                                        pendingGuardianReplayTarget = null
+                                        guardianTutorialViewModel
+                                            .startReplayTutorial(target)
+                                    } else {
+                                        pendingGuardianReplayTarget = target
+
+                                        navController.navigate(destination) {
+                                            popUpTo(Routes.GuardianHome) {
+                                                inclusive = false
+                                            }
+                                            launchSingleTop = true
+                                            restoreState = false
+                                        }
+                                    }
                                 }
                             )
                         } else {
@@ -802,7 +1034,7 @@ fun AppNavHost(
                                 onLogout = {
                                     pendingReplayTarget = null
                                     tutorialViewModel.stopTutorial()
-                                    hasAttemptedTutorialAutoStart = false
+                                    hasAttemptedUserTutorialAutoStart = true
 
                                     navController.navigate(Routes.Login) {
                                         popUpTo(0) { inclusive = true }
@@ -823,7 +1055,7 @@ fun AppNavHost(
                                      * 최초 완료 기록은 변경하지 않습니다.
                                      */
                                     tutorialViewModel.stopTutorial()
-                                    hasAttemptedTutorialAutoStart = true
+                                    hasAttemptedUserTutorialAutoStart = true
 
                                     val destination = when (target) {
                                         TutorialReplayTarget.FULL,
@@ -1032,17 +1264,36 @@ fun AppNavHost(
                         }
 
                         AnalysisUserSelectScreen(
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             patients = patients,
                             isLoading = isLoadingPatients,
                             patientStatuses = patientStatuses,
                             onBack = {
                                 navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                             },
-                            onUserClick = { patient ->
+                            onUserClick = { patient: LinkedUserInfo ->
                                 patient.userId?.let { patientId ->
-                                    guardianViewModel.markPatientViewed(patientId)
-                                    analysisViewModel.loadForPatient(patientId)
-                                    navController.navigate(Routes.AnalysisResult)
+                                    if (guardianTutorialState.isRunning) {
+                                        guardianTutorialViewModel
+                                            .moveToAnalysisResult(
+                                                number =
+                                                    guardianTutorialState
+                                                        .currentNumber + 1
+                                            )
+                                    }
+
+                                    guardianViewModel.markPatientViewed(
+                                        patientId
+                                    )
+                                    analysisViewModel.loadForPatient(
+                                        patientId
+                                    )
+                                    navController.navigate(
+                                        Routes.AnalysisResult
+                                    ) {
+                                        launchSingleTop = true
+                                    }
                                 }
                             }
                         )
@@ -1051,20 +1302,22 @@ fun AppNavHost(
                     composable(Routes.AnalysisResult) {
                         AnalysisResultScreen(
                             tutorialViewModel = tutorialViewModel,
+                            guardianTutorialViewModel =
+                                guardianTutorialViewModel,
                             onBack = {
                                 analysisViewModel.resetToSelf()
-                                navController.popBackStackIfCurrent(Routes.AnalysisResult)
-                            },
-                            onNavigateSettings = {
-                                /*
-                                 * 전체 튜토리얼의 분석 결과 단계가 끝나면
-                                 * 설정 화면으로 이동합니다.
-                                 *
-                                 * TutorialViewModel의 currentScreen은
-                                 * AnalysisResultScreen에서 SETTINGS로 먼저 변경됩니다.
-                                 */
-                                navController.navigate(Routes.Settings) {
-                                    launchSingleTop = true
+
+                                if (isGuardian) {
+                                    // 보호자 분석 결과 화면에서는 항상 사용자 선택 화면으로 이동합니다.
+                                    navController.navigate(Routes.AnalysisUserSelect) {
+                                        popUpTo(Routes.AnalysisResult) {
+                                            inclusive = true
+                                        }
+                                        launchSingleTop = true
+                                    }
+                                } else {
+                                    // 사용자 모드에서는 기존처럼 이전 화면으로 돌아갑니다.
+                                    navController.popBackStackIfCurrent(Routes.AnalysisResult)
                                 }
                             },
                             viewModel = analysisViewModel
@@ -1098,7 +1351,7 @@ fun AppNavHost(
             isPatient &&
             tutorialState.isRunning &&
             tutorialState.highlightedBottomTab != null &&
-            highlightedBottomTabBounds != null
+            highlightedUserBottomTabBounds != null
         ) {
             val guideTitle = when (tutorialState.highlightedBottomTab) {
                 TutorialBottomTab.HOME -> "홈 화면으로 이동하기"
@@ -1125,7 +1378,7 @@ fun AppNavHost(
             }
 
             TutorialOverlay(
-                targetBounds = highlightedBottomTabBounds,
+                targetBounds = highlightedUserBottomTabBounds,
                 title = guideTitle,
                 message = guideMessage,
                 currentStep = tutorialState.currentNumber,
@@ -1134,10 +1387,82 @@ fun AppNavHost(
                     highlightedUserTab?.let(handleBottomTabClick)
                 },
                 onSkip = {
+                    prefs.setUserTutorialCompleted(true)
                     tutorialViewModel.stopTutorial()
                 },
                 isBottomTabGuide = true
             )
         }
+
+        if (
+            isGuardian &&
+            guardianTutorialState.isRunning &&
+            guardianTutorialState.highlightedBottomTab != null &&
+            highlightedGuardianBottomTabBounds != null
+        ) {
+            val guideTitle = when (
+                guardianTutorialState.highlightedBottomTab
+            ) {
+                GuardianBottomTab.HOME ->
+                    "보호자 홈으로 이동하기"
+
+                GuardianBottomTab.ANALYSIS ->
+                    "분석 결과 확인하기"
+
+                GuardianBottomTab.LOCATION ->
+                    "위치 정보 확인하기"
+
+                GuardianBottomTab.SETTINGS ->
+                    "보호자 설정 살펴보기"
+
+                null -> ""
+            }
+
+            val guideMessage = when (
+                guardianTutorialState.highlightedBottomTab
+            ) {
+                GuardianBottomTab.HOME ->
+                    "홈 탭에서는 연결된 사용자와 오늘의 점수를 확인할 수 있어요."
+
+                GuardianBottomTab.ANALYSIS ->
+                    "분석 탭에서는 연결된 사용자의 인지 분석 결과를 확인할 수 있어요."
+
+                GuardianBottomTab.LOCATION ->
+                    "위치 탭에서는 사용자의 현재 위치와 이동 경로를 확인할 수 있어요."
+
+                GuardianBottomTab.SETTINGS ->
+                    "설정 탭에서는 관리 사용자, 분석 알림과 접근성 기능을 변경할 수 있어요."
+
+                null -> ""
+            }
+
+            TutorialOverlay(
+                targetBounds =
+                    highlightedGuardianBottomTabBounds,
+                title = guideTitle,
+                message = guideMessage,
+                currentStep =
+                    guardianTutorialState.currentNumber,
+                totalSteps =
+                    guardianTutorialState.totalNumber,
+                onNext = {
+                    highlightedGuardianTab?.let(
+                        handleBottomTabClick
+                    )
+                },
+                onTargetClick = {
+                    highlightedGuardianTab?.let(
+                        handleBottomTabClick
+                    )
+                },
+                onSkip = {
+                    prefs.setGuardianTutorialCompleted(true)
+                    guardianTutorialViewModel.stopTutorial()
+                },
+                isBottomTabGuide = true,
+                tutorialColor = GuardianTutorialAccentColor
+            )
+        }
+
     }
 }

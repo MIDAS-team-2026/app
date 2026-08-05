@@ -41,15 +41,15 @@ class TutorialViewModel : ViewModel() {
          * 11    : 분석 탭 안내
          * 12~14 : 분석 결과
          * 15    : 설정 탭 안내
-         * 16~21 : 설정
+         * 16~20 : 설정
          */
-        const val TOTAL_TUTORIAL_STEPS = 21
+        const val TOTAL_TUTORIAL_STEPS = 20
 
         // 화면별 다시 보기에는 하단 탭 이동 안내를 포함하지 않습니다.
         const val HOME_TUTORIAL_STEPS = 5
         const val VOICE_CHAT_TUTORIAL_STEPS = 3
         const val ANALYSIS_TUTORIAL_STEPS = 3
-        const val SETTINGS_TUTORIAL_STEPS = 6
+        const val SETTINGS_TUTORIAL_STEPS = 5
 
         const val FULL_MOVE_TO_HOME_TAB_NUMBER = 1
         const val FULL_HOME_START_NUMBER = 2
