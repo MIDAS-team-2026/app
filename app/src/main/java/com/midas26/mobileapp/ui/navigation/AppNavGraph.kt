@@ -710,6 +710,16 @@ fun AppNavHost(
                         },
                         onSessionEnded = {
                             analysisViewModel.refresh()
+                        },
+                        onNavigateHome = {
+                            analysisViewModel.refresh()
+
+                            navController.navigate(Routes.UserHome) {
+                                popUpTo(Routes.UserHome) {
+                                    inclusive = false
+                                }
+                                launchSingleTop = true
+                            }
                         }
                     )
                 }

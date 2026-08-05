@@ -65,24 +65,27 @@ def decide_conversation_action(
             reason="current_topic_has_enough_detail",
         )
 
-    if candidate_count <= 0 and not has_followup_context:
+    if needs_memory_detail:
+        return ConversationDecision(
+            action=ConversationAction.FOLLOW_UP,
+            stage="ANCHOR",
+            reason="request_one_grounded_memory_detail",
+        )
+
+    if not has_followup_context:
         return ConversationDecision(
             action=ConversationAction.OPEN_TOPIC,
             stage="DEEPEN",
-            reason="no_recall_candidate_in_current_cycle",
+            reason="latest_answer_has_no_topic_to_follow_up",
         )
 
     return ConversationDecision(
         action=ConversationAction.FOLLOW_UP,
-        stage="ANCHOR" if needs_memory_detail else "DEEPEN",
+        stage="DEEPEN",
         reason=(
-            "request_one_grounded_memory_detail"
-            if needs_memory_detail
-            else (
-                "continue_current_topic_without_recall_candidate"
-                if candidate_count <= 0
-                else "continue_grounded_topic"
-            )
+            "continue_current_topic_without_recall_candidate"
+            if candidate_count <= 0
+            else "continue_grounded_topic"
         ),
     )
 

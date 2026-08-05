@@ -1,6 +1,7 @@
 package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.analysis.AiReplyResponseDTO;
+import com.example.backend.Model.DTO.analysis.FixedQuestionStatusDTO;
 import com.example.backend.Model.DTO.analysis.RecallRecordLinkDTO;
 import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
@@ -140,17 +141,24 @@ public class VoiceService {
 
 
     @Transactional(readOnly = true)
-    public boolean isFixedQuestionsDoneToday(Integer userId) {
+    public FixedQuestionStatusDTO getFixedQuestionStatus(Integer userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
-        return LocalDate.now().equals(user.getLastFixedQuestionDate());
+        boolean doneToday = LocalDate.now().equals(user.getLastFixedQuestionDate());
+        // last_fixed_question_date만 있고 onboarding 플래그가 없는 예전 유저도
+        // 온보딩을 완료한 것으로 취급한다 (컬럼 추가 전 데이터 호환).
+        boolean onboardingDone = user.isFixedOnboardingDone() || user.getLastFixedQuestionDate() != null;
+        return new FixedQuestionStatusDTO(doneToday, onboardingDone);
     }
 
     @Transactional
-    public void markFixedQuestionsDoneToday(Integer userId) {
+    public void markFixedQuestionsDoneToday(Integer userId, boolean onboarding) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
         user.setLastFixedQuestionDate(LocalDate.now());
+        if (onboarding) {
+            user.setFixedOnboardingDone(true);
+        }
         userRepository.save(user);
     }
 
@@ -166,7 +174,8 @@ public class VoiceService {
                         record.getAudioFilePath(),
                         record.getAnswerRole() != null ? record.getAnswerRole().toString() : null,
                         record.getRecallQuestionId(),
-                        record.getParentRecord() != null ? record.getParentRecord().getId() : null
+                        record.getParentRecord() != null ? record.getParentRecord().getId() : null,
+                        record.getAiReplyText()
                 ))
 
                 .collect(Collectors.toList());

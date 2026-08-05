@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -48,22 +50,35 @@ fun AnalysisUserSelectScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📊", fontSize = 24.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AnalysisChartIcon(
+                            color = AppColor.textPrimary,
+                            modifier = Modifier.size(32.dp)
+                        )
+
+                        Spacer(modifier = Modifier.width(10.dp))
+
                         Text(
                             text = "분석 결과 확인",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp
+                            fontSize = 22.sp,
+                            color = AppColor.textPrimary
                         )
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "뒤로"
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.White
+                )
             )
         },
         containerColor = Color.White
@@ -77,8 +92,11 @@ fun AnalysisUserSelectScreen(
         ) {
             when {
                 isLoading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
+
                 patients.isEmpty() -> {
                     Text(
                         text = "연결된 사용자가 없습니다",
@@ -86,6 +104,7 @@ fun AnalysisUserSelectScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
+
                 else -> {
                     Column(
                         modifier = Modifier
@@ -95,31 +114,42 @@ fun AnalysisUserSelectScreen(
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 8.dp
+                                ),
                             shape = RoundedCornerShape(14.dp),
-                            color = Color(0xFFF0F4FF)
+                            color = Color(0xFFFFE5DF)
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                                modifier = Modifier.padding(
+                                    horizontal = 16.dp,
+                                    vertical = 16.dp
+                                ),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("📋", fontSize = 26.sp)
                                 Spacer(modifier = Modifier.width(10.dp))
+
                                 Text(
-                                    text = "분석 결과를 확인할 사용자를 선택하세요",
+                                    text = "분석 결과를 확인할 사용자를 선택하세요!",
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF1A4FAA)
+                                    color = Color(0xFFC85E48)
                                 )
                             }
                         }
 
                         patients.forEach { patient ->
-                            val status = patient.userId?.let { patientStatuses[it] }
+                            val status = patient.userId?.let {
+                                patientStatuses[it]
+                            }
+
                             AnalysisUserCard(
                                 patient = patient,
                                 status = status,
-                                onClick = { onUserClick(patient) }
+                                onClick = {
+                                    onUserClick(patient)
+                                }
                             )
                         }
                     }
@@ -134,6 +164,65 @@ fun AnalysisUserSelectScreen(
     }
 }
 
+/**
+ * 첨부된 이미지와 비슷한 형태의 막대그래프 아이콘
+ *
+ * color에 제목 글자와 동일한 색상을 전달하여
+ * 아이콘과 제목 색상이 함께 변경되도록 구성
+ */
+@Composable
+private fun AnalysisChartIcon(
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier = modifier) {
+        val iconWidth = size.width
+        val iconHeight = size.height
+
+        val barWidth = iconWidth * 0.20f
+        val bottomPosition = iconHeight * 0.88f
+
+        // 왼쪽 막대
+        drawRect(
+            color = color,
+            topLeft = Offset(
+                x = iconWidth * 0.08f,
+                y = iconHeight * 0.42f
+            ),
+            size = Size(
+                width = barWidth,
+                height = bottomPosition - iconHeight * 0.42f
+            )
+        )
+
+        // 가운데 막대
+        drawRect(
+            color = color,
+            topLeft = Offset(
+                x = iconWidth * 0.40f,
+                y = iconHeight * 0.14f
+            ),
+            size = Size(
+                width = barWidth,
+                height = bottomPosition - iconHeight * 0.14f
+            )
+        )
+
+        // 오른쪽 막대
+        drawRect(
+            color = color,
+            topLeft = Offset(
+                x = iconWidth * 0.72f,
+                y = iconHeight * 0.58f
+            ),
+            size = Size(
+                width = barWidth,
+                height = bottomPosition - iconHeight * 0.58f
+            )
+        )
+    }
+}
+
 @Composable
 private fun AnalysisUserCard(
     patient: LinkedUserInfo,
@@ -141,21 +230,34 @@ private fun AnalysisUserCard(
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
+
     val relation = patient.userId
-        ?.let { PrefsManager.from(context).getPatientRelation(it) }
-        ?.ifEmpty { "사용자" }
+        ?.let {
+            PrefsManager.from(context).getPatientRelation(it)
+        }
+        ?.ifEmpty {
+            "사용자"
+        }
         ?: "사용자"
-    val pillFontSize = with(LocalDensity.current) { 14.dp.toSp() }
+
+    val pillFontSize = with(LocalDensity.current) {
+        14.dp.toSp()
+    }
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(
+                horizontal = 12.dp,
+                vertical = 6.dp
+            )
             .height(100.dp)
-            .clickable { onClick() }
+            .clickable {
+                onClick()
+            }
             .border(
                 width = 1.5.dp,
-                color = Color(0xFFB3D4F5),
+                color = AppColor.guardianDark,
                 shape = RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),
@@ -167,16 +269,22 @@ private fun AnalysisUserCard(
                 .padding(horizontal = 28.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                // 이름 + 관계 pill
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                // 이름과 관계 표시
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = patient.name ?: "이름 없음",
                         fontSize = 25.sp,
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
+
                     Spacer(modifier = Modifier.width(8.dp))
+
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = AppColor.guardianSurface,
@@ -188,38 +296,53 @@ private fun AnalysisUserCard(
                             lineHeight = pillFontSize,
                             fontWeight = FontWeight.Medium,
                             color = AppColor.guardianDark,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(
+                                horizontal = 8.dp,
+                                vertical = 2.dp
+                            )
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // 상태 문구
+                // 분석 결과 상태 문구
                 when (status) {
-                    PatientAnalysisStatus.LOADING -> StatusShimmer()
-                    PatientAnalysisStatus.NEW_RESULT -> Text(
-                        text = "새로운 분석 결과가 나왔어요!",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color(0xFFF59E0B)
-                    )
-                    PatientAnalysisStatus.VIEWED_TODAY -> Text(
-                        text = "오늘의 분석 결과를 확인했어요!",
-                        fontSize = 13.sp,
-                        color = AppColor.textTertiary
-                    )
-                    PatientAnalysisStatus.NO_RESULT, null -> Text(
-                        text = "아직 오늘의 분석 결과가 도착하지 않았어요",
-                        fontSize = 13.sp,
-                        color = AppColor.textTertiary
-                    )
+                    PatientAnalysisStatus.LOADING -> {
+                        StatusShimmer()
+                    }
+
+                    PatientAnalysisStatus.NEW_RESULT -> {
+                        Text(
+                            text = "새로운 분석 결과가 나왔어요!",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFF59E0B)
+                        )
+                    }
+
+                    PatientAnalysisStatus.VIEWED_TODAY -> {
+                        Text(
+                            text = "오늘의 분석 결과를 확인했어요!",
+                            fontSize = 13.sp,
+                            color = AppColor.textTertiary
+                        )
+                    }
+
+                    PatientAnalysisStatus.NO_RESULT,
+                    null -> {
+                        Text(
+                            text = "아직 오늘의 분석 결과가 도착하지 않았어요",
+                            fontSize = 13.sp,
+                            color = AppColor.textTertiary
+                        )
+                    }
                 }
             }
 
             Icon(
                 imageVector = Icons.Default.ChevronRight,
-                contentDescription = null,
+                contentDescription = "분석 결과 확인",
                 tint = AppColor.textTertiary,
                 modifier = Modifier.size(26.dp)
             )
@@ -227,15 +350,23 @@ private fun AnalysisUserCard(
     }
 }
 
-/** 상태 로딩 중 shimmer 효과 */
+/**
+ * 상태 로딩 중 shimmer 효과
+ */
 @Composable
 private fun StatusShimmer() {
-    val transition = rememberInfiniteTransition(label = "shimmer")
+    val transition = rememberInfiniteTransition(
+        label = "shimmer"
+    )
+
     val shimmerX by transition.animateFloat(
         initialValue = -200f,
         targetValue = 600f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1000, easing = LinearEasing),
+            animation = tween(
+                durationMillis = 1000,
+                easing = LinearEasing
+            ),
             repeatMode = RepeatMode.Restart
         ),
         label = "shimmerX"
@@ -252,8 +383,14 @@ private fun StatusShimmer() {
                         Color(0xFFF5F5F5),
                         Color(0xFFE0E0E0)
                     ),
-                    start = Offset(shimmerX, 0f),
-                    end = Offset(shimmerX + 200f, 0f)
+                    start = Offset(
+                        x = shimmerX,
+                        y = 0f
+                    ),
+                    end = Offset(
+                        x = shimmerX + 200f,
+                        y = 0f
+                    )
                 ),
                 shape = RoundedCornerShape(6.dp)
             )
