@@ -89,6 +89,7 @@ import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.TutorialScreen
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
+import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsScreen(
@@ -123,7 +124,7 @@ fun SettingsScreen(
     var locationSharingBounds by remember { mutableStateOf<Rect?>(null) }
     var notificationBounds by remember { mutableStateOf<Rect?>(null) }
     var notificationTimeBounds by remember { mutableStateOf<Rect?>(null) }
-    var supportBounds by remember { mutableStateOf<Rect?>(null) }
+    var replayTutorialBounds by remember { mutableStateOf<Rect?>(null) }
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
     val isPatient = role == PrefsManager.ROLE_USER
@@ -235,8 +236,15 @@ fun SettingsScreen(
                     scrollState.animateScrollTo(190)
                 }
 
-                SettingsTutorialStep.SUPPORT -> {
-                    scrollState.animateScrollTo(scrollState.maxValue)
+                SettingsTutorialStep.REPLAY_TUTORIAL -> {
+                    /*
+                     * 다시 보기 항목이 화면에 보이도록 스크롤한 뒤
+                     * 좌표를 다시 측정합니다.
+                     */
+                    replayTutorialBounds = null
+                    val replayScrollTarget = 230.coerceAtMost(scrollState.maxValue)
+                    scrollState.animateScrollTo(replayScrollTarget)
+                    delay(120L)
                 }
 
                 SettingsTutorialStep.COMPLETED -> Unit
@@ -446,13 +454,6 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                SettingsRow(
-                    label = "앱 사용법 다시 보기",
-                    onClick = {
-                        showTutorialSelectionDialog = true
-                    }
-                )
-
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
@@ -468,14 +469,19 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            SettingsSection(
-                title = "지원",
-                modifier = Modifier.onGloballyPositioned { coordinates ->
-                    supportBounds = coordinates
-                        .boundsInRoot()
-                        .relativeTo(tutorialRootBounds)
-                }
-            ) {
+            SettingsSection(title = "지원") {
+                SettingsRow(
+                    label = "앱 사용법 다시 보기",
+                    modifier = Modifier.onGloballyPositioned { coordinates ->
+                        replayTutorialBounds = coordinates
+                            .boundsInRoot()
+                            .relativeTo(tutorialRootBounds)
+                    },
+                    onClick = {
+                        showTutorialSelectionDialog = true
+                    }
+                )
+
                 SettingsRow(label = "개인정보 처리방침", onClick = {})
 
                 HorizontalDivider(
@@ -550,7 +556,7 @@ fun SettingsScreen(
                 SettingsTutorialStep.LOCATION_SHARING -> locationSharingBounds
                 SettingsTutorialStep.CHECK_NOTIFICATION -> notificationBounds
                 SettingsTutorialStep.NOTIFICATION_TIME -> notificationTimeBounds
-                SettingsTutorialStep.SUPPORT -> supportBounds
+                SettingsTutorialStep.REPLAY_TUTORIAL -> replayTutorialBounds
                 SettingsTutorialStep.COMPLETED -> null
             }
 
@@ -563,6 +569,11 @@ fun SettingsScreen(
                 targetBounds != null ||
                 tutorialState.settingsStep == SettingsTutorialStep.COMPLETED
             ) {
+                /*
+                 * 전체 튜토리얼에서는 설정 단계가 16~20번으로 진행되고,
+                 * 설정 화면만 다시 보기에서는 1~5번으로 진행됩니다.
+                 * 번호는 TutorialState의 currentNumber/totalNumber를 그대로 사용합니다.
+                 */
                 SettingsTutorialOverlay(
                     step = tutorialState.settingsStep,
                     targetBounds = targetBounds,
@@ -593,12 +604,12 @@ fun SettingsScreen(
 
                             SettingsTutorialStep.NOTIFICATION_TIME -> {
                                 tutorialViewModel.moveSettingsStep(
-                                    SettingsTutorialStep.SUPPORT,
+                                    SettingsTutorialStep.REPLAY_TUTORIAL,
                                     tutorialState.currentNumber + 1
                                 )
                             }
 
-                            SettingsTutorialStep.SUPPORT,
+                            SettingsTutorialStep.REPLAY_TUTORIAL,
                             SettingsTutorialStep.COMPLETED -> {
                                 notificationEnabled = savedNotificationEnabled
                                 tutorialViewModel.completeTutorial()
@@ -655,7 +666,7 @@ private fun SettingsTutorialOverlay(
         SettingsTutorialStep.LOCATION_SHARING -> "위치 정보 공유"
         SettingsTutorialStep.CHECK_NOTIFICATION -> "점검 알림"
         SettingsTutorialStep.NOTIFICATION_TIME -> "알림 시간"
-        SettingsTutorialStep.SUPPORT -> "지원 메뉴"
+        SettingsTutorialStep.REPLAY_TUTORIAL -> "앱 사용법 다시 보기"
         SettingsTutorialStep.COMPLETED -> "설정 사용법 완료"
     }
 
@@ -672,8 +683,8 @@ private fun SettingsTutorialOverlay(
         SettingsTutorialStep.NOTIFICATION_TIME ->
             "알림을 받고 싶은 시간을 직접 선택할 수 있어요."
 
-        SettingsTutorialStep.SUPPORT ->
-            "개인정보 처리방침, 이용 약관과 문의 메뉴를 확인할 수 있어요."
+        SettingsTutorialStep.REPLAY_TUTORIAL ->
+            "사용법을 다시 보고 싶을 때 이 메뉴에서 전체 또는 원하는 화면의 튜토리얼을 선택할 수 있어요."
 
         SettingsTutorialStep.COMPLETED ->
             "설정 화면의 주요 기능을 모두 살펴봤어요."
@@ -813,7 +824,7 @@ private fun SettingsTutorialOverlay(
                     ) {
                         Text(
                             text = if (
-                                step == SettingsTutorialStep.SUPPORT ||
+                                step == SettingsTutorialStep.REPLAY_TUTORIAL ||
                                 step == SettingsTutorialStep.COMPLETED
                             ) {
                                 "완료"

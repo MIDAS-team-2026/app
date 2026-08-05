@@ -78,6 +78,9 @@ import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.tutorial.AnalysisTutorialStep
 import com.midas26.mobileapp.ui.tutorial.TutorialScreen
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianAnalysisTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -89,7 +92,8 @@ fun AnalysisResultScreen(
     onBack: () -> Unit,
     onNavigateSettings: () -> Unit = {},
     onNavigateTextScoreDetail: () -> Unit = {},
-    viewModel: AnalysisViewModel = viewModel()
+    viewModel: AnalysisViewModel = viewModel(),
+    guardianTutorialViewModel: GuardianTutorialViewModel? = null
 ) {
     val context = LocalContext.current
     val isGuardian = PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN
@@ -100,7 +104,8 @@ fun AnalysisResultScreen(
         onNavigateSettings = onNavigateSettings,
         onNavigateTextScoreDetail = onNavigateTextScoreDetail,
         viewModel = viewModel,
-        isGuardian = isGuardian
+        isGuardian = isGuardian,
+        guardianTutorialViewModel = guardianTutorialViewModel
     )
 }
 
@@ -111,10 +116,18 @@ private fun UserAnalysisResultContent(
     onNavigateSettings: () -> Unit,
     onNavigateTextScoreDetail: () -> Unit = {},
     viewModel: AnalysisViewModel,
-    isGuardian: Boolean = false
+    isGuardian: Boolean = false,
+    guardianTutorialViewModel: GuardianTutorialViewModel? = null
 ) {
     val fontScale = LocalFontSizeScale.current.scale
     val tutorialState by tutorialViewModel.state.collectAsState()
+
+    val guardianTutorialState =
+        if (guardianTutorialViewModel != null) {
+            guardianTutorialViewModel.state.collectAsState().value
+        } else {
+            null
+        }
 
     /*
      * boundsInRoot()로 최상위 화면과 각 강조 대상의 위치를 측정한 뒤,
@@ -215,15 +228,12 @@ private fun UserAnalysisResultContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = {
-                                    if (!isToday) viewModel.clearSelectedDay()
-                                    else onBack()
-                                },
+                                onClick = onBack,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = if (isToday) "뒤로가기" else "오늘로 돌아가기",
+                                    contentDescription = "뒤로가기",
                                     tint = BrandWhite,
                                     modifier = Modifier.size(28.dp)
                                 )
@@ -437,12 +447,14 @@ private fun UserAnalysisResultContent(
             if (
                 !isGuardian &&
                 tutorialState.isRunning &&
-                tutorialState.currentScreen == TutorialScreen.ANALYSIS
+                tutorialState.currentScreen == TutorialScreen.ANALYSIS &&
+                tutorialState.analysisStep != AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB
             ) {
                 val targetBounds = when (tutorialState.analysisStep) {
                     AnalysisTutorialStep.MAIN_SCORE -> mainScoreBounds
                     AnalysisTutorialStep.WEEKLY_GRAPH -> weeklyGraphBounds
                     AnalysisTutorialStep.DETAIL_SCORES -> detailScoresBounds
+                    AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> null
                     AnalysisTutorialStep.COMPLETED -> null
                 }
 
@@ -469,11 +481,22 @@ private fun UserAnalysisResultContent(
 
                             AnalysisTutorialStep.DETAIL_SCORES -> {
                                 if (tutorialViewModel.isFullTutorial()) {
-                                    tutorialViewModel.moveToSettings()
-                                    onNavigateSettings()
+                                    /*
+                                     * 분석 결과 설명이 끝나면 AppNavGraph에서
+                                     * 하단 설정 탭을 안내합니다.
+                                     */
+                                    tutorialViewModel.showSettingsTabGuide(
+                                        number = tutorialState.currentNumber + 1
+                                    )
                                 } else {
                                     tutorialViewModel.completeTutorial()
                                 }
+                            }
+
+                            AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> {
+                                /*
+                                 * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
+                                 */
                             }
 
                             AnalysisTutorialStep.COMPLETED -> {
@@ -486,6 +509,129 @@ private fun UserAnalysisResultContent(
                     }
                 )
             }
+
+            val guardianState = guardianTutorialState
+
+            if (
+                isGuardian &&
+                guardianTutorialViewModel != null &&
+                guardianState?.isRunning == true &&
+                guardianState.currentScreen ==
+                GuardianTutorialScreen.ANALYSIS_RESULT &&
+                guardianState.analysisStep !=
+                GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB &&
+                guardianState.analysisStep !=
+                GuardianAnalysisTutorialStep.COMPLETED
+            ) {
+                val mappedStep = when (
+                    guardianState.analysisStep
+                ) {
+                    GuardianAnalysisTutorialStep.MAIN_SCORE ->
+                        AnalysisTutorialStep.MAIN_SCORE
+
+                    GuardianAnalysisTutorialStep.WEEKLY_GRAPH ->
+                        AnalysisTutorialStep.WEEKLY_GRAPH
+
+                    GuardianAnalysisTutorialStep.DETAIL_SCORES ->
+                        AnalysisTutorialStep.DETAIL_SCORES
+
+                    GuardianAnalysisTutorialStep.USER_SELECT,
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.COMPLETED ->
+                        null
+                }
+
+                val guardianTargetBounds = when (
+                    guardianState.analysisStep
+                ) {
+                    GuardianAnalysisTutorialStep.MAIN_SCORE ->
+                        mainScoreBounds
+
+                    GuardianAnalysisTutorialStep.WEEKLY_GRAPH ->
+                        weeklyGraphBounds
+
+                    GuardianAnalysisTutorialStep.DETAIL_SCORES ->
+                        detailScoresBounds
+
+                    GuardianAnalysisTutorialStep.USER_SELECT,
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.COMPLETED ->
+                        null
+                }
+
+                if (
+                    mappedStep != null &&
+                    guardianTargetBounds != null
+                ) {
+                    AnalysisTutorialOverlay(
+                        step = mappedStep,
+                        targetBounds = guardianTargetBounds,
+                        currentNumber =
+                            guardianState.currentNumber,
+                        totalNumber =
+                            guardianState.totalNumber,
+                        onNext = {
+                            when (
+                                guardianState.analysisStep
+                            ) {
+                                GuardianAnalysisTutorialStep.MAIN_SCORE -> {
+                                    guardianTutorialViewModel
+                                        .moveAnalysisStep(
+                                            step =
+                                                GuardianAnalysisTutorialStep
+                                                    .WEEKLY_GRAPH,
+                                            number =
+                                                guardianState.currentNumber + 1
+                                        )
+                                }
+
+                                GuardianAnalysisTutorialStep.WEEKLY_GRAPH -> {
+                                    guardianTutorialViewModel
+                                        .moveAnalysisStep(
+                                            step =
+                                                GuardianAnalysisTutorialStep
+                                                    .DETAIL_SCORES,
+                                            number =
+                                                guardianState.currentNumber + 1
+                                        )
+                                }
+
+                                GuardianAnalysisTutorialStep.DETAIL_SCORES -> {
+                                    if (
+                                        guardianTutorialViewModel
+                                            .isFullTutorial()
+                                    ) {
+                                        guardianTutorialViewModel
+                                            .showLocationTabGuide(
+                                                number =
+                                                    guardianState
+                                                        .currentNumber + 1
+                                            )
+                                    } else {
+                                        guardianTutorialViewModel
+                                            .completeTutorial()
+                                    }
+                                }
+
+                                GuardianAnalysisTutorialStep.USER_SELECT,
+                                GuardianAnalysisTutorialStep
+                                    .MOVE_TO_LOCATION_TAB ->
+                                    Unit
+
+                                GuardianAnalysisTutorialStep.COMPLETED ->
+                                    guardianTutorialViewModel
+                                        .completeTutorial()
+                            }
+                        },
+                        onSkip = {
+                            guardianTutorialViewModel
+                                .stopTutorial()
+                        },
+                        tutorialColor = Color(0xFFC85E48)
+                    )
+                }
+            }
+
         }
     }
 
@@ -518,15 +664,17 @@ private fun AnalysisTutorialOverlay(
     currentNumber: Int,
     totalNumber: Int,
     onNext: () -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    tutorialColor: Color = AppColor.greenPrimary
 ) {
     val density = LocalDensity.current
-    val highlightColor = AppColor.greenPrimary
+    val highlightColor = tutorialColor
 
     val title = when (step) {
         AnalysisTutorialStep.MAIN_SCORE -> "오늘의 인지 점수"
         AnalysisTutorialStep.WEEKLY_GRAPH -> "이번 주 점수 추이"
         AnalysisTutorialStep.DETAIL_SCORES -> "세부 분석 결과"
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> "앱 설정 살펴보기"
         AnalysisTutorialStep.COMPLETED -> "분석 결과 사용법 완료"
     }
 
@@ -539,6 +687,9 @@ private fun AnalysisTutorialOverlay(
 
         AnalysisTutorialStep.DETAIL_SCORES ->
             "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
+            "하단 설정 탭에서 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
 
         AnalysisTutorialStep.COMPLETED ->
             "분석 결과 화면의 주요 기능을 모두 살펴봤어요."
@@ -619,7 +770,7 @@ private fun AnalysisTutorialOverlay(
                 Text(
                     text = "$currentNumber / $totalNumber",
                     style = MaterialTheme.typography.labelLarge,
-                    color = AppColor.greenPrimary,
+                    color = tutorialColor,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -665,7 +816,7 @@ private fun AnalysisTutorialOverlay(
                             } else {
                                 "다음"
                             },
-                            color = AppColor.greenPrimary,
+                            color = tutorialColor,
                             fontWeight = FontWeight.Bold
                         )
                     }

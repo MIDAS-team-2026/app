@@ -43,7 +43,9 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -52,9 +54,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -70,15 +75,24 @@ import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianSettingsTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialReplayTarget
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
+
+private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 private val AnalysisAlertToggleColor = Color(0xFFC85E48)
 private val NotificationTimeBackgroundColor = Color(0xFFFFD5CD)
 private val NotificationTimeTextColor = Color(0xFFC85E48)
 private val DialogButtonPressedColor = Color(0xFFFFD5CD)
 
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun GuardianSettingsScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     userName: String = "",
     patients: List<LinkedUserInfo> = emptyList(),
     noResultCount: Int = 0,
@@ -89,9 +103,46 @@ fun GuardianSettingsScreen(
     onAccessibility: () -> Unit = {},
     onManagedUsers: () -> Unit = {},
     onProfileEdit: () -> Unit = {},
+    onReplayTutorial: (GuardianTutorialReplayTarget) -> Unit = {},
     profileViewModel: ProfileEditViewModel = viewModel()
 ) {
     val context = LocalContext.current
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
+
+    var localSettingsStep by remember {
+        mutableStateOf(tutorialState.settingsStep)
+    }
+
+    var localTutorialNumber by remember {
+        mutableIntStateOf(tutorialState.currentNumber)
+    }
+
+    LaunchedEffect(
+        tutorialState.currentScreen,
+        tutorialState.settingsStep,
+        tutorialState.currentNumber
+    ) {
+        if (
+            tutorialState.currentScreen ==
+            GuardianTutorialScreen.SETTINGS
+        ) {
+            localSettingsStep = tutorialState.settingsStep
+            localTutorialNumber = tutorialState.currentNumber
+        }
+    }
+
+    var accessibilityBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+    var managedUsersBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+    var analysisNotificationBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+    var replayTutorialBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
 
     val patientsLabel = when {
         patients.isEmpty() -> "없음"
@@ -108,6 +159,7 @@ fun GuardianSettingsScreen(
 
     var showAnalysisTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showReplayTutorialDialog by remember { mutableStateOf(false) }
 
     NotificationHelper.createChannel(context)
 
@@ -136,8 +188,50 @@ fun GuardianSettingsScreen(
     }
 
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(
+        tutorialState.isRunning,
+        tutorialState.currentScreen,
+        localSettingsStep
+    ) {
+        if (
+            tutorialState.isRunning &&
+            tutorialState.currentScreen ==
+            GuardianTutorialScreen.SETTINGS
+        ) {
+            when (localSettingsStep) {
+                GuardianSettingsTutorialStep.ACCESSIBILITY,
+                GuardianSettingsTutorialStep.MANAGED_USERS,
+                GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
+                    scrollState.animateScrollTo(0)
+                }
+
+                GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
+                    scrollState.animateScrollTo(
+                        scrollState.maxValue
+                    )
+                }
+
+                GuardianSettingsTutorialStep.COMPLETED -> Unit
+                else -> Unit
+            }
+        }
+    }
+
     val rangePx = with(LocalDensity.current) { 180.dp.toPx() }
     val p = (scrollState.value / rangePx).coerceIn(0f, 1f)
+
+    if (showReplayTutorialDialog) {
+        GuardianTutorialReplayDialog(
+            onSelect = { target ->
+                showReplayTutorialDialog = false
+                onReplayTutorial(target)
+            },
+            onDismiss = {
+                showReplayTutorialDialog = false
+            }
+        )
+    }
 
     if (showLogoutDialog) {
         ConfirmDialog(
@@ -166,7 +260,13 @@ fun GuardianSettingsScreen(
             Spacer(modifier = Modifier.height(10.dp))
 
             SettingsSection(title = "접근성") {
-                SettingsRow(label = "접근성 설정", onClick = onAccessibility)
+                SettingsRow(
+                    label = "접근성 설정",
+                    onClick = onAccessibility,
+                    onBoundsChanged = {
+                        accessibilityBounds = it
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -174,7 +274,10 @@ fun GuardianSettingsScreen(
             SettingsSection(title = "사용자 설정") {
                 SettingsRow(
                     label = "관리 중인 사용자",
-                    onClick = onManagedUsers
+                    onClick = onManagedUsers,
+                    onBoundsChanged = {
+                        managedUsersBounds = it
+                    }
                 )
             }
 
@@ -185,6 +288,9 @@ fun GuardianSettingsScreen(
                     label = "분석 알림",
                     description = "인지 분석 결과 관련 알림을 받아요",
                     checked = analysisAlertEnabled,
+                    onBoundsChanged = {
+                        analysisNotificationBounds = it
+                    },
                     onCheckedChange = { enabled ->
                         analysisAlertEnabled = enabled
 
@@ -226,8 +332,22 @@ fun GuardianSettingsScreen(
 
             Spacer(modifier = Modifier.height(12.dp))
 
+
             SettingsSection(title = "지원") {
-                SettingsRow(label = "개인정보 처리방침", onClick = {})
+                SettingsRow(
+                    label = "앱 사용법 다시 보기",
+                    onClick = {
+                        showReplayTutorialDialog = true
+                    },
+                    onBoundsChanged = {
+                        replayTutorialBounds = it
+                    }
+                )
+
+                SettingsRow(
+                    label = "개인정보 처리방침",
+                    onClick = {}
+                )
 
                 HorizontalDivider(
                     color = AppColor.divider,
@@ -244,6 +364,12 @@ fun GuardianSettingsScreen(
                 )
 
                 SettingsRow(label = "문의하기", onClick = {})
+
+                HorizontalDivider(
+                    color = AppColor.divider,
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -290,6 +416,289 @@ fun GuardianSettingsScreen(
             unviewedCount = unviewedCount,
             onBack = onBack,
             onProfileEdit = onProfileEdit
+        )
+
+        if (
+            tutorialState.isRunning &&
+            tutorialState.currentScreen ==
+            GuardianTutorialScreen.SETTINGS &&
+            localSettingsStep !=
+            GuardianSettingsTutorialStep.COMPLETED
+        ) {
+            val targetBounds = when (
+                localSettingsStep
+            ) {
+                GuardianSettingsTutorialStep.ACCESSIBILITY ->
+                    accessibilityBounds
+
+                GuardianSettingsTutorialStep.MANAGED_USERS ->
+                    managedUsersBounds
+
+                GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION ->
+                    analysisNotificationBounds
+
+                GuardianSettingsTutorialStep.REPLAY_TUTORIAL ->
+                    replayTutorialBounds
+
+                GuardianSettingsTutorialStep.COMPLETED ->
+                    null
+
+                else -> null
+            }
+
+            if (targetBounds != null) {
+                val title = when (
+                    localSettingsStep
+                ) {
+                    GuardianSettingsTutorialStep.ACCESSIBILITY ->
+                        "접근성 설정"
+
+                    GuardianSettingsTutorialStep.MANAGED_USERS ->
+                        "관리 중인 사용자"
+
+                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION ->
+                        "분석 알림"
+
+                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL ->
+                        "앱 사용법 다시 보기"
+
+                    GuardianSettingsTutorialStep.COMPLETED ->
+                        ""
+
+                    else -> ""
+                }
+
+                val message = when (
+                    localSettingsStep
+                ) {
+                    GuardianSettingsTutorialStep.ACCESSIBILITY ->
+                        "글자 크기와 화면 대비 등 보호자 앱의 접근성 기능을 변경할 수 있어요."
+
+                    GuardianSettingsTutorialStep.MANAGED_USERS ->
+                        "보호자가 관리하고 있는 연결 사용자를 확인하고 관리할 수 있어요."
+
+                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION ->
+                        "새로운 인지 분석 결과를 알림으로 받을 수 있어요."
+
+                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL ->
+                        "나중에도 이 메뉴에서 보호자 앱 사용법을 다시 확인할 수 있어요."
+
+                    GuardianSettingsTutorialStep.COMPLETED ->
+                        ""
+                }
+
+                TutorialOverlay(
+                    targetBounds = targetBounds,
+                    title = title,
+                    message = message,
+                    currentStep =
+                        localTutorialNumber,
+                    totalSteps =
+                        tutorialState.totalNumber,
+                    onNext = {
+                        when (localSettingsStep) {
+                            GuardianSettingsTutorialStep.ACCESSIBILITY -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.MANAGED_USERS
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.MANAGED_USERS -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
+                                if (
+                                    guardianTutorialViewModel
+                                        .isFullTutorial()
+                                ) {
+                                    PrefsManager.from(context)
+                                        .setGuardianTutorialCompleted(true)
+                                }
+
+                                guardianTutorialViewModel
+                                    .completeTutorial()
+                            }
+
+                            GuardianSettingsTutorialStep.COMPLETED -> Unit
+                            else -> Unit
+                        }
+                    },
+                    onTargetClick = {
+                        when (localSettingsStep) {
+                            GuardianSettingsTutorialStep.ACCESSIBILITY -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.MANAGED_USERS
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.MANAGED_USERS -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
+                                localSettingsStep =
+                                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL
+                                localTutorialNumber += 1
+                            }
+
+                            GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
+                                if (
+                                    guardianTutorialViewModel
+                                        .isFullTutorial()
+                                ) {
+                                    PrefsManager.from(context)
+                                        .setGuardianTutorialCompleted(true)
+                                }
+
+                                guardianTutorialViewModel
+                                    .completeTutorial()
+                            }
+
+                            GuardianSettingsTutorialStep.COMPLETED -> Unit
+                            else -> Unit
+                        }
+                    },
+                    onSkip = {
+                        PrefsManager.from(context)
+                            .setGuardianTutorialCompleted(true)
+                        guardianTutorialViewModel.stopTutorial()
+                    },
+                    tutorialColor = GuardianTutorialAccentColor
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+
+@Composable
+private fun GuardianTutorialReplayDialog(
+    onSelect: (GuardianTutorialReplayTarget) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "취소",
+                    color = AppColor.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        title = {
+            Text(
+                text = "어떤 사용법을 볼까요?",
+                color = AppColor.textPrimary,
+                fontWeight = FontWeight.ExtraBold
+            )
+        },
+        text = {
+            Column {
+                GuardianReplayOption(
+                    title = "전체 사용법",
+                    description = "처음부터 모든 기능을 차례대로 알아봐요",
+                    onClick = {
+                        onSelect(GuardianTutorialReplayTarget.FULL)
+                    }
+                )
+
+                GuardianReplayOption(
+                    title = "홈 화면",
+                    description = "연결 사용자와 주요 메뉴 사용법을 알아봐요",
+                    onClick = {
+                        onSelect(GuardianTutorialReplayTarget.HOME)
+                    }
+                )
+
+                GuardianReplayOption(
+                    title = "분석 결과",
+                    description = "인지 점수와 분석 결과 확인 방법을 알아봐요",
+                    onClick = {
+                        onSelect(GuardianTutorialReplayTarget.ANALYSIS)
+                    }
+                )
+
+                GuardianReplayOption(
+                    title = "위치 정보",
+                    description = "현재 위치, 이동 경로와 전화 기능을 알아봐요",
+                    onClick = {
+                        onSelect(GuardianTutorialReplayTarget.LOCATION)
+                    }
+                )
+
+                GuardianReplayOption(
+                    title = "설정",
+                    description = "접근성, 사용자 관리와 알림 설정을 알아봐요",
+                    onClick = {
+                        onSelect(GuardianTutorialReplayTarget.SETTINGS)
+                    }
+                )
+            }
+        },
+        containerColor = BrandWhite,
+        shape = RoundedCornerShape(24.dp)
+    )
+}
+
+@Composable
+private fun GuardianReplayOption(
+    title: String,
+    description: String,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = title,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = description,
+                    color = AppColor.textTertiary
+                )
+            }
+
+            Icon(
+                imageVector =
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = AppColor.textTertiary
+            )
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(top = 12.dp),
+            color = AppColor.divider
         )
     }
 }
@@ -691,12 +1100,24 @@ private fun SettingsRow(
     trailingText: String? = null,
     labelColor: Color = AppColor.textPrimary,
     showArrow: Boolean = trailingText == null,
-    onClick: (() -> Unit)?
+    onClick: (() -> Unit)?,
+    onBoundsChanged: (Rect) -> Unit = {}
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(
+                    coordinates.boundsInRoot()
+                )
+            }
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 20.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
@@ -730,11 +1151,17 @@ private fun SettingsToggleRow(
     label: String,
     description: String,
     checked: Boolean,
+    onBoundsChanged: (Rect) -> Unit = {},
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(
+                    coordinates.boundsInRoot()
+                )
+            }
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
