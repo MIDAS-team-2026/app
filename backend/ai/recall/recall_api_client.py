@@ -1,6 +1,8 @@
 import argparse
 import re
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
@@ -8,6 +10,15 @@ import requests
 from recall.recall_score_calculator import (
     calculate_final_recall_score,
 )
+
+# text_linguistic_markers는 analysis/src에 있다. main.py를 거쳐 import될 때는
+# 이미 sys.path에 잡혀 있지만, import 순서에 기대지 않도록 여기서도 직접 추가한다.
+_ANALYSIS_SRC = Path(__file__).resolve().parents[1] / "analysis" / "src"
+
+if str(_ANALYSIS_SRC) not in sys.path:
+    sys.path.append(str(_ANALYSIS_SRC))
+
+import text_linguistic_markers
 
 BASE_URL = "http://localhost:8080"
 
@@ -124,6 +135,70 @@ def send_risk_result(
         json=body,
         timeout=10,
     )
+
+
+def send_linguistic_markers(
+    session_id: int,
+    pronoun_noun_ratio: Optional[float],
+    noun_ratio: Optional[float],
+    lexical_diversity_mattr: Optional[float],
+    repetition_score: Optional[float],
+    base_url: str = BASE_URL,
+):
+    body = {
+        "sessionId": session_id,
+        "pronounNounRatio": pronoun_noun_ratio,
+        "nounRatio": noun_ratio,
+        "lexicalDiversityMattr": lexical_diversity_mattr,
+        "repetitionScore": repetition_score,
+    }
+
+    return requests.post(
+        f"{base_url}/api/ai/analysis/linguistic-markers",
+        json=body,
+        timeout=10,
+    )
+
+
+def compute_and_send_linguistic_markers(
+    session_id: int,
+    records: List[dict],
+    base_url: str = BASE_URL,
+) -> Optional[dict]:
+    """세션의 모든 사용자 발화로 언어 지표(대명사:명사 비율 등)를 계산해서 저장한다.
+
+    회상 정답 여부와 무관하게 세션 전체의 "말하는 방식"을 보는 지표라,
+    고정질문/회상질문 답변을 가리지 않고 세션의 모든 발화를 사용한다.
+    """
+    texts = [
+        str(record.get("transcriptText") or "").strip()
+        for record in records
+    ]
+    texts = [text for text in texts if text]
+
+    if not texts:
+        return None
+
+    markers = {
+        "pronounNounRatio": text_linguistic_markers.pronoun_noun_ratio(texts),
+        "nounRatio": text_linguistic_markers.noun_ratio(texts),
+        "lexicalDiversityMattr": text_linguistic_markers.lexical_diversity_mattr(texts),
+        "repetitionScore": text_linguistic_markers.repetition_score(texts),
+    }
+
+    response = send_linguistic_markers(
+        session_id=session_id,
+        pronoun_noun_ratio=markers["pronounNounRatio"],
+        noun_ratio=markers["nounRatio"],
+        lexical_diversity_mattr=markers["lexicalDiversityMattr"],
+        repetition_score=markers["repetitionScore"],
+        base_url=base_url,
+    )
+
+    print("linguistic markers status:", response.status_code, response.text)
+    response.raise_for_status()
+
+    return markers
 
 
 def find_recall_pairs(records: List[dict]) -> List[tuple]:
@@ -514,6 +589,17 @@ def analyze_session_recall(
 
     print("risk status:", risk_response.status_code, risk_response.text)
     risk_response.raise_for_status()
+
+    try:
+        compute_and_send_linguistic_markers(
+            session_id=session_id,
+            records=records,
+            base_url=base_url,
+        )
+    except Exception as e:
+        # 언어 지표는 위험도 점수에 반영되지 않는 부가 지표라, 실패해도
+        # 회상/위험도 분석 자체를 막지 않는다.
+        print(f"linguistic markers 저장 실패(무시하고 계속): {e}")
 
     print("분석 완료")
     print("initialFixedScore:", initial_fixed_score)

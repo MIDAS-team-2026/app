@@ -2,6 +2,7 @@ package com.example.backend.Controller;
 
 import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
+import com.example.backend.Model.DTO.analysis.LinguisticMarkerDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
@@ -48,6 +49,14 @@ class AiAnalysisController {
     @PostMapping("/risk")
     public ResponseEntity<ApiResponse<Void>> receiveRiskResult(@RequestBody RiskAnalysisDTO dto) {
         aiAnalysisService.saveFinalRiskResult(dto);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // 세션 단위 텍스트 언어 지표(대명사:명사 비율 등) 수신 — 위험도 점수에는 미반영, 추적용
+    // Python/FastAPI 연동용이므로 현재는 인증 적용하지 않음
+    @PostMapping("/linguistic-markers")
+    public ResponseEntity<ApiResponse<Void>> receiveLinguisticMarkers(@RequestBody LinguisticMarkerDTO dto) {
+        aiAnalysisService.saveLinguisticMarkers(dto);
         return ResponseEntity.ok(ApiResponse.success());
     }
 
