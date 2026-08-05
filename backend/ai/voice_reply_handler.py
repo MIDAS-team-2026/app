@@ -88,6 +88,17 @@ SAFE_OPENING_QUESTIONS = [
 ]
 
 
+# 고정 질문 답변 직후 자유대화로 넘어갈 때 쓰는 쿠션 문장.
+# 고정 질문 답변 내용(성함/배우자/고향 등)과 무관하게, 방금 답변에
+# 자연스럽게 반응하면서 자유대화로 전환만 시키는 범용 문장만 담는다.
+FIXED_TO_FREE_TALK_OPENERS = [
+    "좋습니다! 오늘은 어떤 이야기를 나눠볼까요?",
+    "좋아요, 그럼 오늘 하루는 뭘 하면서 지내셨는지 이야기해주시겠어요?",
+    "네, 알겠습니다. 이제 편하게 오늘 이야기를 나눠볼까요?",
+    "좋습니다. 오늘 있었던 일 중에 편하게 나누고 싶은 이야기가 있으세요?",
+]
+
+
 AFTER_RECALL_OPENING_QUESTIONS = [
     "이어서 오늘 드신 것 중에 생각나는 음식이 있으세요?",
     "이번에는 오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
@@ -2309,6 +2320,28 @@ def _get_topic_openers() -> list[str]:
     return SAFE_OPENING_QUESTIONS
 
 
+def _get_fixed_to_free_talk_opener(session_records: list[dict] | None) -> str:
+    used_questions = _get_recent_ai_replies(session_records)
+    previous_questions = _get_recent_ai_reply_list(session_records)
+    start_index = len(session_records or []) % len(FIXED_TO_FREE_TALK_OPENERS)
+
+    opener = _pick_non_repeated_question(
+        candidates=FIXED_TO_FREE_TALK_OPENERS,
+        used_questions=used_questions,
+        previous_questions=previous_questions,
+        start_index=start_index,
+    )
+
+    if opener:
+        return opener
+
+    return _pick_least_recent_question(
+        candidates=FIXED_TO_FREE_TALK_OPENERS,
+        previous_questions=previous_questions,
+        start_index=start_index,
+    )
+
+
 def _get_topic_change_openers(current_topic: str | None) -> list[str]:
     topic_markers = {
         "PERSON": ("보고 싶은 사람",),
@@ -2906,7 +2939,7 @@ def process_voice_reply(
             )
             _save_ai_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(0, session_records),
+                reply_text=_get_fixed_to_free_talk_opener(session_records),
             )
             logger.info("고정 답변 이후 자유대화 질문 저장 재개: recordId=%s", record_id)
             return
@@ -3029,7 +3062,7 @@ def process_voice_reply(
 
             _save_ai_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(0, session_records),
+                reply_text=_get_fixed_to_free_talk_opener(session_records),
             )
             return
 
@@ -3060,7 +3093,7 @@ def process_voice_reply(
 
                 _save_ai_reply(
                     record_id=record_id,
-                    reply_text=_get_next_normal_question(0, session_records),
+                    reply_text=_get_fixed_to_free_talk_opener(session_records),
                 )
                 return
 

@@ -3959,7 +3959,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         mark_mock.assert_called_once_with(2, onboarding=True)
         self.assertEqual(1, len(saved))
-        self.assertIn(saved[0]["reply_text"], handler.SAFE_OPENING_QUESTIONS)
+        self.assertIn(saved[0]["reply_text"], handler.FIXED_TO_FREE_TALK_OPENERS)
 
     def test_linked_recall_answer_resumes_transition_without_relinking(self):
         records = [
