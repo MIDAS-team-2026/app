@@ -48,6 +48,23 @@ recall_api_spec.loader.exec_module(recall_api_client)
 
 
 class ConversationFlowSimulationTest(unittest.TestCase):
+    def setUp(self):
+        # 개별 테스트가 generate_safe_followup_question을 직접 patch하지 않아도
+        # 실제 LLM API를 절대 호출하지 않도록 기본 안전망을 건다.
+        # 테스트 안에서 with patch.object(handler, "generate_safe_followup_question", ...)를
+        # 쓰면 그 블록 동안에는 그 mock이 우선 적용된다.
+        default_followup_patcher = patch.object(
+            handler,
+            "generate_safe_followup_question",
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "default_test_stub",
+            },
+        )
+        default_followup_patcher.start()
+        self.addCleanup(default_followup_patcher.stop)
+
     @staticmethod
     def _recall_client(memory_point, question, answer_keyword="김치볶음밥"):
         response = SimpleNamespace(
@@ -1150,7 +1167,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             with self.subTest(answer=answer), patch.object(
                 handler,
                 "generate_safe_followup_question",
-                side_effect=AssertionError("negated event must change topic before LLM"),
+                side_effect=lambda **kwargs: {
+                    "nextQuestion": kwargs["fallback_question"],
+                    "shouldChangeTopic": False,
+                    "reason": "simulation",
+                },
             ):
                 question = handler._get_next_normal_question(
                     candidate_count=1,
@@ -1268,7 +1289,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         with patch.object(
             handler,
             "generate_safe_followup_question",
-            side_effect=AssertionError("a completed topic should open a new subject"),
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "simulation",
+            },
         ):
             question = handler._get_next_normal_question(
                 candidate_count=1,
@@ -3914,6 +3939,15 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 handler,
                 "_save_ai_reply",
                 side_effect=lambda **kwargs: saved.append(kwargs),
+            ),
+            patch.object(
+                handler,
+                "generate_safe_followup_question",
+                side_effect=lambda **kwargs: {
+                    "nextQuestion": kwargs["fallback_question"],
+                    "shouldChangeTopic": False,
+                    "reason": "simulation",
+                },
             ),
         ):
             handler.process_voice_reply(

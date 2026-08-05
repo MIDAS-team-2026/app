@@ -2148,6 +2148,14 @@ def _get_topic_aware_fallback_candidates(
 
     if topic == "MEDIA":
         context = " ".join([latest_text, *cycle_texts])
+        corrected_latest_text = _get_final_correction_segment(latest_text)
+        is_confirmed_song_not_broadcast = _contains_any(
+            corrected_latest_text,
+            ("노래", "가수", "들었"),
+        ) and not _contains_any(
+            corrected_latest_text,
+            ("방송", "티비", "텔레비전", "프로그램", "뉴스", "드라마"),
+        )
         has_specific_media_detail = _contains_any(
             context,
             (
@@ -2186,7 +2194,13 @@ def _get_topic_aware_fallback_candidates(
                 if "사람" not in question and "기분" not in question
             ]
 
-        if _contains_any(context, ("노래", "가수", "들었")):
+        if is_confirmed_song_not_broadcast:
+            candidates = [
+                question
+                for question in candidates
+                if "보실 때" not in question and "방송" not in question
+            ]
+        elif _contains_any(context, ("노래", "가수", "들었")):
             candidates = [
                 question
                 for question in candidates
@@ -2374,6 +2388,12 @@ def _with_topic_change_acknowledgement(
     question: str,
     session_records: list[dict] | None,
 ) -> str:
+    if _contains_any(
+        question,
+        ("괜찮습니다.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.", "좋으셨겠어요.", "아이고", "다행이네요."),
+    ):
+        return question
+
     latest_record = _get_latest_record(session_records)
     latest_text = str((latest_record or {}).get("transcriptText") or "")
 
@@ -2427,7 +2447,10 @@ def _with_recall_transition_acknowledgement(
     question: str,
     session_records: list[dict] | None,
 ) -> str:
-    if _contains_any(question, ("괜찮습니다.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.")):
+    if _contains_any(
+        question,
+        ("괜찮습니다.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.", "좋으셨겠어요.", "아이고", "다행이네요."),
+    ):
         return question
 
     latest_record = _get_latest_record(session_records)
@@ -2450,7 +2473,7 @@ def _with_recall_question_acknowledgement(
 ) -> str:
     if _contains_any(
         question,
-        ("좋으셨겠어요.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요."),
+        ("좋으셨겠어요.", "그러셨군요.", "그렇군요.", "알겠습니다.", "그랬군요.", "아이고", "다행이네요."),
     ):
         return question
 
@@ -2555,13 +2578,23 @@ def _get_next_normal_question(
         )
 
         if opener_question:
+            generated_opener = generate_safe_followup_question(
+                conversation_history=_build_generation_history(
+                    followup_cycle_texts,
+                    followup_latest_text,
+                ),
+                stage="OPEN",
+                fallback_question=opener_question,
+                previous_questions=previous_questions,
+            )["nextQuestion"]
+
             if after_recall_answer:
                 return _with_recall_transition_acknowledgement(
-                    opener_question,
+                    generated_opener,
                     session_records,
                 )
 
-            return opener_question
+            return generated_opener
 
     if decision.action == ConversationAction.CHANGE_TOPIC:
         opener_question = _pick_non_repeated_question(
@@ -2572,8 +2605,18 @@ def _get_next_normal_question(
         )
 
         if opener_question:
+            generated_opener = generate_safe_followup_question(
+                conversation_history=_build_generation_history(
+                    followup_cycle_texts,
+                    followup_latest_text,
+                ),
+                stage="OPEN",
+                fallback_question=opener_question,
+                previous_questions=previous_questions,
+            )["nextQuestion"]
+
             return _with_topic_change_acknowledgement(
-                opener_question,
+                generated_opener,
                 session_records,
             )
 
@@ -2593,8 +2636,18 @@ def _get_next_normal_question(
         )
 
         if opener_question:
+            generated_opener = generate_safe_followup_question(
+                conversation_history=_build_generation_history(
+                    followup_cycle_texts,
+                    followup_latest_text,
+                ),
+                stage="OPEN",
+                fallback_question=opener_question,
+                previous_questions=previous_questions,
+            )["nextQuestion"]
+
             return _with_topic_change_acknowledgement(
-                opener_question,
+                generated_opener,
                 session_records,
             )
 
@@ -2638,8 +2691,18 @@ def _get_next_normal_question(
             )
 
             if opener_question:
+                generated_opener = generate_safe_followup_question(
+                    conversation_history=_build_generation_history(
+                        followup_cycle_texts,
+                        followup_latest_text,
+                    ),
+                    stage="OPEN",
+                    fallback_question=opener_question,
+                    previous_questions=previous_questions,
+                )["nextQuestion"]
+
                 return _with_topic_change_acknowledgement(
-                    opener_question,
+                    generated_opener,
                     session_records,
                 )
 
