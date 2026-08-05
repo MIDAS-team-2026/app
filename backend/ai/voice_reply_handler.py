@@ -968,6 +968,9 @@ _EXACT_MATCH_TAGS = _NOUN_TAGS | {"MAG", "XR", "SL", "SH", "SN", "IC"}
 # 동사/형용사는 접두사로 비교한다. "듣다/눕다/어렵다/덥다/춥다" 같은
 # 불규칙 활용 어간은 kiwi가 "VV-I"/"VA-I"처럼 -I가 붙은 태그를 쓴다.
 _PREDICATE_TAG_PREFIXES = ("VV", "VA", "VX", "XSA", "XSV")
+# 어미류: 용언 뒤에 붙는 시제/문체/연결 꼬리표. 부정 표현의 끝 위치를
+# 찾을 때 이 태그가 이어지는 동안은 같은 용언구의 일부로 본다.
+_INFLECTION_TAGS = {"EP", "EF", "EC", "ETN", "ETM"}
 _tokenize_cache: dict[str, tuple] = {}
 
 
@@ -1144,15 +1147,51 @@ NEGATED_POSITIVE_PHRASES = (
 )
 
 
-NEGATED_ACTION_RESPONSE_PATTERN = re.compile(
-    r"(?:"
-    r"(?:^|\s)(?:안|못)\s*"
-    r"(?:먹|먹었|마시|마셨|가|갔|다녀|보|봤|만나|만났|사|샀|"
-    r"하|했|오|왔|나가|나갔|들|쉬|자|잤|읽|읽었|쓰|썼|타|탔|통화|전화|"
-    r"연락|운동|산책|청소|요리|아프|아팠)[가-힣]*"
-    r"|(?:^|\s)[가-힣]+지\s*않[가-힣]*"
-    r")"
-)
+# "안/못 + 용언" 또는 "-지 않다"의 부정 표현을 형태소로 찾는다.
+# 예전엔 "안" 뒤에 올 수 있는 동사 활용 조각을 문자 그대로 하드코딩한
+# 정규식을 썼는데("보","봤" 등), "봐"(보다+아의 축약형)처럼 문자로는
+# "보"를 포함하지 않는 축약형은 전혀 못 잡았다. 형태소 분석은 "봐"도
+# 정확히 "보"(VV)로 인식하므로 활용형을 나열할 필요가 없어진다.
+_NEGATION_ADVERBS = {"안", "못"}
+# "생각이 안 나"/"기억이 안 나"의 "나"(생각나다/기억나다)는 행동이 아니라
+# 회상 실패를 뜻하는 별도의 LOW_INFO 표현이라 여기서는 부정 행동으로
+# 치지 않는다(_is_low_info_response가 이미 따로 처리한다).
+_EXCLUDED_NEGATION_PREDICATES = {"나"}
+
+
+def _negated_action_end_positions(text: str) -> list[int]:
+    """부정 표현이 끝나는 글자 위치(exclusive)들을 문장 안에서 전부 찾는다."""
+    tokens = _tokenize_cached(text)
+    positions = []
+
+    for index, token in enumerate(tokens):
+        predicate_index = None
+
+        if token.tag == "MAG" and token.form in _NEGATION_ADVERBS:
+            next_index = index + 1
+            if (
+                next_index < len(tokens)
+                and tokens[next_index].tag.startswith(_PREDICATE_TAG_PREFIXES)
+                and tokens[next_index].form not in _EXCLUDED_NEGATION_PREDICATES
+            ):
+                predicate_index = next_index
+        elif token.tag == "VX" and token.form == "않":
+            # "-지 않다" 구성: "않다" 자체가 부정의 핵심 서술어다.
+            predicate_index = index
+
+        if predicate_index is None:
+            continue
+
+        end = tokens[predicate_index].start + tokens[predicate_index].len
+        cursor = predicate_index + 1
+
+        while cursor < len(tokens) and tokens[cursor].tag in _INFLECTION_TAGS:
+            end = tokens[cursor].start + tokens[cursor].len
+            cursor += 1
+
+        positions.append(end)
+
+    return positions
 
 
 CONFIRMED_ACTION_CUES = (
@@ -1165,12 +1204,12 @@ CONFIRMED_ACTION_CUES = (
 
 def _get_confirmed_text_after_negated_action(text: str) -> str:
     text = _normalize_text(_get_final_correction_segment(text))
-    matches = list(NEGATED_ACTION_RESPONSE_PATTERN.finditer(text))
+    positions = _negated_action_end_positions(text)
 
-    if not matches:
+    if not positions:
         return ""
 
-    suffix = text[matches[-1].end():].strip(" ,.;!?")
+    suffix = text[positions[-1]:].strip(" ,.;!?")
 
     if _contains_any(suffix, CONFIRMED_ACTION_CUES):
         return suffix
@@ -1280,7 +1319,7 @@ def _is_positive_response(text: str) -> bool:
 
 def _is_negated_action_response(text: str) -> bool:
     final_text = _get_final_correction_segment(text)
-    return bool(NEGATED_ACTION_RESPONSE_PATTERN.search(_normalize_text(final_text)))
+    return bool(_negated_action_end_positions(_normalize_text(final_text)))
 
 
 def _is_short_response(text: str) -> bool:
