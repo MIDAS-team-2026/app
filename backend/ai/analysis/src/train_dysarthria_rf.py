@@ -55,7 +55,7 @@ NORMAL_CSV = Path(
 )
 
 ABNORMAL_CSV = Path(
-    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.csv")
+    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.partial.csv")
 )
 
 RANDOM_STATE = 42
@@ -418,8 +418,10 @@ def main():
     # health_score = (1.0 - prob_abnormal) * 100.0
 
     # 여기서부터 ----------------------------------
-    calibrated_model = CalibratedClassifierCV(estimator=model, method='isotonic', cv='prefit')
-    calibrated_model.fit(X_val, y_val)
+    X_val_final = preprocessor_probe.transform(X_val_raw)[top_features]
+
+    calibrated_model = CalibratedClassifierCV(estimator=model, method='isotonic')
+    calibrated_model.fit(X_val_final, y_val)
 
     # 보정된 확률 추출 후 점수 환산
     prob_calibrated = calibrated_model.predict_proba(example_df)[0, 1]
