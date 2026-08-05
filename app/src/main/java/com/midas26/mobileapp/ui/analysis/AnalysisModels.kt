@@ -16,6 +16,7 @@ import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.network.DailyScoreResponse
+import com.midas26.mobileapp.network.LinguisticMarkerResponse
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -38,6 +39,32 @@ data class AnalysisItem(
 
 /** 한 일자의 인지 건강 점수. 앱 표시 점수는 높을수록 양호하다. */
 data class DailyScore(val dayLabel: String, val score: Int, val date: String? = null)
+
+/**
+ * 언어 지표 하나의 상태. 전체 사용자 기준 "정상 범위"가 아니라 본인의 최근 세션
+ * 평균 대비 오늘이 얼마나 벗어났는지(z-score)로 판정한다.
+ */
+enum class MarkerStatus(val label: String) {
+    GOOD("좋음"),
+    WATCH("주의"),
+    DANGER("위험"),
+    INSUFFICIENT_DATA("측정 중")
+}
+
+/** 언어 지표 상세 그래프의 점 하나(요일 라벨 + 값). */
+data class LinguisticMarkerPoint(val dayLabel: String, val value: Float?)
+
+/** 언어 지표 4개(대명사 비율/명사 비율/어휘 다양성/반복 표현) 중 하나의 UI 표시용 상태. */
+data class LinguisticMarkerUi(
+    val key: String,
+    val displayName: String,
+    val status: MarkerStatus,
+    val todayValue: Float?,
+    val baselineMean: Float?,
+    val diffText: String,
+    val diffDescription: String,
+    val weeklyPoints: List<LinguisticMarkerPoint>
+)
 
 /** 그래프 탭. */
 
@@ -121,6 +148,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             launch { doLoadSummary() }
             launch { doLoadWeeklyScores() }
             launch { doLoadStreak() }
+            launch { doLoadLinguisticMarkers() }
         }
         isLoading = false
         isInitialLoadDone = true
@@ -157,6 +185,132 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         runCatching { api.getStreakDays(userId) }
             .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
             .onFailure { e -> networkError = toErrorCode(e) }
+    }
+
+    // ── 언어 지표(대명사 비율/명사 비율/어휘 다양성/반복 표현) ───────────────────
+
+    var linguisticMarkers by mutableStateOf<List<LinguisticMarkerUi>>(emptyList())
+        private set
+
+    /** 어휘 점수 카드에 표시할 종합 상태 — 4개 지표 중 가장 우려스러운 상태를 따른다. */
+    val textScoreStatus: MarkerStatus get() {
+        if (linguisticMarkers.isEmpty()) return MarkerStatus.INSUFFICIENT_DATA
+        return linguisticMarkers.maxByOrNull { markerSeverity(it.status) }?.status
+            ?: MarkerStatus.INSUFFICIENT_DATA
+    }
+
+    private fun markerSeverity(status: MarkerStatus): Int = when (status) {
+        MarkerStatus.INSUFFICIENT_DATA -> -1
+        MarkerStatus.GOOD -> 0
+        MarkerStatus.WATCH -> 1
+        MarkerStatus.DANGER -> 2
+    }
+
+    private suspend fun doLoadLinguisticMarkers() {
+        val userId = resolveUserId()
+        if (userId <= 0) return
+        runCatching { api.getLinguisticMarkers(userId) }
+            .onSuccess { resp ->
+                resp.body()?.data?.let { list ->
+                    linguisticMarkers = buildLinguisticMarkerUiList(list)
+                }
+            }
+            .onFailure { e -> networkError = toErrorCode(e) }
+    }
+
+    private data class MarkerDef(
+        val key: String,
+        val displayName: String,
+        val increaseIsBad: Boolean,
+        val valueOf: (LinguisticMarkerResponse) -> Float?,
+        val zScoreOf: (LinguisticMarkerResponse) -> Float?
+    )
+
+    private val markerDefs = listOf(
+        MarkerDef("pronounNounRatio", "대명사 사용 비율", true,
+            { it.pronounNounRatio }, { it.pronounNounRatioZScore }),
+        MarkerDef("nounRatio", "명사 사용 비율", false,
+            { it.nounRatio }, { it.nounRatioZScore }),
+        MarkerDef("lexicalDiversityMattr", "어휘 다양성", false,
+            { it.lexicalDiversityMattr }, { it.lexicalDiversityMattrZScore }),
+        MarkerDef("repetitionScore", "반복 표현", true,
+            { it.repetitionScore }, { it.repetitionScoreZScore })
+    )
+
+    /** 최소 3개 과거 세션이 있어야 z-score가 안정적이므로, 그전에는 기준선 없음으로 본다. */
+    private fun classifyMarker(zScore: Float?, increaseIsBad: Boolean): MarkerStatus {
+        if (zScore == null) return MarkerStatus.INSUFFICIENT_DATA
+        val concerningZ = if (increaseIsBad) zScore else -zScore
+        return when {
+            concerningZ >= 2f -> MarkerStatus.DANGER
+            concerningZ >= 1f -> MarkerStatus.WATCH
+            else -> MarkerStatus.GOOD
+        }
+    }
+
+    private fun computeBaselineMean(
+        history: List<LinguisticMarkerResponse>,
+        valueOf: (LinguisticMarkerResponse) -> Float?
+    ): Float? {
+        val past = history.drop(1).mapNotNull(valueOf)
+        if (past.size < 3) return null
+        return (past.sum() / past.size)
+    }
+
+    private fun formatDiffText(today: Float?, baselineMean: Float?): String {
+        if (today == null || baselineMean == null) return "-"
+        val diff = today - baselineMean
+        val sign = if (diff >= 0f) "+" else ""
+        return "$sign${String.format(Locale.getDefault(), "%.2f", diff)}"
+    }
+
+    private fun diffDescription(status: MarkerStatus, key: String): String = when {
+        status == MarkerStatus.INSUFFICIENT_DATA -> "기준 데이터를 모으고 있어요"
+        status == MarkerStatus.GOOD -> "평소와 비슷한 수준이에요"
+        key == "pronounNounRatio" -> "평소보다 대명사 사용이 늘었어요"
+        key == "nounRatio" -> "평소보다 명사 사용이 줄었어요"
+        key == "lexicalDiversityMattr" -> "평소보다 사용 어휘가 단조로워요"
+        key == "repetitionScore" -> "평소보다 같은 말을 반복했어요"
+        else -> "평소보다 변화가 있어요"
+    }
+
+    private val markerDateFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault())
+
+    private fun markerDayLabel(analyzedAt: String?): String {
+        if (analyzedAt == null || analyzedAt.length < 19) return ""
+        return runCatching {
+            val cal = Calendar.getInstance().apply { time = markerDateFmt.parse(analyzedAt.substring(0, 19))!! }
+            listOf("일", "월", "화", "수", "목", "금", "토")[cal.get(Calendar.DAY_OF_WEEK) - 1]
+        }.getOrDefault("")
+    }
+
+    private fun buildLinguisticMarkerUiList(
+        history: List<LinguisticMarkerResponse>
+    ): List<LinguisticMarkerUi> {
+        if (history.isEmpty()) return emptyList()
+
+        val today = history.first()
+        val recentOldestFirst = history.take(7).reversed()
+
+        return markerDefs.map { def ->
+            val zScore = def.zScoreOf(today)
+            val status = classifyMarker(zScore, def.increaseIsBad)
+            val todayValue = def.valueOf(today)
+            val baselineMean = computeBaselineMean(history, def.valueOf)
+
+            LinguisticMarkerUi(
+                key = def.key,
+                displayName = def.displayName,
+                status = status,
+                todayValue = todayValue,
+                baselineMean = baselineMean,
+                diffText = formatDiffText(todayValue, baselineMean),
+                diffDescription = diffDescription(status, def.key),
+                weeklyPoints = recentOldestFirst.map {
+                    LinguisticMarkerPoint(markerDayLabel(it.analyzedAt), def.valueOf(it))
+                }
+            )
+        }
     }
 
     // ── 홈 화면용 ─────────────────────────────────────────────────────────────
@@ -220,7 +374,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private fun formatHealthScoreFromRisk(score: Float?): String =
         formatScore(riskToHealthScore(score))
 
-    private fun formatRecallScore(score: Float?): String {
+    private fun formatMemoryScore(score: Float?): String {
         if (score == null || score <= 0f) return "측정 전"
         return formatScore(score)
     }
@@ -295,7 +449,6 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val dRisk       = sel?.riskLevel   ?: riskLevel
             val dSpeechRisk = sel?.speechScore ?: speechScore
             val dTextScore  = sel?.textScore   ?: textScore
-            val dRecall     = sel?.recallScore ?: recallScore
 
             return listOf(
                 AnalysisItem(
@@ -314,14 +467,14 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 ),
                 AnalysisItem(
                     icon      = Icons.Default.Psychology,
-                    label     = "회상 점수",
-                    valueText = formatRecallScore(dRecall),
+                    label     = "기억력 점수",
+                    valueText = formatMemoryScore(dTextScore),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
                 AnalysisItem(
                     icon      = Icons.AutoMirrored.Filled.MenuBook,
-                    label     = "텍스트 점수",
+                    label     = "어휘 점수",
                     valueText = formatScore(dTextScore),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady

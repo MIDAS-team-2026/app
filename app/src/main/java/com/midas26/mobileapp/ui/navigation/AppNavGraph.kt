@@ -29,6 +29,7 @@ import androidx.navigation.navArgument
 import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
+import com.midas26.mobileapp.ui.analysis.LinguisticMarkerDetailScreen
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -84,6 +85,7 @@ private val mainRoutes = setOf(
     Routes.LocationDetail,
     Routes.LocationRoute,
     Routes.AnalysisUserSelect,
+    Routes.LinguisticMarkerDetail,
     GuardianManagedUsersRoute
 )
 
@@ -212,7 +214,8 @@ fun AppNavHost(
             UserHomeTab.Chat
 
         Routes.AnalysisResult,
-        Routes.AnalysisUserSelect ->
+        Routes.AnalysisUserSelect,
+        Routes.LinguisticMarkerDetail ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
 
         Routes.LocationList,
@@ -956,6 +959,18 @@ fun AppNavHost(
                             navController.navigate(Routes.Settings) {
                                 launchSingleTop = true
                             }
+                        },
+                        viewModel = analysisViewModel,
+                        onNavigateTextScoreDetail = {
+                            navController.navigate(Routes.LinguisticMarkerDetail)
+                        }
+                    )
+                }
+
+                composable(Routes.LinguisticMarkerDetail) {
+                    LinguisticMarkerDetailScreen(
+                        onBack = {
+                            navController.popBackStackIfCurrent(Routes.LinguisticMarkerDetail)
                         },
                         viewModel = analysisViewModel
                     )

@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -87,6 +88,7 @@ fun AnalysisResultScreen(
     tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
     onNavigateSettings: () -> Unit = {},
+    onNavigateTextScoreDetail: () -> Unit = {},
     viewModel: AnalysisViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -96,6 +98,7 @@ fun AnalysisResultScreen(
         tutorialViewModel = tutorialViewModel,
         onBack = onBack,
         onNavigateSettings = onNavigateSettings,
+        onNavigateTextScoreDetail = onNavigateTextScoreDetail,
         viewModel = viewModel,
         isGuardian = isGuardian
     )
@@ -106,6 +109,7 @@ private fun UserAnalysisResultContent(
     tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
     onNavigateSettings: () -> Unit,
+    onNavigateTextScoreDetail: () -> Unit = {},
     viewModel: AnalysisViewModel,
     isGuardian: Boolean = false
 ) {
@@ -359,7 +363,12 @@ private fun UserAnalysisResultContent(
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 ItemCard(item = items[2], modifier = Modifier.weight(1f))
-                                ItemCard(item = items[3], modifier = Modifier.weight(1f))
+                                TextScoreCard(
+                                    item = items[3],
+                                    status = viewModel.textScoreStatus,
+                                    onClick = onNavigateTextScoreDetail,
+                                    modifier = Modifier.weight(1f)
+                                )
                             }
                         }
 
@@ -962,6 +971,78 @@ private fun ItemCard(
                 fontSize = (26 * fontScale).sp,
                 color = AppColor.textPrimary,
                 fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/**
+ * 어휘 점수 카드. 백분위 점수 대신 언어 지표 4개(대명사 비율 등)를 종합한
+ * 좋음/주의/위험 배지를 보여주고, 탭하면 지표별 상세 화면으로 이동한다.
+ */
+@Composable
+private fun TextScoreCard(
+    item: AnalysisItem,
+    status: MarkerStatus,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val fontScale = LocalFontSizeScale.current.scale
+
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = BrandWhite,
+        border = BorderStroke(1.5.dp, AppColor.divider)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = item.icon,
+                    contentDescription = null,
+                    tint = AppColor.textTertiary,
+                    modifier = Modifier.size(18.dp)
+                )
+
+                Spacer(modifier = Modifier.size(6.dp))
+
+                Text(
+                    text = item.label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = AppColor.textTertiary,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = status.label,
+                    fontSize = (26 * fontScale).sp,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "자세히 보기",
+                    tint = AppColor.textTertiary,
+                    modifier = Modifier.size((26 * fontScale).dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = "눌러서 자세히 보기",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColor.textTertiary
             )
         }
     }

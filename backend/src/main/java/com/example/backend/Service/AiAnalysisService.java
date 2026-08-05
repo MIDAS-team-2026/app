@@ -232,6 +232,11 @@ public class AiAnalysisService {
                     item.setNounRatio(result.getNounRatio());
                     item.setLexicalDiversityMattr(result.getLexicalDiversityMattr());
                     item.setRepetitionScore(result.getRepetitionScore());
+                    item.setPronounNounRatioZScore(result.getPronounNounRatioZScore());
+                    item.setNounRatioZScore(result.getNounRatioZScore());
+                    item.setLexicalDiversityMattrZScore(result.getLexicalDiversityMattrZScore());
+                    item.setRepetitionScoreZScore(result.getRepetitionScoreZScore());
+                    item.setBaselineSampleSize(result.getBaselineSampleSize());
                     return item;
                 })
                 .collect(Collectors.toList());

@@ -6,7 +6,9 @@ import lombok.Setter;
 import java.time.LocalDateTime;
 
 /**
- * 개인 기준선 계산용으로 Python에 내려주는 과거 세션 1건의 원본 지표값.
+ * 과거 세션 1건의 언어 지표값. Python이 개인 기준선(z-score) 계산할 때는
+ * 원본값(pronounNounRatio 등)만 쓰고, 앱이 상세 화면을 그릴 때는 z-score와
+ * baselineSampleSize까지 함께 쓴다 — 같은 응답을 두 용도로 재사용한다.
  */
 @Getter
 @Setter
@@ -17,4 +19,9 @@ public class LinguisticMarkerHistoryItemDTO {
     private Float nounRatio;
     private Float lexicalDiversityMattr;
     private Float repetitionScore;
+    private Float pronounNounRatioZScore;
+    private Float nounRatioZScore;
+    private Float lexicalDiversityMattrZScore;
+    private Float repetitionScoreZScore;
+    private Integer baselineSampleSize;
 }
