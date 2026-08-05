@@ -5,6 +5,7 @@ import unicodedata
 from typing import Dict, List, Optional
 
 import requests
+from kiwipiepy import Kiwi
 from openai import OpenAI
 
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
@@ -709,26 +710,58 @@ def _normalize_keyword_word(word: str) -> str:
     return word
 
 
+_kiwi = Kiwi()
+_NOUN_TAGS = {"NNG", "NNP"}
+_tokenize_cache: dict[str, tuple] = {}
+
+
+def _tokenize_cached(text: str) -> tuple:
+    text = str(text or "")
+    cached = _tokenize_cache.get(text)
+
+    if cached is not None:
+        return cached
+
+    tokens = tuple(_kiwi.tokenize(text))
+
+    if len(_tokenize_cache) > 2000:
+        _tokenize_cache.clear()
+
+    _tokenize_cache[text] = tokens
+    return tokens
+
+
+def _word_occurs_as_token(word: str, text: str) -> bool:
+    """word가 text 안에 실제 단어(형태소)로 등장하는지 확인한다.
+
+    조사가 붙은 활용("형이", "형을")은 형태소 분석으로 정확히 잡아내고,
+    "형섭"처럼 다른 단어 속에 우연히 낀 글자는 더 이상 매칭되지 않는다.
+    """
+    if word not in text:
+        return False
+
+    # "약과"(과자)를 "약"+"과"(조사)로, "국가"를 "국"+"가"(조사)로 잘못
+    # 쪼개는 것처럼 형태소 분석기 자체가 헷갈리는 소수의 복합어는
+    # 별도로 관리한다(NON_PARTICLE_COMPOUND_WORDS).
+    for compound in NON_PARTICLE_COMPOUND_WORDS:
+        if compound != word and compound.startswith(word) and compound in text:
+            return False
+
+    tokens = _tokenize_cached(text)
+
+    if any(token.form == word for token in tokens):
+        return True
+
+    embedded_in_unrelated_noun = any(
+        token.tag in _NOUN_TAGS and token.form != word and word in token.form
+        for token in tokens
+    )
+
+    return not embedded_in_unrelated_noun
+
+
 def _single_syllable_keyword_occurs(answer_keyword: str, text: str) -> bool:
-    allowed_endings = set(KEYWORD_PARTICLE_SUFFIXES) | set(KEYWORD_POLITE_SUFFIXES)
-    allowed_endings.update(f"{particle}요" for particle in KEYWORD_PARTICLE_SUFFIXES)
-
-    for token in clean_text(text).split():
-        token = _comparison_text(token)
-
-        if token == answer_keyword:
-            return True
-
-        if answer_keyword not in SHORT_MEMORY_CONTENT_WORDS:
-            continue
-
-        if token in NON_PARTICLE_COMPOUND_WORDS or not token.startswith(answer_keyword):
-            continue
-
-        if token[len(answer_keyword):] in allowed_endings:
-            return True
-
-    return False
+    return _word_occurs_as_token(answer_keyword, text)
 
 
 def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
@@ -769,10 +802,7 @@ def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
 
 
 def _memory_hint_occurs(hint: str, text: str) -> bool:
-    if len(_comparison_text(hint)) == 1:
-        return _single_syllable_keyword_occurs(hint, text)
-
-    return hint in text
+    return _word_occurs_as_token(hint, text)
 
 
 def _memory_detail_hint_occurs(hint: str, text: str) -> bool:
