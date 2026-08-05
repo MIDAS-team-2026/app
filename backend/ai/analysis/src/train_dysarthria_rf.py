@@ -35,21 +35,23 @@ from sklearn.metrics import (
 from sklearn.model_selection import GridSearchCV, GroupShuffleSplit, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
+from speech_feature_preprocessing import preprocess_abnormal_segment_features
+
 # ============================================================================
 # 0. 설정값 (CONFIG)
 # ============================================================================
 
 AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+DATA_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+ARTIFACT_DIR = Path(os.getenv("MIDAS_RF_ARTIFACT_DIR", AI_ANALYSIS_ROOT / "artifacts"))
 
 NORMAL_CSV = Path(
-    os.getenv("MIDAS_NORMAL_CSV", OUTPUT_DIR / "elderly_chatbot_reference_features_egemaps_sample_1000.csv")
+    os.getenv("MIDAS_NORMAL_CSV", DATA_DIR / "elderly_chatbot_reference_features_egemaps_sample_1000.csv")
 )
 ABNORMAL_CSV = Path(
-    os.getenv("MIDAS_ABNORMAL_CSV", OUTPUT_DIR / "dysarthria_neuro_25_reference_features_egemaps_full.partial.csv")
+    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.csv")
 )
 
-OUTPUT_DIR = Path("./analysis/artifacts")
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
 
@@ -61,7 +63,7 @@ N_ESTIMATORS_GRID = [200, 400, 600]
 MAX_DEPTH_GRID = [None, 6, 10, 16]
 MIN_SAMPLES_LEAF_GRID = [1, 2, 4]
 
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def get_class_balanced_weights(y, beta=0.99):
@@ -95,6 +97,9 @@ METADATA_EXCLUDE = {
     "short_answer_flag", "record_time_float", "speech_rate_word", "speech_rate_char",
     "slow_speech_flag", "long_recording_flag", "low_content_slow_speech_flag",
     "sample_seed", "sample_group", "play_time", "segment_count",
+    "segment_id", "source_dataset", "label", "label_name", "source_audio_file_name",
+    "source_audio_path", "source_json_path", "source_row_index", "speaker_key",
+    "segment_index", "segment_start_sec", "segment_end_sec",
 }
 
 """
@@ -143,7 +148,7 @@ MIC_ENVIRONMENT_CONFOUNDED = {
 }
 """
 
-def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str]:
+def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str, dict]:
     df_normal = pd.read_csv(normal_csv)
     df_abnormal = pd.read_csv(abnormal_csv)
 
@@ -158,6 +163,11 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
         if c not in METADATA_EXCLUDE
         and c not in DURATION_CONFOUNDED
         and c not in MIC_ENVIRONMENT_CONFOUNDED
+    )
+
+    df_abnormal, preprocessing_report = preprocess_abnormal_segment_features(
+        df_abnormal,
+        feature_cols,
     )
 
     # 정상군 화자 그룹화
@@ -189,7 +199,7 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
     print(f"[load] 공통 피처 {len(feature_cols)}개 선정 완료")
     print(f"[load] 화자 그룹 분할 기준: '{group_col}' (정상군 화자: {df_normal['speaker_group'].nunique()}명, 비정상군 화자: {df_abnormal['speaker_group'].nunique()}명)")
 
-    return combined, feature_cols, group_col
+    return combined, feature_cols, group_col, preprocessing_report
 
 
 # ============================================================================
@@ -356,7 +366,7 @@ def predict_from_feature_dict(feature_dict: dict, model, preprocessor: FeaturePr
     }
 
 def main():
-    combined, candidate_features, group_col = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
+    combined, candidate_features, group_col, preprocessing_report = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
 
     X = combined[candidate_features]
     y = combined["label"]
@@ -383,22 +393,32 @@ def main():
     X_val = preprocessor_probe.transform(X_val_raw)
 
     top_features, importance_table = select_top_features(X_fit, y_fit, X_val, y_val, TOP_N_FEATURES)
-    importance_table.to_csv(OUTPUT_DIR / "feature_importance_full.csv")
+    importance_table.to_csv(ARTIFACT_DIR / "feature_importance_full.csv")
 
     preprocessor_final = FeaturePreprocessor(skew_threshold=SKEW_THRESHOLD)
     X_train_final = preprocessor_final.fit(X_train_raw[top_features])
     X_test_final = preprocessor_final.transform(X_test_raw[top_features])
 
     model = train_final_model(X_train_final, y_train)
-    metrics = evaluate_model(model, X_test_final, y_test, top_features, OUTPUT_DIR)
+    metrics = evaluate_model(model, X_test_final, y_test, top_features, ARTIFACT_DIR)
 
-    joblib.dump(model, OUTPUT_DIR / "random_forest_model.joblib")
-    joblib.dump(preprocessor_final, OUTPUT_DIR / "preprocessor.joblib")
+    joblib.dump(model, ARTIFACT_DIR / "random_forest_model.joblib")
+    joblib.dump(preprocessor_final, ARTIFACT_DIR / "preprocessor.joblib")
 
-    with open(OUTPUT_DIR / "selected_features.json", "w", encoding="utf-8") as f:
+    with open(ARTIFACT_DIR / "selected_features.json", "w", encoding="utf-8") as f:
         json.dump(top_features, f, ensure_ascii=False, indent=2)
 
-    print(f"\n[done] 아티팩트 저장 완료: {OUTPUT_DIR.resolve()}")
+    training_report = {
+        "normal_csv": str(NORMAL_CSV),
+        "abnormal_csv": str(ABNORMAL_CSV),
+        "preprocessing": preprocessing_report,
+        "selected_features": top_features,
+        "metrics": metrics,
+    }
+    with open(ARTIFACT_DIR / "random_forest_training_report.json", "w", encoding="utf-8") as f:
+        json.dump(training_report, f, ensure_ascii=False, indent=2)
+
+    print(f"\n[done] 아티팩트 저장 완료: {ARTIFACT_DIR.resolve()}")
 
     example = X_test_raw.iloc[0][top_features].to_dict()
     example_result = predict_from_feature_dict(example, model, preprocessor_final)
