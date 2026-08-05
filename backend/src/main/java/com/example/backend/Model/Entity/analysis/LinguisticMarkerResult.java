@@ -40,6 +40,23 @@ public class LinguisticMarkerResult {
     @Column(name = "repetition_score")
     private Float repetitionScore;
 
+    // 이 사용자 본인의 과거 세션 평균 대비 오늘이 얼마나 벗어났는지(z-score).
+    // 과거 세션이 3개 미만이면 기준선이 불안정해서 null로 저장된다.
+    @Column(name = "pronoun_noun_ratio_zscore")
+    private Float pronounNounRatioZScore;
+
+    @Column(name = "noun_ratio_zscore")
+    private Float nounRatioZScore;
+
+    @Column(name = "lexical_diversity_mattr_zscore")
+    private Float lexicalDiversityMattrZScore;
+
+    @Column(name = "repetition_score_zscore")
+    private Float repetitionScoreZScore;
+
+    @Column(name = "baseline_sample_size")
+    private Integer baselineSampleSize;
+
     @Column(name = "analyzed_at", nullable = false)
     private LocalDateTime analyzedAt;
 

@@ -17,12 +17,29 @@ Narrative Speech"에서 진단과 상관관계가 검증된 지표 중, 오디�
 텍스트만으로 동작한다. 값을 위험도 점수로 환산하는 로직은 포함하지 않는다 —
 이 논문의 요인분석 가중치는 영어 DementiaBank 데이터 기준이라 한국어 데이터에
 그대로 옮겨 쓸 수 없고, 별도의 보정이 필요하다.
+
+대신 compute_baseline_deviation()으로 "전체 정상 범위"가 아니라 "이 사용자
+본인의 최근 기준선 대비 오늘이 얼마나 벗어났는지"를 본다. 사용자 수가 아직
+적어 전체 인구 기준 정상 범위를 통계적으로 잡을 근거가 없는 지금 단계에서는,
+개인별 추이 모니터링이 더 현실적이다.
 """
 
 import math
 from collections import Counter
+from statistics import mean, stdev
 
 from kiwipiepy import Kiwi
+
+# 값이 어느 방향으로 움직일 때 인지 저하 신호로 보는지(참고용 메타데이터).
+# "increase": 값이 커질수록 우려스러움, "decrease": 값이 작아질수록 우려스러움.
+CONCERNING_DIRECTION = {
+    "pronounNounRatio": "increase",
+    "nounRatio": "decrease",
+    "lexicalDiversityMattr": "decrease",
+    "repetitionScore": "increase",
+}
+
+MIN_BASELINE_SESSIONS = 3
 
 _kiwi = Kiwi()
 
@@ -140,3 +157,41 @@ def _cosine_similarity(a: Counter, b: Counter) -> float:
         return 0.0
 
     return dot_product / (norm_a * norm_b)
+
+
+def compute_baseline_deviation(
+    history_values: list[float | None],
+    current_value: float | None,
+) -> dict:
+    """current_value가 이 사용자 본인의 과거 이력 대비 얼마나 벗어났는지 계산한다.
+
+    전체 인구 기준 "정상 범위" 대신, 같은 사용자의 최근 세션들(history_values)
+    평균/표준편차를 기준선으로 삼는다. 표본이 MIN_BASELINE_SESSIONS(3)보다
+    적으면 z-score는 불안정하므로 계산하지 않고 None을 반환한다 — 기준선이
+    아직 안 쌓인 신규 사용자를 "정상"으로 오판하지 않기 위함이다.
+
+    반환값의 zScore는 부호가 그대로 방향을 담고 있다(양수 = 기준선보다 큼).
+    어느 방향이 우려스러운 신호인지는 CONCERNING_DIRECTION을 참고해서
+    호출하는 쪽에서 해석한다 — 지표마다 "커지면 나쁨"/"작아지면 나쁨"이
+    다르기 때문이다.
+    """
+    valid_history = [value for value in history_values if value is not None]
+    baseline_mean = mean(valid_history) if valid_history else None
+
+    result = {
+        "baselineMean": baseline_mean,
+        "baselineSampleSize": len(valid_history),
+        "zScore": None,
+    }
+
+    if current_value is None or len(valid_history) < MIN_BASELINE_SESSIONS:
+        return result
+
+    baseline_std = stdev(valid_history)
+
+    if baseline_std == 0:
+        result["zScore"] = 0.0 if current_value == baseline_mean else None
+        return result
+
+    result["zScore"] = (current_value - baseline_mean) / baseline_std
+    return result

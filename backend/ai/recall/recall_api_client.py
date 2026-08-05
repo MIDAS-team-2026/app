@@ -64,6 +64,21 @@ def get_session_records(session_id: int, base_url: str = BASE_URL) -> List[dict]
     return response.json()
 
 
+def get_linguistic_marker_history(user_id: int, base_url: str = BASE_URL) -> List[dict]:
+    """개인 기준선 계산용으로 이 사용자의 과거 세션 언어 지표들을 가져온다.
+
+    /api/ai/analysis/linguistic-markers/user/{userId}는 ApiResponse로 감싸서
+    내려오므로 "data" 필드를 꺼내 써야 한다(다른 일부 GET 엔드포인트와 다름).
+    """
+    response = requests.get(
+        f"{base_url}/api/ai/analysis/linguistic-markers/user/{user_id}",
+        timeout=10,
+    )
+    response.raise_for_status()
+
+    return response.json().get("data") or []
+
+
 def get_recall_questions(user_id: int, base_url: str = BASE_URL) -> Dict[int, dict]:
     response = requests.get(
         f"{base_url}/api/recall/questions/{user_id}",
@@ -139,18 +154,22 @@ def send_risk_result(
 
 def send_linguistic_markers(
     session_id: int,
-    pronoun_noun_ratio: Optional[float],
-    noun_ratio: Optional[float],
-    lexical_diversity_mattr: Optional[float],
-    repetition_score: Optional[float],
+    markers: dict,
+    deviations: dict,
+    baseline_sample_size: int,
     base_url: str = BASE_URL,
 ):
     body = {
         "sessionId": session_id,
-        "pronounNounRatio": pronoun_noun_ratio,
-        "nounRatio": noun_ratio,
-        "lexicalDiversityMattr": lexical_diversity_mattr,
-        "repetitionScore": repetition_score,
+        "pronounNounRatio": markers["pronounNounRatio"],
+        "nounRatio": markers["nounRatio"],
+        "lexicalDiversityMattr": markers["lexicalDiversityMattr"],
+        "repetitionScore": markers["repetitionScore"],
+        "pronounNounRatioZScore": deviations["pronounNounRatio"]["zScore"],
+        "nounRatioZScore": deviations["nounRatio"]["zScore"],
+        "lexicalDiversityMattrZScore": deviations["lexicalDiversityMattr"]["zScore"],
+        "repetitionScoreZScore": deviations["repetitionScore"]["zScore"],
+        "baselineSampleSize": baseline_sample_size,
     }
 
     return requests.post(
@@ -161,6 +180,7 @@ def send_linguistic_markers(
 
 
 def compute_and_send_linguistic_markers(
+    user_id: int,
     session_id: int,
     records: List[dict],
     base_url: str = BASE_URL,
@@ -169,6 +189,9 @@ def compute_and_send_linguistic_markers(
 
     회상 정답 여부와 무관하게 세션 전체의 "말하는 방식"을 보는 지표라,
     고정질문/회상질문 답변을 가리지 않고 세션의 모든 발화를 사용한다.
+
+    전체 사용자 기준 "정상 범위"는 아직 근거가 없어 사용하지 않고, 이 사용자
+    본인의 과거 세션 평균 대비 오늘이 얼마나 벗어났는지(z-score)를 함께 계산한다.
     """
     texts = [
         str(record.get("transcriptText") or "").strip()
@@ -186,19 +209,29 @@ def compute_and_send_linguistic_markers(
         "repetitionScore": text_linguistic_markers.repetition_score(texts),
     }
 
+    history = get_linguistic_marker_history(user_id=user_id, base_url=base_url)
+    baseline_sample_size = len(history)
+
+    deviations = {
+        metric_key: text_linguistic_markers.compute_baseline_deviation(
+            history_values=[item.get(metric_key) for item in history],
+            current_value=markers[metric_key],
+        )
+        for metric_key in markers
+    }
+
     response = send_linguistic_markers(
         session_id=session_id,
-        pronoun_noun_ratio=markers["pronounNounRatio"],
-        noun_ratio=markers["nounRatio"],
-        lexical_diversity_mattr=markers["lexicalDiversityMattr"],
-        repetition_score=markers["repetitionScore"],
+        markers=markers,
+        deviations=deviations,
+        baseline_sample_size=baseline_sample_size,
         base_url=base_url,
     )
 
     print("linguistic markers status:", response.status_code, response.text)
     response.raise_for_status()
 
-    return markers
+    return {"markers": markers, "deviations": deviations}
 
 
 def find_recall_pairs(records: List[dict]) -> List[tuple]:
@@ -592,6 +625,7 @@ def analyze_session_recall(
 
     try:
         compute_and_send_linguistic_markers(
+            user_id=user_id,
             session_id=session_id,
             records=records,
             base_url=base_url,

@@ -3,6 +3,7 @@ package com.example.backend.Controller;
 import com.example.backend.Model.DTO.*;
 import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
 import com.example.backend.Model.DTO.analysis.LinguisticMarkerDTO;
+import com.example.backend.Model.DTO.analysis.LinguisticMarkerHistoryItemDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
@@ -58,6 +59,14 @@ class AiAnalysisController {
     public ResponseEntity<ApiResponse<Void>> receiveLinguisticMarkers(@RequestBody LinguisticMarkerDTO dto) {
         aiAnalysisService.saveLinguisticMarkers(dto);
         return ResponseEntity.ok(ApiResponse.success());
+    }
+
+    // 개인 기준선(z-score) 계산용으로 Python이 과거 세션 지표들을 가져갈 때 사용
+    // Python/FastAPI 연동용이므로 현재는 인증 적용하지 않음
+    @GetMapping("/linguistic-markers/user/{userId}")
+    public ResponseEntity<ApiResponse<List<LinguisticMarkerHistoryItemDTO>>> getLinguisticMarkerHistory(
+            @PathVariable Integer userId) {
+        return ResponseEntity.ok(ApiResponse.success(aiAnalysisService.getLinguisticMarkerHistory(userId)));
     }
 
     // 세션별 최종 분석 요약 조회

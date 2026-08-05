@@ -67,6 +67,46 @@ class LinguisticMarkersTest(unittest.TestCase):
         self.assertIsNone(markers.repetition_score(["혼자 있는 발화"]))
         self.assertIsNone(markers.repetition_score([]))
 
+    def test_baseline_deviation_is_none_with_insufficient_history(self):
+        result = markers.compute_baseline_deviation([0.1, 0.1], 0.5)
+
+        self.assertEqual(2, result["baselineSampleSize"])
+        self.assertIsNone(result["zScore"])
+
+    def test_baseline_deviation_is_zero_when_matching_baseline_mean(self):
+        result = markers.compute_baseline_deviation([0.1, 0.2, 0.3], 0.2)
+
+        self.assertAlmostEqual(0.2, result["baselineMean"])
+        self.assertAlmostEqual(0.0, result["zScore"])
+
+    def test_baseline_deviation_is_positive_when_above_baseline(self):
+        result = markers.compute_baseline_deviation([0.1, 0.2, 0.3], 0.9)
+
+        self.assertGreater(result["zScore"], 0)
+
+    def test_baseline_deviation_is_negative_when_below_baseline(self):
+        result = markers.compute_baseline_deviation([0.4, 0.5, 0.6], 0.1)
+
+        self.assertLess(result["zScore"], 0)
+
+    def test_baseline_deviation_ignores_none_values_in_history(self):
+        result = markers.compute_baseline_deviation([0.1, None, 0.2, 0.3, None], 0.2)
+
+        self.assertEqual(3, result["baselineSampleSize"])
+        self.assertAlmostEqual(0.0, result["zScore"])
+
+    def test_baseline_deviation_is_none_when_current_value_missing(self):
+        result = markers.compute_baseline_deviation([0.1, 0.2, 0.3, 0.4], None)
+
+        self.assertIsNone(result["zScore"])
+
+    def test_baseline_deviation_handles_zero_variance_history(self):
+        matching = markers.compute_baseline_deviation([0.5, 0.5, 0.5], 0.5)
+        deviating = markers.compute_baseline_deviation([0.5, 0.5, 0.5], 0.9)
+
+        self.assertAlmostEqual(0.0, matching["zScore"])
+        self.assertIsNone(deviating["zScore"])
+
 
 if __name__ == "__main__":
     unittest.main()

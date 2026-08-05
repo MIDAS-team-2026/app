@@ -2,6 +2,7 @@ package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
 import com.example.backend.Model.DTO.analysis.LinguisticMarkerDTO;
+import com.example.backend.Model.DTO.analysis.LinguisticMarkerHistoryItemDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
@@ -210,8 +211,30 @@ public class AiAnalysisService {
         result.setNounRatio(dto.getNounRatio());
         result.setLexicalDiversityMattr(dto.getLexicalDiversityMattr());
         result.setRepetitionScore(dto.getRepetitionScore());
+        result.setPronounNounRatioZScore(dto.getPronounNounRatioZScore());
+        result.setNounRatioZScore(dto.getNounRatioZScore());
+        result.setLexicalDiversityMattrZScore(dto.getLexicalDiversityMattrZScore());
+        result.setRepetitionScoreZScore(dto.getRepetitionScoreZScore());
+        result.setBaselineSampleSize(dto.getBaselineSampleSize());
 
         linguisticMarkerRepository.save(result);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LinguisticMarkerHistoryItemDTO> getLinguisticMarkerHistory(Integer userId) {
+        return linguisticMarkerRepository.findByChatSession_User_IdOrderByAnalyzedAtDesc(userId)
+                .stream()
+                .map(result -> {
+                    LinguisticMarkerHistoryItemDTO item = new LinguisticMarkerHistoryItemDTO();
+                    item.setSessionId(result.getChatSession().getId());
+                    item.setAnalyzedAt(result.getAnalyzedAt());
+                    item.setPronounNounRatio(result.getPronounNounRatio());
+                    item.setNounRatio(result.getNounRatio());
+                    item.setLexicalDiversityMattr(result.getLexicalDiversityMattr());
+                    item.setRepetitionScore(result.getRepetitionScore());
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)
