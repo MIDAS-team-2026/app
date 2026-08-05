@@ -40,21 +40,24 @@ from sklearn.calibration import CalibratedClassifierCV
 sys.path.append(str(Path(__file__).resolve().parent))
 from feature_preprocessor import FeaturePreprocessor, predict_from_feature_dict  # noqa: E402
 
+from speech_feature_preprocessing import preprocess_abnormal_segment_features
+
 # ============================================================================
 # 0. 설정값 (CONFIG)
 # ============================================================================
 
 AI_ANALYSIS_ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+DATA_DIR = Path(os.getenv("MIDAS_EXTRACTED_DIR", AI_ANALYSIS_ROOT / "outputs"))
+ARTIFACT_DIR = Path(os.getenv("MIDAS_RF_ARTIFACT_DIR", AI_ANALYSIS_ROOT / "artifacts"))
 
 NORMAL_CSV = Path(
-    os.getenv("MIDAS_NORMAL_CSV", OUTPUT_DIR / "elderly_chatbot_reference_features_egemaps_sample_1000.csv")
-)
-ABNORMAL_CSV = Path(
-    os.getenv("MIDAS_ABNORMAL_CSV", OUTPUT_DIR / "dysarthria_neuro_25_segment_features_egemaps.partial.csv")
+    os.getenv("MIDAS_NORMAL_CSV", DATA_DIR / "elderly_chatbot_reference_features_egemaps_sample_1000.csv")
 )
 
-ARTIFACT_DIR = Path(os.getenv("MIDAS_REFERENCE_MODEL_DIR", AI_ANALYSIS_ROOT / "artifacts"))
+ABNORMAL_CSV = Path(
+    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.csv")
+)
+
 RANDOM_STATE = 42
 TEST_SIZE = 0.2
 
@@ -74,7 +77,6 @@ N_ESTIMATORS_GRID = [200, 400, 600]
 MAX_DEPTH_GRID = [None, 6, 10, 16]
 MIN_SAMPLES_LEAF_GRID = [1, 2, 4]
 
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -109,7 +111,7 @@ METADATA_EXCLUDE = {
     "short_answer_flag", "record_time_float", "speech_rate_word", "speech_rate_char",
     "slow_speech_flag", "long_recording_flag", "low_content_slow_speech_flag",
     "sample_seed", "sample_group", "play_time", "segment_count",
-    # 세그먼트 메타데이터 -- 현재 비정상군 전용 식별자.
+    # 세그먼트/청킹본 메타데이터 -- 현재 비정상군 전용 식별자.
     # 정상군 CSV에는 아직 없어 common_cols 교집합에서 자연히 제외되지만, 이름이 겹치는
     # 사고를 막기 위해 명시적으로 등록해 둔다.
     "segment_id", "source_dataset", "label", "label_name", "source_audio_file_name",
@@ -150,7 +152,7 @@ MFCC_HIGH_ORDER_EXCLUDE = {
     "mfcc_13_mean", "mfcc_13_std",
 }
 
-def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str]:
+def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str, dict]:
     df_normal = pd.read_csv(normal_csv)
     df_abnormal = pd.read_csv(abnormal_csv)
 
@@ -166,6 +168,11 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
         and c not in DURATION_CONFOUNDED
         and c not in MIC_ENVIRONMENT_CONFOUNDED
         and c not in MFCC_HIGH_ORDER_EXCLUDE
+    )
+
+    df_abnormal, preprocessing_report = preprocess_abnormal_segment_features(
+        df_abnormal,
+        feature_cols,
     )
 
     # 정상군 화자 그룹화
@@ -197,7 +204,7 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
     print(f"[load] 공통 피처 {len(feature_cols)}개 선정 완료")
     print(f"[load] 화자 그룹 분할 기준: '{group_col}' (정상군 화자: {df_normal['speaker_group'].nunique()}명, 비정상군 화자: {df_abnormal['speaker_group'].nunique()}명)")
 
-    return combined, feature_cols, group_col
+    return combined, feature_cols, group_col, preprocessing_report
 
 
 # ============================================================================
@@ -343,7 +350,7 @@ def evaluate_model(model, X_test, y_test, feature_names, output_dir: Path):
 # predict_from_feature_dict()도 feature_preprocessor.py(공용 모듈)에서 import해서 사용한다.
 
 def main():
-    combined, candidate_features, group_col = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
+    combined, candidate_features, group_col, preprocessing_report = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
 
     X = combined[candidate_features]
     y = combined["label"]
@@ -387,8 +394,18 @@ def main():
     with open(ARTIFACT_DIR / "selected_features.json", "w", encoding="utf-8") as f:
         json.dump(top_features, f, ensure_ascii=False, indent=2)
 
-    print(f"\n[done] 모델 아티팩트 저장 완료: {ARTIFACT_DIR.resolve()}")
-    print(f"[done] (참고) CSV/그래프 등 부가 산출물 경로: {OUTPUT_DIR.resolve()}")
+    training_report = {
+        "normal_csv": str(NORMAL_CSV),
+        "abnormal_csv": str(ABNORMAL_CSV),
+        "preprocessing": preprocessing_report,
+        "selected_features": top_features,
+        "metrics": metrics,
+    }
+    
+    with open(ARTIFACT_DIR / "random_forest_training_report.json", "w", encoding="utf-8") as f:
+        json.dump(training_report, f, ensure_ascii=False, indent=2)
+
+    print(f"\n[done] 모델 아티팩트 및 리포트 저장 완료: {ARTIFACT_DIR.resolve()}")
 
     example = X_test_raw.iloc[0][top_features].to_dict()
 
