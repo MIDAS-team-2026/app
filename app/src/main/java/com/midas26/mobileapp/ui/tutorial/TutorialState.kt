@@ -9,5 +9,5 @@ data class TutorialState(
     val settingsStep: SettingsTutorialStep = SettingsTutorialStep.ACCESSIBILITY,
     val highlightedBottomTab: TutorialBottomTab? = null,
     val currentNumber: Int = 1,
-    val totalNumber: Int = 21
+    val totalNumber: Int = 20
 )
