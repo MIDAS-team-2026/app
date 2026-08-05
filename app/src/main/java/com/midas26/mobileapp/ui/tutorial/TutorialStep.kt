@@ -1,8 +1,5 @@
 package com.midas26.mobileapp.ui.tutorial
 
-/**
- * 튜토리얼이 진행되는 화면을 구분합니다.
- */
 enum class TutorialScreen {
     HOME,
     VOICE_CHAT,
@@ -11,46 +8,51 @@ enum class TutorialScreen {
     COMPLETED
 }
 
-/**
- * 홈 화면의 튜토리얼 단계입니다.
- */
+enum class TutorialBottomTab {
+    HOME,
+    VOICE_CHAT,
+    ANALYSIS,
+    SETTINGS
+}
+
 enum class HomeTutorialStep {
+    MOVE_TO_HOME_TAB,
     WELCOME,
     WEEKLY_CHECK,
     VOICE_CHAT,
     ANALYSIS,
     SETTINGS,
+    MOVE_TO_VOICE_TAB,
     COMPLETED
 }
 
-/**
- * 음성 대화 화면의 튜토리얼 단계입니다.
- */
 enum class VoiceChatTutorialStep {
     MESSAGE,
     MICROPHONE,
     END_BUTTON,
+    MOVE_TO_ANALYSIS_TAB,
     COMPLETED
 }
 
-/**
- * 분석 결과 화면의 튜토리얼 단계입니다.
- */
 enum class AnalysisTutorialStep {
     MAIN_SCORE,
     WEEKLY_GRAPH,
     DETAIL_SCORES,
+    MOVE_TO_SETTINGS_TAB,
     COMPLETED
 }
 
-/**
- * 설정 화면의 튜토리얼 단계입니다.
- */
 enum class SettingsTutorialStep {
     ACCESSIBILITY,
     LOCATION_SHARING,
     CHECK_NOTIFICATION,
     NOTIFICATION_TIME,
     SUPPORT,
+
+    /**
+     * 전체 튜토리얼 마지막에 앱 사용법 다시 보기 메뉴를 안내합니다.
+     */
+    REPLAY_TUTORIAL,
+
     COMPLETED
 }

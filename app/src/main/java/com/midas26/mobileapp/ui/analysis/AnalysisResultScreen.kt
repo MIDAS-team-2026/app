@@ -428,12 +428,14 @@ private fun UserAnalysisResultContent(
             if (
                 !isGuardian &&
                 tutorialState.isRunning &&
-                tutorialState.currentScreen == TutorialScreen.ANALYSIS
+                tutorialState.currentScreen == TutorialScreen.ANALYSIS &&
+                tutorialState.analysisStep != AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB
             ) {
                 val targetBounds = when (tutorialState.analysisStep) {
                     AnalysisTutorialStep.MAIN_SCORE -> mainScoreBounds
                     AnalysisTutorialStep.WEEKLY_GRAPH -> weeklyGraphBounds
                     AnalysisTutorialStep.DETAIL_SCORES -> detailScoresBounds
+                    AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> null
                     AnalysisTutorialStep.COMPLETED -> null
                 }
 
@@ -460,11 +462,22 @@ private fun UserAnalysisResultContent(
 
                             AnalysisTutorialStep.DETAIL_SCORES -> {
                                 if (tutorialViewModel.isFullTutorial()) {
-                                    tutorialViewModel.moveToSettings()
-                                    onNavigateSettings()
+                                    /*
+                                     * 분석 결과 설명이 끝나면 AppNavGraph에서
+                                     * 하단 설정 탭을 안내합니다.
+                                     */
+                                    tutorialViewModel.showSettingsTabGuide(
+                                        number = tutorialState.currentNumber + 1
+                                    )
                                 } else {
                                     tutorialViewModel.completeTutorial()
                                 }
+                            }
+
+                            AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> {
+                                /*
+                                 * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
+                                 */
                             }
 
                             AnalysisTutorialStep.COMPLETED -> {
@@ -518,6 +531,7 @@ private fun AnalysisTutorialOverlay(
         AnalysisTutorialStep.MAIN_SCORE -> "오늘의 인지 점수"
         AnalysisTutorialStep.WEEKLY_GRAPH -> "이번 주 점수 추이"
         AnalysisTutorialStep.DETAIL_SCORES -> "세부 분석 결과"
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> "앱 설정 살펴보기"
         AnalysisTutorialStep.COMPLETED -> "분석 결과 사용법 완료"
     }
 
@@ -530,6 +544,9 @@ private fun AnalysisTutorialOverlay(
 
         AnalysisTutorialStep.DETAIL_SCORES ->
             "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
+            "하단 설정 탭에서 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
 
         AnalysisTutorialStep.COMPLETED ->
             "분석 결과 화면의 주요 기능을 모두 살펴봤어요."
