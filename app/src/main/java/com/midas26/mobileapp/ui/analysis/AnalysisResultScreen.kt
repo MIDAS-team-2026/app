@@ -345,9 +345,8 @@ private fun UserAnalysisResultContent(
                         Spacer(modifier = Modifier.weight(2f))
 
                         /*
-                         * 세부 분석 카드 4개만 감싸는 영역에 좌표 측정을 적용합니다.
-                         * 위아래 Spacer는 하이라이트 영역에서 제외되므로
-                         * 기존보다 하이라이트 박스 높이가 작아집니다.
+                         * 세부 분석 카드 3개만 감싸는 영역에 좌표 측정을 적용합니다.
+                         * 종합 위험도는 상단 대표 점수와 중복되므로 하단 카드에서는 제외합니다.
                          */
                         Column(
                             modifier = Modifier
@@ -362,24 +361,18 @@ private fun UserAnalysisResultContent(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                ItemCard(item = items[0], modifier = Modifier.weight(1f))
                                 ItemCard(item = items[1], modifier = Modifier.weight(1f))
+                                ItemCard(item = items[2], modifier = Modifier.weight(1f))
                             }
 
                             Spacer(modifier = Modifier.height(16.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ItemCard(item = items[2], modifier = Modifier.weight(1f))
-                                TextScoreCard(
-                                    item = items[3],
-                                    status = viewModel.textScoreStatus,
-                                    onClick = onNavigateTextScoreDetail,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
+                            TextScoreCard(
+                                item = items[3],
+                                status = viewModel.textScoreStatus,
+                                onClick = onNavigateTextScoreDetail,
+                                modifier = Modifier.fillMaxWidth()
+                            )
                         }
 
                         Spacer(modifier = Modifier.weight(2f))
