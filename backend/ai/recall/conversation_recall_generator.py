@@ -5,6 +5,7 @@ import unicodedata
 from typing import Dict, List, Optional
 
 import requests
+from kiwipiepy import Kiwi
 from openai import OpenAI
 
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
@@ -71,7 +72,7 @@ MEMORY_DETAIL_HINTS = [
     "썼",
     "줬",
     "갔",
-    "다녀",
+    "다녀오",
     "왔",
     "만났",
     "봤",
@@ -173,7 +174,7 @@ MEMORY_ACTION_HINTS = [
 MEMORY_ACTION_CONCEPTS = {
     "EAT": ("먹", "식사"),
     "DRINK": ("마시",),
-    "GO": ("갔", "다녀", "왔", "가서"),
+    "GO": ("갔", "다녀오", "왔", "가서"),
     "SEE": ("봤", "보았", "보고", "시청"),
     "HEAR": ("들었", "들어", "노래"),
     "BUY": ("샀", "사왔", "장 봤", "장봤"),
@@ -229,12 +230,12 @@ STATE_PREDICATE_PREFIXES = (
     "맛있",
     "맛없",
     "재미있",
-    "재미없",
-    "즐거",
+    "재미없다",
+    "즐겁",
     "기쁘",
     "반갑",
     "무섭",
-    "속상",
+    "속상하",
     "우울",
     "걱정",
 )
@@ -507,10 +508,10 @@ STATE_ONLY_MEMORY_PHRASES = (
     "피곤",
     "어려웠",
     "힘들",
-    "속상",
+    "속상하",
     "슬펐",
     "우울",
-    "외로",
+    "외롭",
     "불안",
     "걱정",
     "괜찮았",
@@ -709,26 +710,114 @@ def _normalize_keyword_word(word: str) -> str:
     return word
 
 
+_kiwi = Kiwi()
+
+# voice_reply_handler와 동일한 원칙: 키워드 리스트 항목은 활용 조각이
+# 아니라 사전형 어간으로 관리하고, 매칭은 부분 문자열이 아니라
+# 형태소(토큰) 단위로만 한다.
+_NOUN_TAGS = {"NNG", "NNP", "NNB", "NR", "NP"}
+_EXACT_MATCH_TAGS = _NOUN_TAGS | {"MAG", "XR", "SL", "SH", "SN", "IC"}
+# 동사/형용사는 접두사로 비교한다. "듣다/눕다/어렵다/덥다/춥다" 같은
+# 불규칙 활용 어간은 kiwi가 "VV-I"/"VA-I"처럼 -I가 붙은 태그를 쓴다.
+_PREDICATE_TAG_PREFIXES = ("VV", "VA", "VX", "XSA", "XSV")
+_tokenize_cache: dict[str, tuple] = {}
+
+
+def _is_match_tag(tag: str) -> bool:
+    return tag in _EXACT_MATCH_TAGS or tag.startswith(_PREDICATE_TAG_PREFIXES)
+
+
+def _tokenize_cached(text: str) -> tuple:
+    text = str(text or "")
+    cached = _tokenize_cache.get(text)
+
+    if cached is not None:
+        return cached
+
+    tokens = tuple(_kiwi.tokenize(text))
+
+    if len(_tokenize_cache) > 2000:
+        _tokenize_cache.clear()
+
+    _tokenize_cache[text] = tokens
+    return tokens
+
+
+def _match_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text) if _is_match_tag(token.tag)]
+
+
+def _full_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text)]
+
+
+def _is_contiguous_subsequence(needle: list[str], haystack: list[str]) -> bool:
+    if not needle:
+        return False
+
+    span = len(needle)
+
+    return any(
+        haystack[start:start + span] == needle
+        for start in range(len(haystack) - span + 1)
+    )
+
+
+# 조사(격조사/보조사/접속조사)는 의미를 가른다("집에만" vs "집을").
+# 어미(EP/EF/EC 등 활용형 꼬리)는 그냥 시제/문체 차이라 무시해도 된다.
+_PARTICLE_TAG_PREFIXES = ("JK", "JX", "JC")
+
+
+def _keyword_has_meaningful_particle(word: str) -> bool:
+    return any(
+        token.tag.startswith(_PARTICLE_TAG_PREFIXES)
+        for token in _tokenize_cached(word)
+    )
+
+
+def _word_occurs_as_token(word: str, text: str, strict: bool = False) -> bool:
+    """word(키워드 하나 또는 구)가 text 안에 실제 단어(형태소)로 등장하는지 확인한다.
+
+    조사가 붙은 활용("형이", "형을")은 형태소 분석으로 정확히 잡아내고,
+    "형섭"처럼 다른 단어 속에 우연히 낀 글자는 매칭되지 않는다.
+
+    strict=True는 어미(시제/의향 등)까지 그대로 지켜야 하는 키워드용이다.
+    예: FUTURE_OR_WISH_PHRASES의 "먹으려고"는 "먹었어"(과거)와는 달라야
+    하므로, 어간만 남기는 느슨한 매칭을 쓰면 안 된다.
+    """
+    # "약과"(과자)를 "약"+"과"(조사)로, "국가"를 "국"+"가"(조사)로 잘못
+    # 쪼개는 것처럼 형태소 분석기 자체가 헷갈리는 소수의 복합어는
+    # 별도로 관리한다(NON_PARTICLE_COMPOUND_WORDS).
+    for compound in NON_PARTICLE_COMPOUND_WORDS:
+        if compound != word and compound.startswith(word) and compound in text:
+            return False
+
+    keyword_content_forms = _match_token_forms(word)
+
+    if not keyword_content_forms:
+        return False
+
+    if (
+        not strict
+        and len(keyword_content_forms) == 1
+        and not _keyword_has_meaningful_particle(word)
+    ):
+        # 단일 형태소 키워드는 조사/어미와 무관하게 그 형태소가
+        # 문장 안에 등장하는지만 본다(활용형에 안정적).
+        return keyword_content_forms[0] in _match_token_forms(text)
+
+    # 조사·어미가 의미를 가르는 키워드는 그걸 빼면 의미가 사라지거나
+    # ("집에만"→"집") 다른 뜻이 되므로("먹으려고"→"먹", 과거와 충돌)
+    # 어미·조사를 포함한 전체 토큰 나열이 연속으로 등장하는지 확인한다.
+    return _is_contiguous_subsequence(_full_token_forms(word), _full_token_forms(text))
+
+
 def _single_syllable_keyword_occurs(answer_keyword: str, text: str) -> bool:
-    allowed_endings = set(KEYWORD_PARTICLE_SUFFIXES) | set(KEYWORD_POLITE_SUFFIXES)
-    allowed_endings.update(f"{particle}요" for particle in KEYWORD_PARTICLE_SUFFIXES)
+    return _word_occurs_as_token(answer_keyword, text)
 
-    for token in clean_text(text).split():
-        token = _comparison_text(token)
 
-        if token == answer_keyword:
-            return True
-
-        if answer_keyword not in SHORT_MEMORY_CONTENT_WORDS:
-            continue
-
-        if token in NON_PARTICLE_COMPOUND_WORDS or not token.startswith(answer_keyword):
-            continue
-
-        if token[len(answer_keyword):] in allowed_endings:
-            return True
-
-    return False
+def _contains_any(text: str, keywords, strict: bool = False) -> bool:
+    return any(_word_occurs_as_token(keyword, text, strict=strict) for keyword in keywords)
 
 
 def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
@@ -769,17 +858,14 @@ def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
 
 
 def _memory_hint_occurs(hint: str, text: str) -> bool:
-    if len(_comparison_text(hint)) == 1:
-        return _single_syllable_keyword_occurs(hint, text)
-
-    return hint in text
+    return _word_occurs_as_token(hint, text)
 
 
 def _memory_detail_hint_occurs(hint: str, text: str) -> bool:
     if hint in MEMORY_CONCRETE_HINTS:
         return _memory_hint_occurs(hint, text)
 
-    return hint in text
+    return _word_occurs_as_token(hint, text)
 
 
 def _has_completed_generic_object_action(text: str) -> bool:
@@ -844,7 +930,7 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
     actions = {
         concept
         for concept, patterns in MEMORY_ACTION_CONCEPTS.items()
-        if any(pattern in text for pattern in patterns)
+        if _contains_any(text, patterns)
     }
     concrete = {
         hint
@@ -965,7 +1051,8 @@ def is_memory_point_grounded(memory_point: str, source_text: str) -> bool:
     )
 
     if any(
-        hint in memory_point and hint not in original_source_text
+        _word_occurs_as_token(hint, memory_point)
+        and not _word_occurs_as_token(hint, original_source_text)
         for hint in explicit_time_hints
     ):
         return False
@@ -1110,7 +1197,7 @@ def is_forbidden_recall_content(text: str) -> bool:
     if not text:
         return True
 
-    return any(keyword in text for keyword in FORBIDDEN_RECALL_KEYWORDS)
+    return _contains_any(text, FORBIDDEN_RECALL_KEYWORDS)
 
 
 def is_valid_recall_question_format(question: str) -> bool:
@@ -1175,7 +1262,7 @@ def evaluate_memory_candidate(text: str) -> Dict[str, object]:
             "reasons": ["forbidden_fixed_question_content"],
         }
 
-    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+    if _contains_any(text, WEAK_MEMORY_PHRASES, strict=True):
         reasons.append("weak_or_uncertain_expression")
         score -= 20
 
@@ -1276,7 +1363,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     recall_score = int(evaluation["score"])
     reasons = list(evaluation["reasons"])
 
-    action_hits = [hint for hint in MEMORY_ACTION_HINTS if hint in text]
+    action_hits = [hint for hint in MEMORY_ACTION_HINTS if _word_occurs_as_token(hint, text)]
     action_concepts, _concrete_concepts = _memory_signature(text)
     has_generic_object_action = _has_completed_generic_object_action(text)
     has_generic_food_action = _has_completed_generic_food_action(text)
@@ -1316,7 +1403,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     future_or_wish_hits = [
         phrase
         for phrase in FUTURE_OR_WISH_PHRASES
-        if phrase in text
+        if _word_occurs_as_token(phrase, text, strict=True)
     ]
     has_only_wish_hits = bool(future_or_wish_hits) and all(
         "싶" in phrase
@@ -1330,19 +1417,19 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
         and _has_confirmed_action_after_wish(text)
     )
     has_incomplete_or_negated_action = (
-        any(phrase in text for phrase in INCOMPLETE_OR_NEGATED_ACTION_PHRASES)
+        _contains_any(text, INCOMPLETE_OR_NEGATED_ACTION_PHRASES, strict=True)
         or bool(NEGATED_ACTION_PATTERN.search(text))
         or bool(UNCOMPLETED_ACTION_PATTERN.search(text))
     )
     has_uncertain_memory = (
-        any(phrase in text for phrase in UNCERTAIN_MEMORY_PHRASES)
+        _contains_any(text, UNCERTAIN_MEMORY_PHRASES, strict=True)
         or bool(UNCERTAIN_ACTION_PATTERN.search(text))
         or bool(HEARSAY_PATTERN.search(text))
     )
     has_state_without_action = (
         _has_state_only_predicate(text)
         or (
-            any(phrase in text for phrase in STATE_ONLY_MEMORY_PHRASES)
+            _contains_any(text, STATE_ONLY_MEMORY_PHRASES, strict=True)
             and not action_hits
             and not action_concepts
             and not has_generic_object_action
@@ -1365,7 +1452,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
         recall_score -= 70
         reasons.append("state_without_action")
 
-    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+    if _contains_any(text, WEAK_MEMORY_PHRASES, strict=True):
         recall_score -= 35
         reasons.append("low_info_expression")
 

@@ -41,6 +41,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianLocationTutorialStep
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
@@ -110,6 +111,13 @@ fun LocationListScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
+    /*
+     * 앱 설정에서 선택한 글자 크기를 위치 사용자 선택 화면에도 적용합니다.
+     * 화면 폭이 좁을 때 레이아웃이 깨지지 않도록 최대 배율을 제한합니다.
+     */
+    val fontScale = LocalFontSizeScale.current.scale
+    val screenFontScale = fontScale.coerceAtMost(1.35f)
+
     var refreshKey by remember { mutableStateOf(0) }
     var guideBounds by remember { mutableStateOf<Rect?>(null) }
     var firstUserBounds by remember { mutableStateOf<Rect?>(null) }
@@ -125,25 +133,14 @@ fun LocationListScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = AppColor.textPrimary,
-                            modifier = Modifier.size(31.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "GPS 위치 확인",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            color = AppColor.textPrimary
-                        )
-                    }
+                    Text(
+                        text = "GPS 위치 확인",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (22 * screenFontScale).sp,
+                        color = AppColor.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -199,7 +196,7 @@ fun LocationListScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "실시간 위치를 확인하세요!",
-                                fontSize = 20.sp,
+                                fontSize = (20 * screenFontScale).sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFC85E48),
                                 maxLines = 1,
@@ -210,7 +207,7 @@ fun LocationListScreen(
 
                             Text(
                                 text = "위치는 5분마다 갱신됩니다",
-                                fontSize = 14.sp,
+                                fontSize = (14 * screenFontScale).sp,
                                 color = Color(0xFFC85E48).copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -223,6 +220,7 @@ fun LocationListScreen(
                     UserLocationCard(
                         user = user,
                         refreshKey = refreshKey,
+                        fontScale = fontScale,
                         onBoundsChanged = { bounds ->
                             if (index == 0) {
                                 firstUserBounds = bounds
@@ -285,6 +283,7 @@ fun LocationListScreen(
 private fun UserLocationCard(
     user: LinkedUser,
     refreshKey: Int = 0,
+    fontScale: Float,
     onBoundsChanged: (Rect) -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -293,7 +292,13 @@ private fun UserLocationCard(
     val relation =
         if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" }
         else "사용자"
-    val pillFontSize = with(LocalDensity.current) { 14.dp.toSp() }
+    /*
+     * 사용자 위치 카드는 최대 1.25배까지만 확대해
+     * 이름, 관계, 주소가 잘리지 않도록 합니다.
+     */
+    val cardFontScale = fontScale.coerceAtMost(1.25f)
+    val cardMinHeight = (126f + ((cardFontScale - 1f) * 72f)).dp
+    val pillFontSize = (14 * cardFontScale).sp
 
     var locationText by remember { mutableStateOf("위치 불러오는 중...") }
     var timeAgoText by remember { mutableStateOf("") }
@@ -337,7 +342,7 @@ private fun UserLocationCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 6.dp)
-            .heightIn(min = 126.dp)
+            .heightIn(min = cardMinHeight)
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged(
                     coordinates.boundsInRoot()
@@ -358,7 +363,7 @@ private fun UserLocationCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = user.name,
-                        fontSize = 25.sp,
+                        fontSize = (25 * cardFontScale).sp,
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary,
                         maxLines = 1,
@@ -389,17 +394,17 @@ private fun UserLocationCard(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Row(verticalAlignment = Alignment.Top) {
-                    Text("📍", fontSize = 15.sp)
+                    Text("📍", fontSize = (15 * cardFontScale).sp)
 
                     Spacer(modifier = Modifier.width(5.dp))
 
                     Text(
                         text = locationText,
-                        fontSize = 14.sp,
+                        fontSize = (14 * cardFontScale).sp,
                         color = AppColor.textTertiary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = 18.sp,
+                        lineHeight = (18 * cardFontScale).sp,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -409,7 +414,7 @@ private fun UserLocationCard(
 
                     Text(
                         text = "🕐 $timeAgoText 업데이트",
-                        fontSize = 14.sp,
+                        fontSize = (14 * cardFontScale).sp,
                         color = AppColor.textTertiary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -424,7 +429,7 @@ private fun UserLocationCard(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = AppColor.textTertiary,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size((26 * cardFontScale.coerceAtMost(1.15f)).dp)
             )
         }
     }

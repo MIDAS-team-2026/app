@@ -42,6 +42,7 @@ import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianAnalysisTutorialStep
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
@@ -62,6 +63,13 @@ fun AnalysisUserSelectScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
+    /*
+     * 앱 설정의 글자 크기를 이 화면에도 반영합니다.
+     * 화면 폭이 좁을 때 레이아웃이 무너지지 않도록 최대 배율을 제한합니다.
+     */
+    val fontScale = LocalFontSizeScale.current.scale
+    val screenFontScale = fontScale.coerceAtMost(1.35f)
+
     var guideBounds by remember {
         mutableStateOf<Rect?>(null)
     }
@@ -74,23 +82,13 @@ fun AnalysisUserSelectScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AnalysisChartIcon(
-                            color = AppColor.textPrimary,
-                            modifier = Modifier.size(32.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "분석 결과 확인",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            color = AppColor.textPrimary
-                        )
-                    }
+                    Text(
+                        text = "분석 결과 확인",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (22 * screenFontScale).sp,
+                        color = AppColor.textPrimary,
+                        maxLines = 1
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -124,6 +122,7 @@ fun AnalysisUserSelectScreen(
                 patients.isEmpty() -> {
                     Text(
                         text = "연결된 사용자가 없습니다",
+                        fontSize = (16 * screenFontScale).sp,
                         color = AppColor.textSecondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -159,7 +158,7 @@ fun AnalysisUserSelectScreen(
 
                                 Text(
                                     text = "분석 결과를 확인할 사용자를 선택하세요!",
-                                    fontSize = 18.sp,
+                                    fontSize = (18 * screenFontScale).sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFFC85E48)
                                 )
@@ -174,6 +173,7 @@ fun AnalysisUserSelectScreen(
                             AnalysisUserCard(
                                 patient = patient,
                                 status = status,
+                                fontScale = fontScale,
                                 onBoundsChanged = { bounds ->
                                     if (index == 0) {
                                         firstUserBounds = bounds
@@ -247,69 +247,11 @@ fun AnalysisUserSelectScreen(
     }
 }
 
-/**
- * 첨부된 이미지와 비슷한 형태의 막대그래프 아이콘
- *
- * color에 제목 글자와 동일한 색상을 전달하여
- * 아이콘과 제목 색상이 함께 변경되도록 구성
- */
-@Composable
-private fun AnalysisChartIcon(
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val iconWidth = size.width
-        val iconHeight = size.height
-
-        val barWidth = iconWidth * 0.20f
-        val bottomPosition = iconHeight * 0.88f
-
-        // 왼쪽 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.08f,
-                y = iconHeight * 0.42f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.42f
-            )
-        )
-
-        // 가운데 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.40f,
-                y = iconHeight * 0.14f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.14f
-            )
-        )
-
-        // 오른쪽 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.72f,
-                y = iconHeight * 0.58f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.58f
-            )
-        )
-    }
-}
-
 @Composable
 private fun AnalysisUserCard(
     patient: LinkedUserInfo,
     status: PatientAnalysisStatus?,
+    fontScale: Float,
     onBoundsChanged: (Rect) -> Unit = {},
     onClick: () -> Unit
 ) {
@@ -324,9 +266,13 @@ private fun AnalysisUserCard(
         }
         ?: "사용자"
 
-    val pillFontSize = with(LocalDensity.current) {
-        14.dp.toSp()
-    }
+    /*
+     * 카드 내부는 최대 1.25배까지 확대해 이름과 상태 문구가
+     * 지나치게 커져 잘리는 현상을 방지합니다.
+     */
+    val cardFontScale = fontScale.coerceAtMost(1.25f)
+    val cardHeight = (100f + ((cardFontScale - 1f) * 56f)).dp
+    val pillFontSize = (14 * cardFontScale).sp
 
     Surface(
         modifier = Modifier
@@ -335,7 +281,7 @@ private fun AnalysisUserCard(
                 horizontal = 12.dp,
                 vertical = 6.dp
             )
-            .height(100.dp)
+            .height(cardHeight)
             .onGloballyPositioned { coordinates ->
                 onBoundsChanged(
                     coordinates.boundsInRoot()
@@ -367,7 +313,8 @@ private fun AnalysisUserCard(
                 ) {
                     Text(
                         text = patient.name ?: "이름 없음",
-                        fontSize = 25.sp,
+                        fontSize = (25 * cardFontScale).sp,
+                        maxLines = 1,
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
@@ -404,7 +351,7 @@ private fun AnalysisUserCard(
                     PatientAnalysisStatus.NEW_RESULT -> {
                         Text(
                             text = "새로운 분석 결과가 나왔어요!",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFFF59E0B)
                         )
@@ -413,7 +360,7 @@ private fun AnalysisUserCard(
                     PatientAnalysisStatus.VIEWED_TODAY -> {
                         Text(
                             text = "오늘의 분석 결과를 확인했어요!",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             color = AppColor.textTertiary
                         )
                     }
@@ -422,7 +369,7 @@ private fun AnalysisUserCard(
                     null -> {
                         Text(
                             text = "아직 오늘의 분석 결과가 도착하지 않았어요",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             color = AppColor.textTertiary
                         )
                     }
@@ -433,7 +380,7 @@ private fun AnalysisUserCard(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = "분석 결과 확인",
                 tint = AppColor.textTertiary,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size((26 * cardFontScale.coerceAtMost(1.15f)).dp)
             )
         }
     }

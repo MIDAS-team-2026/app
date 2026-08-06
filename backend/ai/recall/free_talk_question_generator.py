@@ -115,6 +115,7 @@ POSITIVE_CUE_PATTERNS = [
     "즐거",
     "맛있",
     "상쾌",
+    "개운",
     "편안",
     "기쁘",
     "반가",
@@ -123,6 +124,8 @@ POSITIVE_CUE_PATTERNS = [
 
 IMPROVEMENT_CUE_PATTERNS = [
     "나아",
+    "지금은 괜찮",
+    "이제 괜찮",
     "괜찮아졌",
     "호전",
 ]
@@ -822,7 +825,11 @@ def build_fallback_with_empathy(
 
         return f"다행이네요. {question}"
 
-    if any(pattern in latest_text for pattern in POSITIVE_CUE_PATTERNS):
+    positive_evidence_text = latest_text
+    for pattern in ("좋겠", "좋을 것 같", "좋을것 같"):
+        positive_evidence_text = positive_evidence_text.replace(pattern, "")
+
+    if any(pattern in positive_evidence_text for pattern in POSITIVE_CUE_PATTERNS):
         if question.startswith(negative_prefixes):
             _prefix, separator, remainder = question.partition(".")
             question = remainder.strip() if separator and remainder.strip() else question
@@ -889,27 +896,13 @@ def is_similar_to_previous_question(
     return False
 
 
-def generate_safe_followup_question(
+def _build_followup_prompt(
     conversation_history: List[str],
     stage: str,
-    fallback_question: str,
-    previous_questions: List[str] | None = None,
-) -> dict:
-    stage = str(stage or "").upper()
-    fallback_question = build_fallback_with_empathy(
-        fallback_question,
-        conversation_history,
-    )
-    previous_questions = previous_questions or []
-
-    if stage not in {"OPEN", "DEEPEN", "ANCHOR"}:
-        return {
-            "nextQuestion": fallback_question,
-            "shouldChangeTopic": False,
-            "reason": "unsupported_stage",
-        }
-
-    prompt = f"""
+    previous_questions: List[str],
+    rejection_note: str = "",
+) -> str:
+    return f"""
 당신은 고령자와 자연스럽게 대화하는 한국어 말동무 AI입니다.
 
 대화 목표:
@@ -936,7 +929,7 @@ def generate_safe_followup_question(
 
 이미 물어본 질문:
 {_format_history(previous_questions)}
-
+{rejection_note}
 반드시 지킬 규칙:
 1. 질문은 한국어 1문장만 만듭니다.
 2. 질문은 반드시 물음표로 끝납니다.
@@ -971,81 +964,134 @@ def generate_safe_followup_question(
 {{"nextQuestion":"질문","shouldChangeTopic":false,"reason":"짧은 이유"}}
 """.strip()
 
-    try:
-        response = _get_client().chat.completions.create(
-            model=GPT_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "한국어 말동무 AI입니다. 반드시 JSON만 출력합니다.",
-                },
-                {
-                    "role": "user",
-                    "content": prompt,
-                },
-            ],
-            temperature=0.35,
-        )
 
-        content = response.choices[0].message.content
-        parsed = _extract_json_object(content)
-        question = clean_text(parsed.get("nextQuestion", ""))
-        should_change_topic = _coerce_bool(parsed.get("shouldChangeTopic", False))
-        reason = clean_text(parsed.get("reason", ""))
+_REJECTION_NOTE_TEMPLATES = {
+    "repeated_question": "방금 만든 질문 '{question}'은 이미 물어본 질문과 완전히 같아서 사용할 수 없습니다. 같은 질문을 반복하지 말고 다른 표현으로 다시 만드세요.",
+    "similar_question": "방금 만든 질문 '{question}'은 이미 물어본 질문과 의도가 너무 비슷해서 사용할 수 없습니다. 겹치지 않는 다른 각도로 다시 만드세요.",
+    "ungrounded_question": "방금 만든 질문 '{question}'은 최근 자유대화 답변에 나오지 않은 내용을 묻고 있어 사용할 수 없습니다. 사용자가 실제로 말한 내용에 더 밀착해서 다시 만드세요.",
+    "unsafe_question": "방금 만든 질문 '{question}'은 형식이나 금지 표현 규칙을 어겨서 사용할 수 없습니다. 규칙을 다시 확인하고 짧은 물음표 문장 하나로 다시 만드세요.",
+}
 
-        if is_weak_free_talk_answer(conversation_history[-1] if conversation_history else ""):
-            should_change_topic = True
 
-        if question in {clean_text(item) for item in previous_questions}:
-            return {
-                "nextQuestion": fallback_question,
-                "shouldChangeTopic": should_change_topic,
-                "reason": "repeated_question",
-            }
+def _call_followup_llm(prompt: str) -> dict:
+    response = _get_client().chat.completions.create(
+        model=GPT_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": "한국어 말동무 AI입니다. 반드시 JSON만 출력합니다.",
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            },
+        ],
+        temperature=0.35,
+    )
 
-        if is_similar_to_previous_question(question, previous_questions):
-            return {
-                "nextQuestion": fallback_question,
-                "shouldChangeTopic": should_change_topic,
-                "reason": "similar_question",
-            }
+    content = response.choices[0].message.content
+    parsed = _extract_json_object(content)
 
-        question = build_fallback_with_empathy(
-            question,
-            conversation_history,
-        )
+    return {
+        "question": clean_text(parsed.get("nextQuestion", "")),
+        "shouldChangeTopic": _coerce_bool(parsed.get("shouldChangeTopic", False)),
+        "reason": clean_text(parsed.get("reason", "")),
+    }
 
-        if (
-            stage in {"DEEPEN", "ANCHOR"}
-            and not should_change_topic
-            and not is_question_grounded_in_history(question, conversation_history)
-        ):
-            return {
-                "nextQuestion": fallback_question,
-                "shouldChangeTopic": False,
-                "reason": "ungrounded_question",
-            }
 
-        if is_safe_followup_question(question):
-            return {
-                "nextQuestion": question,
-                "shouldChangeTopic": should_change_topic,
-                "reason": reason,
-            }
+def _validate_followup_question(
+    question: str,
+    stage: str,
+    conversation_history: List[str],
+    previous_questions: List[str],
+    should_change_topic: bool,
+) -> tuple[str | None, str]:
+    if question in {clean_text(item) for item in previous_questions}:
+        return None, "repeated_question"
 
-    except Exception:
+    if is_similar_to_previous_question(question, previous_questions):
+        return None, "similar_question"
+
+    question = build_fallback_with_empathy(question, conversation_history)
+
+    if (
+        stage in {"DEEPEN", "ANCHOR"}
+        and not should_change_topic
+        and not is_question_grounded_in_history(question, conversation_history)
+    ):
+        return None, "ungrounded_question"
+
+    if not is_safe_followup_question(question):
+        return None, "unsafe_question"
+
+    return question, ""
+
+
+def generate_safe_followup_question(
+    conversation_history: List[str],
+    stage: str,
+    fallback_question: str,
+    previous_questions: List[str] | None = None,
+) -> dict:
+    stage = str(stage or "").upper()
+    fallback_question = build_fallback_with_empathy(
+        fallback_question,
+        conversation_history,
+    )
+    previous_questions = previous_questions or []
+
+    if stage not in {"OPEN", "DEEPEN", "ANCHOR"}:
         return {
             "nextQuestion": fallback_question,
-            "shouldChangeTopic": is_weak_free_talk_answer(
-                conversation_history[-1] if conversation_history else ""
-            ),
-            "reason": "llm_failed",
+            "shouldChangeTopic": False,
+            "reason": "unsupported_stage",
         }
+
+    is_weak_answer = is_weak_free_talk_answer(
+        conversation_history[-1] if conversation_history else ""
+    )
+    rejection_note = ""
+
+    for _attempt in range(2):
+        prompt = _build_followup_prompt(
+            conversation_history=conversation_history,
+            stage=stage,
+            previous_questions=previous_questions,
+            rejection_note=rejection_note,
+        )
+
+        try:
+            generated = _call_followup_llm(prompt)
+        except Exception:
+            return {
+                "nextQuestion": fallback_question,
+                "shouldChangeTopic": is_weak_answer,
+                "reason": "llm_failed",
+            }
+
+        should_change_topic = generated["shouldChangeTopic"] or is_weak_answer
+
+        validated_question, rejection_reason = _validate_followup_question(
+            question=generated["question"],
+            stage=stage,
+            conversation_history=conversation_history,
+            previous_questions=previous_questions,
+            should_change_topic=should_change_topic,
+        )
+
+        if validated_question:
+            return {
+                "nextQuestion": validated_question,
+                "shouldChangeTopic": should_change_topic,
+                "reason": generated["reason"],
+            }
+
+        rejection_note = "\n" + _REJECTION_NOTE_TEMPLATES[rejection_reason].format(
+            question=generated["question"] or "(빈 질문)"
+        ) + "\n"
 
     return {
         "nextQuestion": fallback_question,
-        "shouldChangeTopic": is_weak_free_talk_answer(
-            conversation_history[-1] if conversation_history else ""
-        ),
-        "reason": "unsafe_question",
+        "shouldChangeTopic": is_weak_answer,
+        "reason": rejection_reason,
     }
