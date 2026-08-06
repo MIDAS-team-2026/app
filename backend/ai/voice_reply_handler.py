@@ -52,6 +52,7 @@ class ConversationTurnState:
     should_change_topic: bool
     is_memory_candidate: bool
     needs_memory_detail: bool
+    has_real_content: bool
 
 
 FIXED_QUESTIONS = [
@@ -1915,6 +1916,12 @@ def _analyze_conversation_turn(
         previous_question,
     )
     memory_evaluation = score_recall_memory_candidate(analyzed_text)
+    # "안녕"처럼 너무 짧아 실질적인 대화 내용이 없는 답변은(evaluate_memory_candidate가
+    # too_short_or_meaningless로 걸러낸 경우) 아직 이어갈 이야기 자체가 없는 것이지,
+    # "detail이 부족한 이야기"가 아니다. 이런 답변에는 ANCHOR("그때 ~")도,
+    # 기존 맥락을 전제로 한 DEEPEN 이어가기도 부적절하므로 has_real_content로 구분해
+    # 새 주제를 여는 흐름(OPEN_TOPIC)으로 보낸다.
+    has_real_content = "too_short_or_meaningless" not in memory_evaluation["reasons"]
     should_change_topic = (
         _is_negated_action_response(latest_text)
         and not confirmed_text
@@ -1934,11 +1941,13 @@ def _analyze_conversation_turn(
         should_change_topic=should_change_topic,
         is_memory_candidate=bool(memory_evaluation["isValid"]),
         needs_memory_detail=(
-            topic != "PERSON"
+            has_real_content
+            and topic != "PERSON"
             and not memory_evaluation["isValid"]
             and not _is_low_info_response(analyzed_text)
             and not _is_negative_response(analyzed_text)
         ),
+        has_real_content=has_real_content,
     )
 
 
@@ -1950,10 +1959,12 @@ def _decide_next_conversation_action(
 
     has_followup_context를 더 이상 규칙 기반 주제 분류(state.topic) 결과로
     좁히지 않는다 — "이 문장이 무슨 주제인지" 우리가 못 알아챘다고 해서
-    엉뚱한 새 주제로 강제 전환하지 않고, 항상 FOLLOW_UP/DEEPEN으로 보내
-    generate_safe_followup_question(LLM)이 전체 대화 맥락을 보고 판단하게
-    한다. 진짜 새 주제를 열어야 하는 순간(회상 복귀, 부정 행동 표현, 반복되는
-    저정보 응답)은 after_recall_answer/should_change_topic과
+    엉뚱한 새 주제로 강제 전환하지 않고, 실질적인 내용이 있는 답변이면
+    FOLLOW_UP/DEEPEN으로 보내 generate_safe_followup_question(LLM)이 전체
+    대화 맥락을 보고 판단하게 한다. "안녕"처럼 아직 이어갈 이야기 자체가
+    없는 답변(state.has_real_content=False)만 OPEN_TOPIC으로 새로 연다.
+    그 외에 진짜 새 주제를 열어야 하는 순간(회상 복귀, 부정 행동 표현,
+    반복되는 저정보 응답)은 after_recall_answer/should_change_topic과
     _get_stage_fallback_candidates의 REPEATED_LOW_INFO_QUESTIONS,
     그리고 LLM 자신이 반환하는 shouldChangeTopic 신호가 담당한다.
     """
@@ -1962,7 +1973,7 @@ def _decide_next_conversation_action(
         after_recall_answer=state.after_recall_answer,
         should_change_topic=state.should_change_topic,
         needs_memory_detail=state.needs_memory_detail,
-        has_followup_context=True,
+        has_followup_context=state.has_real_content,
     )
 
 
