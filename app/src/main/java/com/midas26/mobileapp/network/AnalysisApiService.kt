@@ -37,7 +37,27 @@ interface AnalysisApiService {
         @Path("userId") userId: Int,
         @Query("date") date: String
     ): Response<com.midas26.mobileapp.network.ApiResponse<DailyScoreResponse>>
+
+    @GET("api/ai/analysis/linguistic-markers/user/{userId}")
+    suspend fun getLinguisticMarkers(
+        @Path("userId") userId: Int
+    ): Response<com.midas26.mobileapp.network.ApiResponse<List<LinguisticMarkerResponse>>>
 }
+
+/** 세션 1건의 언어 지표. analyzedAt 최신순으로 내려온다(index 0 = 오늘/최신). */
+data class LinguisticMarkerResponse(
+    val sessionId: Long?,
+    val analyzedAt: String?,
+    val pronounNounRatio: Float?,
+    val nounRatio: Float?,
+    val lexicalDiversityMattr: Float?,
+    val repetitionScore: Float?,
+    val pronounNounRatioZScore: Float?,
+    val nounRatioZScore: Float?,
+    val lexicalDiversityMattrZScore: Float?,
+    val repetitionScoreZScore: Float?,
+    val baselineSampleSize: Int?
+)
 
 data class DailyScoreResponse(
     val date: String?,

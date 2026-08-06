@@ -34,6 +34,7 @@ import com.midas26.mobileapp.ui.analysis.AnalysisResultScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisUserSelectScreen
 import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
 import com.midas26.mobileapp.network.LinkedUserInfo
+import com.midas26.mobileapp.ui.analysis.LinguisticMarkerDetailScreen
 import com.midas26.mobileapp.ui.auth.AuthViewModel
 import com.midas26.mobileapp.ui.auth.ForgotPasswordScreen
 import com.midas26.mobileapp.ui.auth.ForgotPasswordVerifyScreen
@@ -96,6 +97,7 @@ private val mainRoutes = setOf(
     Routes.LocationDetail,
     Routes.LocationRoute,
     Routes.AnalysisUserSelect,
+    Routes.LinguisticMarkerDetail,
     GuardianManagedUsersRoute
 )
 
@@ -323,7 +325,8 @@ fun AppNavHost(
             UserHomeTab.Chat
 
         Routes.AnalysisResult,
-        Routes.AnalysisUserSelect ->
+        Routes.AnalysisUserSelect,
+        Routes.LinguisticMarkerDetail ->
             if (isGuardian) GuardianHomeTab.Analysis else UserHomeTab.Analysis
 
         Routes.LocationList,
@@ -1319,6 +1322,18 @@ fun AppNavHost(
                                     // 사용자 모드에서는 기존처럼 이전 화면으로 돌아갑니다.
                                     navController.popBackStackIfCurrent(Routes.AnalysisResult)
                                 }
+                            },
+                            onNavigateTextScoreDetail = {
+                                navController.navigate(Routes.LinguisticMarkerDetail)
+                            },
+                            viewModel = analysisViewModel
+                        )
+                    }
+
+                    composable(Routes.LinguisticMarkerDetail) {
+                        LinguisticMarkerDetailScreen(
+                            onBack = {
+                                navController.popBackStackIfCurrent(Routes.LinguisticMarkerDetail)
                             },
                             viewModel = analysisViewModel
                         )
