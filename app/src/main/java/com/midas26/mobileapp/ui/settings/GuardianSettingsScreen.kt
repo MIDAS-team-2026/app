@@ -73,6 +73,9 @@ import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.notification.AlarmScheduler
 import com.midas26.mobileapp.notification.NotificationHelper
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
+import com.midas26.mobileapp.ui.legal.LegalTermsDetailDialog
+import com.midas26.mobileapp.ui.legal.LegalTermsItem
+import com.midas26.mobileapp.ui.legal.LegalTermsItems
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
@@ -160,6 +163,7 @@ fun GuardianSettingsScreen(
     var showAnalysisTimePicker by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showReplayTutorialDialog by remember { mutableStateOf(false) }
+    var selectedLegalTerm by remember { mutableStateOf<LegalTermsItem?>(null) }
 
     NotificationHelper.createChannel(context)
 
@@ -243,6 +247,13 @@ fun GuardianSettingsScreen(
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }
+        )
+    }
+
+    selectedLegalTerm?.let { item ->
+        LegalTermsDetailDialog(
+            item = item,
+            onDismiss = { selectedLegalTerm = null }
         )
     }
 
@@ -344,32 +355,28 @@ fun GuardianSettingsScreen(
                     }
                 )
 
-                SettingsRow(
-                    label = "개인정보 처리방침",
-                    onClick = {}
-                )
-
                 HorizontalDivider(
                     color = AppColor.divider,
                     thickness = 1.dp,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                SettingsRow(label = "이용 약관", onClick = {})
+                LegalTermsItems.forEach { item ->
+                    SettingsRow(
+                        label = item.title,
+                        onClick = {
+                            selectedLegalTerm = item
+                        }
+                    )
 
-                HorizontalDivider(
-                    color = AppColor.divider,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
+                    HorizontalDivider(
+                        color = AppColor.divider,
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
 
                 SettingsRow(label = "문의하기", onClick = {})
-
-                HorizontalDivider(
-                    color = AppColor.divider,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
