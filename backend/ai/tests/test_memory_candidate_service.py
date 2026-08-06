@@ -31,6 +31,7 @@ class MemoryCandidateServiceTest(unittest.TestCase):
                     "answerType": "PERSON",
                     "answerKeyword": "딸",
                     "qualityScore": 60,
+                    "continuesPreviousEvent": True,
                 },
                 {
                     "sourceRecordId": 12,
@@ -39,6 +40,7 @@ class MemoryCandidateServiceTest(unittest.TestCase):
                     "answerType": "PLACE",
                     "answerKeyword": "집",
                     "qualityScore": 60,
+                    "continuesPreviousEvent": True,
                 },
                 {
                     "sourceRecordId": 20,
@@ -71,6 +73,7 @@ class MemoryCandidateServiceTest(unittest.TestCase):
                 "answerType": "FOOD",
                 "answerValue": "김치볶음밥",
                 "qualityScore": 75,
+                "continuesPreviousEvent": False,
             },
             result["candidates"][0]["recallTarget"],
         )

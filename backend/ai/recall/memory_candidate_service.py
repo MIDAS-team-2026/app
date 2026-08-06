@@ -35,6 +35,7 @@ class MemoryCandidateSelection:
                             "answerType": item.answer_type.value,
                             "answerValue": item.answer_value,
                             "qualityScore": item.quality_score,
+                            "continuesPreviousEvent": item.continues_previous_event,
                         }
                         for item in candidate.evidence
                     ],
@@ -44,6 +45,9 @@ class MemoryCandidateSelection:
                         "answerType": candidate.recall_target.answer_type.value,
                         "answerValue": candidate.recall_target.answer_value,
                         "qualityScore": candidate.recall_target.quality_score,
+                        "continuesPreviousEvent": (
+                            candidate.recall_target.continues_previous_event
+                        ),
                     },
                     "answerValues": {
                         key: list(values)

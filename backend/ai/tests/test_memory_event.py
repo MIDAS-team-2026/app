@@ -53,6 +53,7 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
                 answer_type=MemoryAnswerType.PERSON,
                 answer_value="딸",
                 quality_score=60,
+                continues_previous_event=True,
             ),
             MemoryEvidence.create(
                 source_record_id=12,
@@ -61,6 +62,7 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
                 answer_type=MemoryAnswerType.PLACE,
                 answer_value="집",
                 quality_score=60,
+                continues_previous_event=True,
             ),
         ]
 
@@ -106,6 +108,29 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         self.assertEqual(2, len(drafts))
         self.assertEqual((20,), drafts[0].source_record_ids)
         self.assertEqual((21,), drafts[1].source_record_ids)
+
+    def test_same_untyped_detail_kind_is_not_merged_twice(self):
+        evidence = [
+            MemoryEvidence.create(
+                source_record_id=22,
+                text="아침에 김밥을 먹었어",
+                topic="MEAL",
+                answer_type=MemoryAnswerType.FOOD,
+                quality_score=70,
+            ),
+            MemoryEvidence.create(
+                source_record_id=23,
+                text="점심에는 국수를 먹었어",
+                topic="MEAL",
+                answer_type=MemoryAnswerType.FOOD,
+                quality_score=75,
+                continues_previous_event=True,
+            ),
+        ]
+
+        drafts = group_memory_evidence(evidence)
+
+        self.assertEqual(2, len(drafts))
 
     def test_payload_contract_accepts_hyeongseop_analysis_fields(self):
         evidence = MemoryEvidence.from_payload(
@@ -176,6 +201,7 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
                 answer_type=MemoryAnswerType.PERSON,
                 answer_value="딸",
                 quality_score=80,
+                continues_previous_event=True,
             ),
         ]
 

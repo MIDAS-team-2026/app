@@ -36,6 +36,8 @@ from recall.conversation_recall_generator import (
     score_recall_memory_candidate,
     select_recall_memory_candidates,
 )
+from recall.memory_candidate_service import build_memory_candidate_selection
+from recall.memory_event import MemoryAnswerType, infer_answer_type
 from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,21 @@ class ConversationTurnState:
     should_change_topic: bool
     is_memory_candidate: bool
     needs_memory_detail: bool
+
+
+@dataclass(frozen=True)
+class RecallCandidateContext:
+    conversation_history: tuple[str, ...] = ()
+    source_record_ids: tuple[tuple[str, int], ...] = ()
+
+    def find_source_record_id(self, source_text: str) -> int | None:
+        normalized_source = _normalize_text(source_text)
+
+        for text, record_id in self.source_record_ids:
+            if _normalize_text(text) == normalized_source:
+                return record_id
+
+        return None
 
 
 FIXED_QUESTIONS = [
@@ -725,7 +742,7 @@ def _count_fixed_answers(session_records: list[dict]) -> int:
     )
 
 
-def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[str]:
+def _extract_recall_candidate_records(session_records: list[dict]) -> list[dict]:
     """
     가장 최근 회상 사이클 이후의 자유대화 답변만 회상 질문 후보로 사용한다.
 
@@ -739,7 +756,7 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
     회상 질문 → 회상 답변 → 다시 회상 질문 후보
     형태의 순환 구조가 생길 수 있다.
     """
-    transcripts = []
+    candidates = []
     sorted_records = sorted(
         session_records,
         key=lambda record: int(record.get("recordId") or 0),
@@ -781,9 +798,163 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
         if role in {"FIXED", "INITIAL", "RECALL"}:
             continue
 
-        transcripts.append(text)
+        candidates.append(record)
 
-    return transcripts
+    return candidates
+
+
+def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[str]:
+    return [
+        str(record.get("transcriptText") or "").strip()
+        for record in _extract_recall_candidate_records(session_records)
+    ]
+
+
+def _normalize_memory_event_topic(topic: str | None) -> str:
+    normalized = str(topic or "").strip().upper()
+    aliases = {
+        "FOOD": "MEAL",
+        "HOME": "PLACE",
+        "SCENERY": "PLACE",
+        "REST": "ACTIVITY",
+        "ROUTINE": "ACTIVITY",
+        "SHOPPING": "OBJECT",
+    }
+
+    if normalized in {"", "LOW_INFO", "NEGATIVE"}:
+        return "UNGROUPED"
+
+    return aliases.get(normalized, normalized)
+
+
+def _fallback_answer_type_for_topic(topic: str) -> MemoryAnswerType:
+    topic_map = {
+        "MEAL": MemoryAnswerType.FOOD,
+        "PERSON": MemoryAnswerType.PERSON,
+        "PLACE": MemoryAnswerType.PLACE,
+        "MEDIA": MemoryAnswerType.MEDIA,
+        "ACTIVITY": MemoryAnswerType.ACTIVITY,
+        "OBJECT": MemoryAnswerType.OBJECT,
+    }
+    return topic_map.get(topic, MemoryAnswerType.UNKNOWN)
+
+
+def _build_memory_evidence_payloads(
+    session_records: list[dict],
+) -> list[dict]:
+    candidate_records = _extract_recall_candidate_records(session_records)
+    candidate_ids = {
+        int(record.get("recordId") or 0)
+        for record in candidate_records
+    }
+    sorted_records = sorted(
+        session_records,
+        key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
+    )
+    cycle_texts = []
+    payloads = []
+    last_event_topic = None
+
+    for index, record in enumerate(sorted_records):
+        record_id = int(record.get("recordId") or 0)
+
+        if record_id not in candidate_ids:
+            continue
+
+        text = str(record.get("transcriptText") or "").strip()
+        previous_question = (
+            str(sorted_records[index - 1].get("aiReplyText") or "")
+            if index > 0
+            else ""
+        )
+        cycle_texts.append(text)
+        detected_topic = _normalize_memory_event_topic(
+            _detect_conversation_topic(
+                text,
+                cycle_texts,
+                previous_question,
+            )
+        )
+        question_topics = {
+            _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
+            _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
+        }
+        continues_previous_event = (
+            last_event_topic is not None
+            and last_event_topic != "UNGROUPED"
+            and detected_topic == last_event_topic
+            and last_event_topic in question_topics
+        )
+        event_topic = (
+            last_event_topic
+            if continues_previous_event
+            else detected_topic
+        )
+        answer_type = infer_answer_type(previous_question)
+
+        if answer_type == MemoryAnswerType.UNKNOWN:
+            answer_type = _fallback_answer_type_for_topic(event_topic)
+
+        evaluation = score_recall_memory_candidate(text)
+        payloads.append(
+            {
+                "sourceRecordId": record_id,
+                "sourceText": text,
+                "topic": event_topic,
+                "answerType": answer_type.value,
+                "qualityScore": evaluation["recallScore"],
+                "continuesPreviousEvent": continues_previous_event,
+            }
+        )
+        last_event_topic = event_topic
+
+    return payloads
+
+
+def _get_structured_recall_ready_context(
+    session_records: list[dict],
+    previous_question: str = "",
+) -> RecallCandidateContext:
+    payloads = _build_memory_evidence_payloads(session_records)
+
+    if len(payloads) < 2:
+        return RecallCandidateContext()
+
+    matured_payloads = payloads[:-1]
+    selection = build_memory_candidate_selection(
+        matured_payloads,
+        max_candidates=3,
+    )
+    latest_text = payloads[-1]["sourceText"]
+    latest_evaluation = score_recall_memory_candidate(latest_text)
+    transcripts = [payload["sourceText"] for payload in payloads]
+    latest_topic = _detect_conversation_topic(
+        latest_text,
+        transcripts,
+        previous_question,
+    )
+    timing = decide_recall_timing(
+        matured_candidate_count=len(selection.candidates),
+        latest_is_memory_candidate=bool(latest_evaluation["isValid"]),
+        latest_has_followup_context=(
+            latest_topic is not None
+            and latest_topic not in {"LOW_INFO", "NEGATIVE"}
+        ),
+        latest_is_low_info=_is_low_info_response(latest_text),
+        latest_is_negative=_is_negative_response(latest_text),
+    )
+
+    if timing.action != RecallTimingAction.ASK_RECALL:
+        return RecallCandidateContext()
+
+    targets = tuple(candidate.recall_target for candidate in selection.candidates)
+    return RecallCandidateContext(
+        conversation_history=tuple(target.text for target in targets),
+        source_record_ids=tuple(
+            (target.text, target.source_record_id)
+            for target in targets
+        ),
+    )
 
 
 def _get_recall_ready_history(
@@ -3457,11 +3628,14 @@ def process_voice_reply(
             updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
-        recall_ready_history = _get_recall_ready_history(
-            transcripts,
+        recall_candidate_context = _get_structured_recall_ready_context(
+            updated_records,
             previous_question=_get_question_answered_by_latest_record(
                 updated_records
             ),
+        )
+        recall_ready_history = list(
+            recall_candidate_context.conversation_history
         )
 
         if not recall_ready_history:
@@ -3518,10 +3692,15 @@ def process_voice_reply(
             return
 
         recall_question_id = (saved_question or {}).get("questionId")
-        source_record_id = _find_memory_source_record_id(
-            updated_records,
-            source_text,
+        source_record_id = recall_candidate_context.find_source_record_id(
+            source_text
         )
+
+        if source_record_id is None:
+            source_record_id = _find_memory_source_record_id(
+                updated_records,
+                source_text,
+            )
 
         if not recall_question_id or source_record_id is None:
             logger.error(

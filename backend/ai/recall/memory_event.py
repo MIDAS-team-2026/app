@@ -195,6 +195,7 @@ class MemoryEvidence:
     answer_type: MemoryAnswerType = MemoryAnswerType.UNKNOWN
     answer_value: str = ""
     quality_score: int = 0
+    continues_previous_event: bool = False
 
     @classmethod
     def create(
@@ -206,6 +207,7 @@ class MemoryEvidence:
         answer_type: MemoryAnswerType | str = MemoryAnswerType.UNKNOWN,
         answer_value: str = "",
         quality_score: int = 0,
+        continues_previous_event: bool = False,
     ) -> "MemoryEvidence":
         record_id = int(source_record_id)
         cleaned_text = " ".join(str(text or "").split())
@@ -223,6 +225,7 @@ class MemoryEvidence:
             answer_type=parse_answer_type(answer_type),
             answer_value=" ".join(str(answer_value or "").split()),
             quality_score=max(0, min(int(quality_score or 0), 100)),
+            continues_previous_event=bool(continues_previous_event),
         )
 
     @classmethod
@@ -247,6 +250,7 @@ class MemoryEvidence:
                 or ""
             ),
             quality_score=payload.get("qualityScore") or 0,
+            continues_previous_event=payload.get("continuesPreviousEvent", False),
         )
 
 
@@ -320,13 +324,22 @@ class MemoryCandidateDraft:
         if item.topic != self.topic:
             return False
 
+        if not item.continues_previous_event:
+            return False
+
         record_gap = item.source_record_id - self.source_record_ids[-1]
 
         if not 0 < record_gap <= max_record_gap:
             return False
 
-        if not item.answer_value or item.answer_type == MemoryAnswerType.UNKNOWN:
-            return True
+        if not item.answer_value:
+            return not any(
+                existing.answer_type == item.answer_type
+                for existing in self.evidence
+            )
+
+        if item.answer_type == MemoryAnswerType.UNKNOWN:
+            return False
 
         existing_values = self.answer_values.get(item.answer_type.value, ())
         return not existing_values or item.answer_value in existing_values
