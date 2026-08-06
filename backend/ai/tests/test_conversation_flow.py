@@ -212,35 +212,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual("DEEPEN", detailed.stage)
         self.assertEqual("ANCHOR", incomplete.stage)
 
-    def test_conversation_policy_changes_topic_after_enough_same_topic_turns(self):
-        continue_topic = conversation_policy.decide_conversation_action(
-            candidate_count=1,
-            after_recall_answer=False,
-            should_change_topic=False,
-            has_followup_context=True,
-            consecutive_topic_turns=2,
-        )
-        change_topic = conversation_policy.decide_conversation_action(
-            candidate_count=1,
-            after_recall_answer=False,
-            should_change_topic=False,
-            has_followup_context=True,
-            consecutive_topic_turns=3,
-        )
-
-        self.assertEqual(
-            conversation_policy.ConversationAction.FOLLOW_UP,
-            continue_topic.action,
-        )
-        self.assertEqual(
-            conversation_policy.ConversationAction.CHANGE_TOPIC,
-            change_topic.action,
-        )
-        self.assertEqual(
-            "current_topic_has_enough_detail",
-            change_topic.reason,
-        )
-
     def test_conversation_turn_state_keeps_analysis_separate_from_action(self):
         records = [
             {
@@ -269,12 +240,67 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         )
 
         self.assertEqual("PERSON", state.topic)
-        self.assertEqual(2, state.consecutive_topic_turns)
         self.assertTrue(state.is_memory_candidate)
         self.assertEqual(
             conversation_policy.ConversationAction.FOLLOW_UP,
             decision.action,
         )
+
+    def test_movie_conversation_keeps_following_up_without_keyword_bank_coverage(self):
+        # 회귀 테스트: 실제 세션 로그에서 "영화" 관련 대화가 몇 턴 이어졌는데,
+        # 옛 규칙 기반 시스템은 "영화"가 주제 키워드 사전에 없어서 매 턴 엉뚱한
+        # 주제 전환을 강제했다. 지금은 has_followup_context가 주제 분류가 아니라
+        # is_weak_free_talk_answer(답변이 빈약한지)로만 결정되므로, 주제가 무엇으로
+        # 분류되든(None이든 PLACE든 PERSON이든) 답변 자체가 충실하면 계속
+        # FOLLOW_UP으로 이어져야 한다.
+        records = [
+            {
+                "recordId": index,
+                "turnOrder": index,
+                "transcriptText": text,
+                "aiReplyText": "",
+                "answerRole": None,
+            }
+            for index, text in enumerate(
+                [
+                    "영화 보러 나갔어",
+                    "돈가스와 우동을 먹었어",
+                    "친구들과 토론했다",
+                    "오디세우스가 슬퍼 보였어",
+                ],
+                start=1,
+            )
+        ]
+
+        state = handler._analyze_conversation_turn(
+            records,
+            "오디세우스가 슬퍼 보였어",
+        )
+        decision = handler._decide_next_conversation_action(
+            state,
+            candidate_count=2,
+        )
+
+        self.assertFalse(
+            free_talk_generator.is_weak_free_talk_answer(state.latest_text)
+        )
+        self.assertEqual(
+            conversation_policy.ConversationAction.FOLLOW_UP,
+            decision.action,
+        )
+        self.assertNotEqual(
+            conversation_policy.ConversationAction.OPEN_TOPIC,
+            decision.action,
+        )
+
+    def test_observed_third_person_emotion_is_not_the_users_own_feeling(self):
+        # "오디세우스가 슬퍼 보였어"처럼 영화/이야기 속 인물의 감정을 전하는
+        # 관찰 서술은 사용자 본인의 부정적 감정이 아니다. 반면 "나 오늘 너무
+        # 슬펐어"처럼 화자 자신의 감정을 직접 말하는 문장은 여전히 부정
+        # 감정으로 감지되어야 한다(OBSERVED_EMOTION_PATTERN이 과하게
+        # 억제하지 않는지 확인).
+        self.assertFalse(handler._is_negative_response("오디세우스가 슬퍼 보였어"))
+        self.assertTrue(handler._is_negative_response("나 오늘 너무 슬펐어"))
 
     def test_topic_openers_prioritize_topics_not_used_recently(self):
         records = [
@@ -346,84 +372,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             handler._detect_topic_from_question(food_questions[0]),
         )
 
-    def test_consecutive_topic_turns_reset_when_user_changes_topic(self):
-        self.assertEqual(
-            3,
-            handler._count_consecutive_topic_turns(
-                [
-                    "아들과 통화했어",
-                    "손주 학교 이야기를 들었어",
-                    "좋았지",
-                ],
-                "PERSON",
-                "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
-            ),
-        )
-        self.assertEqual(
-            1,
-            handler._count_consecutive_topic_turns(
-                [
-                    "아들과 통화했어",
-                    "손주 학교 이야기를 들었어",
-                    "저녁에는 뉴스를 봤어",
-                ],
-                "MEDIA",
-                "오늘 재미있게 보신 방송이 있으세요?",
-            ),
-        )
-
-    def test_third_same_topic_answer_moves_to_a_different_topic(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "아들과 통화했어",
-                "aiReplyText": "아드님과 어떤 이야기를 나누셨어요?",
-                "answerRole": None,
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "손주 학교 이야기를 들었어",
-                "aiReplyText": "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
-                "answerRole": None,
-            },
-            {
-                "recordId": 3,
-                "turnOrder": 3,
-                "transcriptText": "좋았지",
-                "aiReplyText": "",
-                "answerRole": None,
-            },
-        ]
-
-        question = handler._get_next_normal_question(
-            candidate_count=2,
-            session_records=records,
-            latest_text="좋았지",
-        )
-
-        self.assertTrue(question.startswith("좋으셨겠어요."))
-        self.assertNotIn("사람", question)
-        self.assertNotIn("그분", question)
-        self.assertNotIn("누구", question)
-
-    def test_person_story_detail_is_not_requested_twice(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "손주 학교 이야기를 들었어",
-            [
-                "아들과 통화했어",
-                "손주 학교 이야기를 들었어",
-            ],
-            "아드님과 무슨 이야기를 나누셨어요?",
-        )
-
-        self.assertTrue(questions)
-        self.assertTrue(
-            all("어떤 이야기를" not in question for question in questions)
-        )
-
     def test_future_wish_does_not_receive_past_positive_acknowledgement(self):
         answer = "아들이 왔으면 좋겠어"
 
@@ -433,42 +381,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             [answer],
         )
         self.assertFalse(reply.startswith("좋으셨겠어요."))
-
-    def test_unspecified_food_wish_asks_which_food_first(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "같이 밥 먹고 싶어",
-            ["아들이 다음 주에 온대", "같이 밥 먹고 싶어"],
-            "그분은 언제쯤 만나실 예정이세요?",
-        )
-
-        self.assertEqual(
-            ["어떤 음식이 가장 먼저 떠오르세요?"],
-            questions,
-        )
-
-    def test_unlisted_specific_food_wish_does_not_reask_which_food(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "갈비를 먹고 싶어",
-            ["같이 밥 먹고 싶어", "갈비를 먹고 싶어"],
-            "어떤 음식이 가장 먼저 떠오르세요?",
-        )
-
-        self.assertTrue(questions)
-        self.assertTrue(
-            all("어떤 음식" not in question for question in questions)
-        )
-
-    def test_pain_answer_checks_current_condition_before_memory_detail(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "무릎이 아팠어",
-            ["무릎이 아팠어"],
-        )
-
-        self.assertTrue(questions)
-        self.assertTrue(all("지금" in question for question in questions))
 
     def test_negative_answer_receives_empathy_before_topic_change(self):
         records = [
@@ -504,7 +416,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
 
         self.assertTrue(question.startswith("그러셨군요."))
-        self.assertIn("움직이실 때", question)
         self.assertNotIn("보고 싶은 사람", question)
 
     def test_refreshed_answer_receives_positive_acknowledgement(self):
@@ -583,91 +494,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                     expected,
                     conversation_policy.decide_recall_timing(**inputs).action,
                 )
-
-    def test_non_memory_topic_can_continue_without_becoming_recall_candidate(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "글쎄",
-                "aiReplyText": "요즘 제일 보고 싶은 사람은 누구세요?",
-                "answerRole": None,
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "동생",
-                "aiReplyText": "",
-                "answerRole": None,
-            },
-        ]
-
-        with patch.object(
-            handler,
-            "generate_safe_followup_question",
-            side_effect=lambda **kwargs: {
-                "nextQuestion": kwargs["fallback_question"],
-                "shouldChangeTopic": False,
-                "reason": "simulation",
-            },
-        ):
-            question = handler._get_next_normal_question(
-                candidate_count=0,
-                session_records=records,
-                latest_text="동생",
-            )
-
-        self.assertFalse(
-            recall_generator.score_recall_memory_candidate("동생")["isValid"]
-        )
-        self.assertIn("그분", question)
-        self.assertNotIn("음식", question)
-
-    def test_wish_continues_as_conversation_but_not_as_recall_memory(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "글쎄",
-                "aiReplyText": "지금 드시고 싶은 음식이 있으세요?",
-                "answerRole": None,
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "피자가 먹고 싶어",
-                "aiReplyText": "",
-                "answerRole": None,
-            },
-        ]
-
-        self.assertFalse(
-            recall_generator.score_recall_memory_candidate(
-                "피자가 먹고 싶어"
-            )["isValid"]
-        )
-
-        with patch.object(
-            handler,
-            "generate_safe_followup_question",
-            side_effect=lambda **kwargs: {
-                "nextQuestion": kwargs["fallback_question"],
-                "shouldChangeTopic": False,
-                "reason": "simulation",
-            },
-        ):
-            question = handler._get_next_normal_question(
-                candidate_count=0,
-                session_records=records,
-                latest_text="피자가 먹고 싶어",
-            )
-
-        self.assertTrue(
-            any(
-                phrase in question
-                for phrase in ("이유", "드신다면", "누구와")
-            )
-        )
 
     def test_generation_history_appends_new_latest_answer(self):
         self.assertEqual(
@@ -782,50 +608,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             ),
         )
 
-    def test_unknown_person_name_receives_a_person_followup(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "글쎄",
-                "aiReplyText": "요즘 제일 보고 싶은 사람은 누구세요?",
-                "answerRole": None,
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "선생님",
-                "aiReplyText": "",
-                "answerRole": None,
-            },
-        ]
-
-        with patch.object(
-            handler,
-            "generate_safe_followup_question",
-            side_effect=lambda **kwargs: {
-                "nextQuestion": kwargs["fallback_question"],
-                "shouldChangeTopic": False,
-                "reason": "simulation",
-            },
-        ):
-            question = handler._get_next_normal_question(
-                candidate_count=1,
-                session_records=records,
-                latest_text="선생님",
-            )
-
-        self.assertIn(
-            question,
-            handler._get_topic_aware_fallback_candidates(
-                "DEEPEN",
-                "선생님",
-                ["선생님"],
-                "요즘 제일 보고 싶은 사람은 누구세요?",
-            ),
-        )
-        self.assertNotIn("어디에 다녀오", question)
-
     def test_everyday_object_answer_is_not_treated_as_shopping(self):
         previous_question = "최근에 손에 자주 잡는 물건이 있으세요?"
 
@@ -837,21 +619,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 previous_question,
             ),
         )
-
-        object_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "리모컨",
-            ["리모컨"],
-            previous_question,
-        )
-        self.assertEqual(
-            handler.TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS["OBJECT"]["DEEPEN"],
-            object_questions,
-        )
-        self.assertTrue(
-            all("사신" not in question and "고르" not in question for question in object_questions)
-        )
-
         self.assertEqual(
             "SHOPPING",
             handler._detect_conversation_topic(
@@ -872,16 +639,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 previous_question,
             ),
         )
-        self.assertEqual(
-            handler.TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS["ROUTINE"]["DEEPEN"],
-            handler._get_topic_aware_fallback_candidates(
-                "DEEPEN",
-                "저녁",
-                ["저녁"],
-                previous_question,
-            ),
-        )
-
         self.assertEqual(
             "MEDIA",
             handler._detect_conversation_topic(
@@ -921,54 +678,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         self.assertEqual("PLACE", handler._detect_topic_in_text("방송국에 갔어"))
 
-    def test_generic_tv_answer_does_not_assume_a_person_or_song(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "집에서 티비 봤어",
-            ["집에서 티비 봤어"],
-        )
-
-        self.assertIn("어떤 방송이나 프로그램을 보셨어요?", questions)
-        self.assertTrue(all("사람" not in question for question in questions))
-        self.assertTrue(all("노래" not in question for question in questions))
-
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "집에서 티비 봤어",
-                "aiReplyText": "",
-                "answerRole": None,
-            }
-        ]
-
-        with patch.object(
-            handler,
-            "generate_safe_followup_question",
-            side_effect=lambda **kwargs: {
-                "nextQuestion": kwargs["fallback_question"],
-                "shouldChangeTopic": False,
-                "reason": "simulation",
-            },
-        ):
-            first_followup = handler._get_next_normal_question(
-                candidate_count=1,
-                session_records=records,
-                latest_text="집에서 티비 봤어",
-            )
-
-        self.assertEqual("어떤 방송이나 프로그램을 보셨어요?", first_followup)
-
-        drama_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "드라마를 봤어",
-            ["드라마를 봤어"],
-        )
-        self.assertTrue(any("사람" in question for question in drama_questions))
-        self.assertTrue(
-            all("어떤 방송이나 프로그램" not in question for question in drama_questions)
-        )
-
     def test_staying_home_is_not_treated_as_a_visited_place(self):
         for answer in (
             "집에 있었어",
@@ -977,40 +686,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         ):
             with self.subTest(answer=answer):
                 self.assertEqual("HOME", handler._detect_topic_in_text(answer))
-                questions = handler._get_topic_aware_fallback_candidates(
-                    "DEEPEN",
-                    answer,
-                    [answer],
-                )
-                self.assertTrue(questions)
-                self.assertTrue(all("그곳" not in question for question in questions))
 
         self.assertEqual("MEDIA", handler._detect_topic_in_text("집에서 티비 봤어"))
         self.assertEqual("REST", handler._detect_topic_in_text("집에서 낮잠 잤어"))
         self.assertEqual("FOOD", handler._detect_topic_in_text("집에서 밥 먹었어"))
         self.assertEqual("PLACE", handler._detect_topic_in_text("집 밖에 다녀왔어"))
-
-    def test_unspecified_place_is_requested_before_place_details(self):
-        for answer in (
-            "집 밖에 다녀왔어",
-            "밖에 나갔다 왔어",
-            "어디 좀 다녀왔어",
-        ):
-            with self.subTest(answer=answer):
-                questions = handler._get_topic_aware_fallback_candidates(
-                    "DEEPEN",
-                    answer,
-                    [answer],
-                )
-                self.assertEqual(["어디에 다녀오셨어요?"], questions)
-
-        specific_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "마트에 다녀왔어",
-            ["마트에 다녀왔어"],
-        )
-        self.assertTrue(specific_questions)
-        self.assertTrue(all("그곳" in question for question in specific_questions))
 
     def test_body_words_without_symptoms_do_not_force_health_topic(self):
         self.assertEqual("FOOD", handler._detect_topic_in_text("사과랑 배를 먹었어"))
@@ -1056,7 +736,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertTrue(handler._is_negative_response(answer))
 
         question = free_talk_generator.build_fallback_with_empathy(
-            handler._get_topic_aware_fallback_candidates(
+            handler._get_stage_fallback_candidates(
                 "DEEPEN",
                 answer,
                 [answer],
@@ -1064,7 +744,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             [answer],
         )
         self.assertTrue(question.startswith("그러셨군요."))
-        self.assertNotIn("기분이 조금 가라앉", question)
 
     def test_appetite_absence_keeps_food_topic_with_empathy(self):
         for answer in (
@@ -1080,13 +759,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 self.assertTrue(handler._is_negative_response(answer))
                 self.assertEqual("FOOD", handler._detect_topic_in_text(answer))
 
-                questions = handler._get_topic_aware_fallback_candidates(
+                questions = handler._get_stage_fallback_candidates(
                     "DEEPEN",
                     answer,
                     [answer],
                 )
-                self.assertEqual(handler.FOOD_APPETITE_QUESTIONS["DEEPEN"], questions)
-
                 reply = free_talk_generator.build_fallback_with_empathy(
                     questions[0],
                     [answer],
@@ -1099,115 +776,16 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             "FOOD",
             handler._detect_conversation_topic(food_history[-1], food_history),
         )
-        food_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            food_history[-1],
-            food_history,
-        )
-        self.assertTrue(food_questions)
-        self.assertTrue(all("맛" not in question for question in food_questions))
 
         media_history = ["텔레비전 봤어", "별로였어"]
         self.assertEqual(
             "MEDIA",
             handler._detect_conversation_topic(media_history[-1], media_history),
         )
-        media_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            media_history[-1],
-            media_history,
-        )
-        self.assertTrue(media_questions)
-        self.assertTrue(all("기분" not in question for question in media_questions))
-
-    def test_place_and_rest_followups_do_not_repeat_given_details(self):
-        place_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "공원에 혼자 갔어",
-            ["공원에 혼자 갔어"],
-        )
-        self.assertTrue(place_questions)
-        self.assertTrue(all("혼자" not in question for question in place_questions))
-
-        rest_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "소파에서 낮잠 잤어",
-            ["소파에서 낮잠 잤어"],
-        )
-        self.assertTrue(rest_questions)
-        self.assertTrue(all("어디에서" not in question for question in rest_questions))
-
-    def test_person_followup_does_not_repeat_conversation_content(self):
-        history = ["아들과 통화했어", "건강 얘기했어"]
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            history[-1],
-            history,
-        )
-        self.assertTrue(questions)
-        self.assertTrue(all("어떤 이야기를" not in question for question in questions))
-
-    def test_pharmacy_does_not_assume_medicine_was_taken(self):
-        self.assertEqual("PLACE", handler._detect_topic_in_text("약국에 다녀왔어"))
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "약국에 다녀왔어",
-            ["약국에 다녀왔어"],
-        )
-        self.assertTrue(questions)
-        self.assertTrue(all("약은" not in question and "약 드신" not in question for question in questions))
 
     def test_standalone_soup_and_pharmacy_are_distinguished(self):
         self.assertEqual("FOOD", handler._detect_topic_in_text("국을 먹었어"))
         self.assertEqual("PLACE", handler._detect_topic_in_text("약국에 다녀왔어"))
-
-    def test_future_hospital_plan_uses_future_tense(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "내일 병원에 갈 거야",
-            ["내일 병원에 갈 거야"],
-        )
-        self.assertTrue(questions)
-        self.assertTrue(all("예정" in question for question in questions))
-        self.assertTrue(all("다녀오셨어" not in question for question in questions))
-
-    def test_future_plans_do_not_receive_past_tense_followups(self):
-        cases = (
-            "내일 아들이 올 거야",
-            "모레 공원에 갈 거야",
-            "내일 마트에서 장 볼 거야",
-            "저녁에 피자를 먹을 거야",
-            "내일 드라마를 볼 거야",
-            "내일 청소할 거야",
-        )
-
-        for answer in cases:
-            with self.subTest(answer=answer):
-                topic = handler._detect_conversation_topic(answer, [answer])
-                questions = handler._get_topic_aware_fallback_candidates(
-                    "DEEPEN",
-                    answer,
-                    [answer],
-                )
-                self.assertIn(topic, handler.FUTURE_TOPIC_QUESTIONS)
-                self.assertTrue(questions)
-                self.assertTrue(all("셨어요" not in question for question in questions))
-
-    def test_hospital_visit_without_symptoms_does_not_assume_pain(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "병원에 다녀왔어",
-            ["병원에 다녀왔어"],
-        )
-        self.assertTrue(questions)
-        self.assertTrue(
-            all(
-                "몸 상태" not in question
-                and "어느 쪽" not in question
-                and "괜찮으세요" not in question
-                for question in questions
-            )
-        )
 
     def test_wish_and_low_information_are_not_recall_memories(self):
         for answer in (
@@ -1241,7 +819,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         for answer, expected_topic in cases:
             with self.subTest(answer=answer):
-                self.assertTrue(handler._is_future_response(answer))
                 self.assertEqual(expected_topic, handler._detect_topic_in_text(answer))
                 self.assertFalse(
                     recall_generator.score_recall_memory_candidate(answer)["isValid"]
@@ -1252,14 +829,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                         [answer],
                     )
                 )
-
-                questions = handler._get_topic_aware_fallback_candidates(
-                    "DEEPEN",
-                    answer,
-                    [answer],
-                )
-                self.assertTrue(questions)
-                self.assertTrue(all("셨어요" not in question for question in questions))
 
         self.assertFalse(
             free_talk_generator.is_question_grounded_in_history(
@@ -1281,7 +850,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         for answer in cases:
             with self.subTest(answer=answer):
-                self.assertTrue(handler._is_future_response(answer))
                 self.assertFalse(
                     recall_generator.score_recall_memory_candidate(answer)["isValid"]
                 )
@@ -1314,11 +882,9 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
         )
 
-        self.assertFalse(handler._is_future_response(corrected_from_future))
         self.assertTrue(
             recall_generator.score_recall_memory_candidate(corrected_from_future)["isValid"]
         )
-        self.assertTrue(handler._is_future_response(corrected_to_future))
         self.assertFalse(
             recall_generator.score_recall_memory_candidate(corrected_to_future)["isValid"]
         )
@@ -1560,74 +1126,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 latest_text=answer,
             )
 
-        self.assertNotIn("식사는 못", question)
-        self.assertNotIn("음식", question)
-        self.assertIn("마셨어요", question)
         self.assertEqual(["물은 마셨어"], generator.call_args.kwargs["conversation_history"])
-
-    def test_contact_answer_uses_contact_specific_followup(self):
-        answer = "아들은 못 만났고 동생과 통화했어"
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            handler._get_confirmed_text_after_negated_action(answer),
-            [handler._get_confirmed_text_after_negated_action(answer)],
-        )
-
-        self.assertEqual(handler.PERSON_CONTACT_QUESTIONS["DEEPEN"], questions)
-        self.assertTrue(all("통화" in question or "이야기" in question for question in questions))
-
-        detailed_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "오후에 집에서 동생과 통화했어",
-            ["오후에 집에서 동생과 통화했어"],
-        )
-        self.assertTrue(detailed_questions)
-        self.assertTrue(all("언제" not in question for question in detailed_questions))
-        self.assertTrue(all("어디" not in question for question in detailed_questions))
-
-    def test_rich_answer_changes_topic_instead_of_reasking_known_details(self):
-        answer = "집에서 피자를 혼자 맛있게 먹었어"
-        records = [
-            {
-                "recordId": 30,
-                "turnOrder": 1,
-                "transcriptText": answer,
-                "aiReplyText": "",
-                "answerRole": None,
-            }
-        ]
-
-        with patch.object(
-            handler,
-            "generate_safe_followup_question",
-            side_effect=lambda **kwargs: {
-                "nextQuestion": kwargs["fallback_question"],
-                "shouldChangeTopic": False,
-                "reason": "simulation",
-            },
-        ):
-            question = handler._get_next_normal_question(
-                candidate_count=1,
-                session_records=records,
-                latest_text=answer,
-            )
-
-        self.assertNotIn("혼자", question)
-        self.assertNotIn("어디에서", question)
-        self.assertNotIn("맛", question)
-        self.assertNotIn("음식", question)
-        self.assertNotIn("드신 것", question)
-        self.assertTrue(question.startswith("좋으셨겠어요."))
-
-    def test_conditional_wish_uses_future_person_questions(self):
-        answer = "아들이 왔으면 좋겠어"
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            answer,
-            [answer],
-        )
-        self.assertTrue(handler._is_future_response(answer))
-        self.assertEqual(handler.FUTURE_TOPIC_QUESTIONS["PERSON"], questions)
 
     def test_words_starting_with_an_are_not_mistaken_for_negation(self):
         for answer in ("가족이 무사해서 안심했어", "오늘 하루는 안전했어"):
@@ -2048,14 +1547,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
         )
 
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "아들이 보고 싶어",
-            ["아들이 보고 싶어"],
-        )
-        self.assertTrue(questions)
-        self.assertTrue(all("이야기를 나누셨어" not in question for question in questions))
-
     def test_followup_does_not_turn_future_wish_or_negation_into_past_event(self):
         invalid_pairs = (
             ("그 음식은 어디에서 드셨어요?", "피자가 먹고 싶어"),
@@ -2212,7 +1703,8 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             *handler.AFTER_RECALL_OPENING_QUESTIONS,
             *handler.REPEATED_LOW_INFO_QUESTIONS["DEEPEN"],
             *handler.REPEATED_LOW_INFO_QUESTIONS["ANCHOR"],
-            *handler.TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS["LOW_INFO"]["ANCHOR"],
+            *handler.SAFE_STAGE_FALLBACK_QUESTIONS["DEEPEN"],
+            *handler.SAFE_STAGE_FALLBACK_QUESTIONS["ANCHOR"],
         ]
 
         for question in transition_questions:
@@ -2266,7 +1758,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         self.assertIn(
             first_question,
-            handler.TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS["LOW_INFO"]["DEEPEN"],
+            handler.SAFE_STAGE_FALLBACK_QUESTIONS["DEEPEN"],
         )
         self.assertNotIn(
             first_question,
@@ -4417,57 +3909,8 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             ),
         )
 
-    def test_negated_hospital_visit_does_not_allow_visit_followup(self):
-        candidates = handler._get_topic_aware_fallback_candidates(
-            "ANCHOR",
-            "이제 좀 나아",
-            ["병원에는 못 갔지만 약은 먹었어", "이제 좀 나아"],
-            "약 드신 뒤에는 몸이 좀 어떠셨어요?",
-        )
-
-        self.assertTrue(candidates)
-        self.assertTrue(all("병원" not in question for question in candidates))
-
     def test_cooking_soup_at_home_is_food_not_unspecified_place(self):
         self.assertEqual("FOOD", handler._detect_topic_in_text("집에서 국을 끓였어"))
-
-    def test_meeting_at_a_place_keeps_person_context(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "친구를 만났어",
-                "aiReplyText": "그분과 함께했던 일 중에 기억나는 장면이 있으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "공원에서 만났어",
-                "aiReplyText": "",
-            },
-        ]
-
-        question = handler._get_next_normal_question(
-            2,
-            records,
-            latest_text="공원에서 만났어",
-        )
-
-        self.assertIn("그분", question)
-        self.assertIn("그곳", question)
-        self.assertNotIn("집에서는", question)
-
-    def test_food_wish_question_does_not_sound_like_recall_test(self):
-        candidates = handler._get_topic_aware_fallback_candidates(
-            "ANCHOR",
-            "같이 밥 먹고 싶어",
-            ["손주가 보고 싶어", "같이 밥 먹고 싶어"],
-            "그분은 언제쯤 만나실 예정이세요?",
-        )
-
-        self.assertTrue(candidates)
-        self.assertTrue(all("기억" not in question for question in candidates))
-        self.assertTrue(all("떠올" not in question for question in candidates))
 
     def test_improved_health_answer_gets_relief_acknowledgement(self):
         reply = free_talk_generator.build_fallback_with_empathy(
@@ -4500,31 +3943,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             ),
         )
 
-    def test_wish_questions_do_not_assume_the_event_already_happened(self):
-        cases = (
-            ("손주가 보고 싶어", "PERSON"),
-            ("공원에 가고 싶어", "PLACE"),
-            ("밥을 먹고 싶어", "FOOD"),
-        )
-
-        for answer, expected_topic in cases:
-            with self.subTest(answer=answer):
-                questions = handler._get_topic_aware_fallback_candidates(
-                    "DEEPEN",
-                    answer,
-                    [answer],
-                )
-                self.assertTrue(questions)
-                self.assertEqual(expected_topic, handler._detect_topic_in_text(answer))
-                self.assertTrue(
-                    all(
-                        "하셨어" not in question
-                        and "다녀오셨어" not in question
-                        and "드셨어" not in question
-                        for question in questions
-                    )
-                )
-
     def test_negative_meta_answer_does_not_replace_the_recent_place_topic(self):
         self.assertEqual(
             "PLACE",
@@ -4532,87 +3950,6 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 ["공원에 가고 싶어", "아직은 못 갔어"],
             ),
         )
-
-    def test_future_trip_with_known_companion_asks_a_new_place_detail(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "공원에 가고 싶어",
-                "aiReplyText": "그곳에 가시면 가장 먼저 무엇을 하고 싶으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "아직은 못 갔어",
-                "aiReplyText": "그러셨군요. 오늘 집에서는 주로 어떻게 시간을 보내셨어요?",
-            },
-            {
-                "recordId": 3,
-                "turnOrder": 3,
-                "transcriptText": "내일 아들과 갈 거야",
-                "aiReplyText": "",
-            },
-        ]
-
-        question = handler._get_next_normal_question(
-            3,
-            records,
-            latest_text="내일 아들과 갈 거야",
-        )
-
-        self.assertIn("어떻게 가실 예정", question)
-        self.assertNotIn("혼자", question)
-        self.assertNotIn("함께 가실 분", question)
-
-    def test_in_person_conversation_does_not_jump_to_an_unrelated_home_topic(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "아들이 왔어",
-                "aiReplyText": "그분과 함께했던 일 중에 기억나는 장면이 있으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "같이 점심 먹었어",
-                "aiReplyText": "드셨을 때 맛은 어떠셨어요?",
-            },
-            {
-                "recordId": 3,
-                "turnOrder": 3,
-                "transcriptText": "거실에서 이야기했어",
-                "aiReplyText": "",
-            },
-        ]
-
-        question = handler._get_next_normal_question(
-            3,
-            records,
-            latest_text="거실에서 이야기했어",
-        )
-
-        self.assertIn("그분", question)
-        self.assertIn("이야기", question)
-        self.assertNotIn("집에서는", question)
-
-    def test_negated_and_future_contact_stays_with_the_person(self):
-        negated_questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "요즘 연락을 못 했어",
-            ["손주가 보고 싶어", "요즘 연락을 못 했어"],
-            "그분을 만나면 가장 먼저 어떤 말을 하고 싶으세요?",
-        )
-        future_questions = handler._get_topic_aware_fallback_candidates(
-            "ANCHOR",
-            "다음 주에 전화할 거야",
-            ["손주가 보고 싶어", "다음 주에 전화할 거야"],
-            "그분께 연락하게 되면 어떤 이야기를 나누고 싶으세요?",
-        )
-
-        self.assertTrue(all("그분" in question for question in negated_questions))
-        self.assertTrue(all("전화" in question or "그분" in question for question in future_questions))
 
     def test_correction_with_malgo_keeps_only_the_final_answer(self):
         answer = "아니 짜장면 말고 국수 먹었어"
@@ -4704,81 +4041,9 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertTrue(question.startswith("아하, 생각나셨군요."))
         self.assertNotIn("알겠습니다", question)
 
-    def test_future_nap_does_not_receive_a_past_rest_question(self):
-        answer = "조금 있다가 낮잠 잘 거야"
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": answer,
-                "aiReplyText": "",
-            }
-        ]
-
-        question = handler._get_next_normal_question(
-            1,
-            records,
-            latest_text=answer,
-        )
-
-        self.assertTrue(handler._is_future_response(answer))
-        self.assertNotIn("쉬고 나서는", question)
-        self.assertNotIn("쉬셨어", question)
-        self.assertIn("예정", question)
-
     def test_shopping_wish_is_recognized_without_assuming_a_purchase(self):
         answer = "새 신발을 사고 싶어"
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            answer,
-            [answer],
-        )
-
         self.assertEqual("SHOPPING", handler._detect_topic_in_text(answer))
-        self.assertTrue(questions)
-        self.assertTrue(all("사셨어" not in question for question in questions))
-
-    def test_drink_wish_uses_drink_wording(self):
-        questions = handler._get_topic_aware_fallback_candidates(
-            "DEEPEN",
-            "커피 마시고 싶어",
-            ["커피 마시고 싶어"],
-        )
-
-        self.assertEqual(handler.FOOD_DRINK_WISH_QUESTIONS, questions)
-        self.assertTrue(all("음식" not in question for question in questions))
-
-    def test_place_detail_is_not_requested_again_after_it_was_given(self):
-        records = [
-            {
-                "recordId": 1,
-                "turnOrder": 1,
-                "transcriptText": "아들을 만났어",
-                "aiReplyText": "그분이 생각날 때 가장 먼저 떠오르는 모습이 있으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
-                "transcriptText": "공원에서 만났어",
-                "aiReplyText": "그곳에서 그분과 무엇을 하셨어요?",
-            },
-            {
-                "recordId": 3,
-                "turnOrder": 3,
-                "transcriptText": "한 시간 있었어",
-                "aiReplyText": "",
-            },
-        ]
-
-        question = handler._get_next_normal_question(
-            3,
-            records,
-            latest_text="한 시간 있었어",
-        )
-
-        self.assertNotIn("어디", question)
-        self.assertNotIn("다녀오신 곳", question)
-        self.assertTrue("그곳" in question or "장소" in question or "주변" in question)
 
     def test_object_action_without_a_particle_survives_stt_style_speech(self):
         for answer in ("화분 옮겼어", "창문 열었어", "리모컨 뒀어"):

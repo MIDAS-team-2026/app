@@ -206,6 +206,16 @@ NEGATED_NEGATIVE_CUE_PATTERN = re.compile(
 )
 
 
+# "슬퍼 보였어"처럼 "-아/어 보이다"로 끝나는 관찰 서술은 화자 자신의 감정이
+# 아니라 다른 사람·이야기 속 인물의 묘사인 경우가 많아, 공감 접두어를
+# 붙이기 전에 먼저 제거한다.
+OBSERVED_EMOTION_PATTERN = re.compile(
+    r"(?:슬퍼|슬픈|힘들어|힘든|불안해|불안한|외로워|외로운|무서워|무서운|"
+    r"피곤해|피곤한|아파|아픈|속상해|속상한|우울해|우울한|불편해|불편한|"
+    r"화나|화난)\s*보(?:였|인다|여|였어|였다|였어요|였습니다|이네요)"
+)
+
+
 TOPIC_SIMILARITY_GROUPS = [
     ("방송", "프로그램", "텔레비전", "티비", "tv", "TV", "노래", "가수", "트롯", "미스터트롯", "임영웅"),
     ("집", "집안", "집밖", "집 밖", "집에", "집에서", "방", "거실"),
@@ -790,7 +800,7 @@ def build_fallback_with_empathy(
     negative_prefixes = ("그러셨군요", "그랬군요", "아이고")
     positive_prefixes = ("좋으셨겠어요", "좋았겠어요", "재미있으셨겠어요")
 
-    negative_evidence_text = latest_text
+    negative_evidence_text = OBSERVED_EMOTION_PATTERN.sub("", latest_text)
 
     for pattern in NEGATED_NEGATIVE_CUE_PATTERNS:
         negative_evidence_text = negative_evidence_text.replace(pattern, "")
@@ -944,6 +954,7 @@ def _build_followup_prompt(
 11. 감정 반응은 최대 1문장, 25자 안팎으로 짧게 합니다.
 12. 상담, 치료, 진단처럼 들리는 위로는 하지 않습니다.
 13. 전체 출력 질문은 "짧은 반응 + 질문" 형태여도 되지만, 합쳐서 1~2문장 이내로 유지합니다.
+14. 사용자가 이미 구체적인 대상(영화, 책, 사건, 사람 등 위 예시 목록에 없는 것이라도)을 언급했다면, 그 구체적인 내용을 최우선으로 이어갑니다. 위 "열 수 있는 일상 주제 예시" 목록은 OPEN 단계에서 완전히 새 주제를 고를 때만 참고하는 것이지, 이미 나온 이야기를 그 목록에 맞춰 다른 주제로 바꾸라는 뜻이 아닙니다.
 
 좋은 예:
 - 좋으셨겠어요. 그때 어떤 장면이 제일 기억나세요?

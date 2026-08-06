@@ -16,9 +16,6 @@ class RecallTimingAction(str, Enum):
     ASK_RECALL = "ASK_RECALL"
 
 
-MAX_CONSECUTIVE_TOPIC_TURNS = 3
-
-
 @dataclass(frozen=True)
 class ConversationDecision:
     action: ConversationAction
@@ -39,8 +36,13 @@ def decide_conversation_action(
     should_change_topic: bool,
     needs_memory_detail: bool = False,
     has_followup_context: bool = False,
-    consecutive_topic_turns: int = 0,
 ) -> ConversationDecision:
+    """다음 대화 액션을 정한다.
+
+    주제를 언제 바꿀지는 더 이상 정해진 턴 수로 강제하지 않는다. LLM이
+    매 턴 대화 맥락을 보고 반환하는 shouldChangeTopic 신호(free_talk_question_generator)에
+    맡기고, 여기서는 대화 흐름상의 상태 신호(회상 복귀/부정 행동/빈약한 답변)만 다룬다.
+    """
     if after_recall_answer:
         return ConversationDecision(
             action=ConversationAction.RESUME_AFTER_RECALL,
@@ -55,16 +57,6 @@ def decide_conversation_action(
             reason="latest_answer_cannot_support_a_followup",
         )
 
-    if (
-        has_followup_context
-        and consecutive_topic_turns >= MAX_CONSECUTIVE_TOPIC_TURNS
-    ):
-        return ConversationDecision(
-            action=ConversationAction.CHANGE_TOPIC,
-            stage="OPEN",
-            reason="current_topic_has_enough_detail",
-        )
-
     if needs_memory_detail:
         return ConversationDecision(
             action=ConversationAction.FOLLOW_UP,
@@ -76,7 +68,7 @@ def decide_conversation_action(
         return ConversationDecision(
             action=ConversationAction.OPEN_TOPIC,
             stage="DEEPEN",
-            reason="latest_answer_has_no_topic_to_follow_up",
+            reason="latest_answer_too_weak_to_follow_up",
         )
 
     return ConversationDecision(
