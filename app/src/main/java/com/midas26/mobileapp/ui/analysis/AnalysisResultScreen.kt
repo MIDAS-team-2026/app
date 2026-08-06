@@ -276,7 +276,14 @@ private fun UserAnalysisResultContent(
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 Text(
-                                    text = viewModel.displayScore.toString(),
+                                    text = if (
+                                        viewModel.isViewingToday &&
+                                        !viewModel.hasTodayData
+                                    ) {
+                                        "0"
+                                    } else {
+                                        viewModel.displayScore.toString()
+                                    },
                                     fontSize = (56 * fontScale).sp,
                                     color = BrandWhite,
                                     fontWeight = FontWeight.Bold
@@ -300,7 +307,14 @@ private fun UserAnalysisResultContent(
                                     modifier = Modifier.padding(bottom = 14.dp)
                                 ) {
                                     Text(
-                                        text = viewModel.displayRiskLevel,
+                                        text = if (
+                                            viewModel.isViewingToday &&
+                                            !viewModel.hasTodayData
+                                        ) {
+                                            "-"
+                                        } else {
+                                            viewModel.displayRiskLevel
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
                                         fontWeight = FontWeight.Bold,
@@ -334,7 +348,19 @@ private fun UserAnalysisResultContent(
                 val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    val items = viewModel.todayItems
+                    val items = if (
+                        viewModel.isViewingToday &&
+                        !viewModel.hasTodayData
+                    ) {
+                        viewModel.todayItems.mapIndexed { index, item ->
+                            when (index) {
+                                1, 2 -> item.copy(valueText = "측정 전")
+                                else -> item
+                            }
+                        }
+                    } else {
+                        viewModel.todayItems
+                    }
 
                     Column(
                         modifier = Modifier
@@ -342,7 +368,14 @@ private fun UserAnalysisResultContent(
                             .padding(top = 12.dp + graphCardHeightDp)
                             .padding(horizontal = 16.dp)
                     ) {
-                        Spacer(modifier = Modifier.weight(2f))
+                        /*
+                         * 그래프 카드, 점수 카드, 어휘 카드 사이의 세로 간격을
+                         * 모두 12.dp로 통일합니다.
+                         *
+                         * 가중치 Spacer를 사용하지 않아 글자 크기가 매우 큰 경우에도
+                         * 화면 높이에 따라 카드 간격이 달라지지 않습니다.
+                         */
+                        Spacer(modifier = Modifier.height(12.dp))
 
                         /*
                          * 세부 분석 카드 3개만 감싸는 영역에 좌표 측정을 적용합니다.
@@ -365,7 +398,7 @@ private fun UserAnalysisResultContent(
                                 ItemCard(item = items[2], modifier = Modifier.weight(1f))
                             }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             TextScoreCard(
                                 item = items[3],
@@ -374,7 +407,7 @@ private fun UserAnalysisResultContent(
                             )
                         }
 
-                        Spacer(modifier = Modifier.weight(2f))
+                        Spacer(modifier = Modifier.weight(1f))
                     }
 
                     Box(
@@ -1082,6 +1115,12 @@ private fun ItemCard(
     modifier: Modifier = Modifier
 ) {
     val fontScale = LocalFontSizeScale.current.scale
+
+    /*
+     * 점수 카드는 화면 폭의 절반만 사용하므로 접근성 글자 크기가
+     * 매우 큰 경우에도 제목과 점수가 줄바꿈되지 않도록 카드 내부 배율을 제한합니다.
+     */
+    val cardFontScale = fontScale.coerceAtMost(1.15f)
     val scoreColor = AppColor.greenPrimary
 
     /*
@@ -1124,7 +1163,9 @@ private fun ItemCard(
 
                 Text(
                     text = item.label,
-                    fontSize = (19 * fontScale).sp,
+                    fontSize = (19 * cardFontScale).sp,
+                    maxLines = 1,
+                    softWrap = false,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
@@ -1144,7 +1185,9 @@ private fun ItemCard(
                     ) {
                         Text(
                             text = numberText,
-                            fontSize = (46 * fontScale).sp,
+                            fontSize = (42 * cardFontScale).sp,
+                            maxLines = 1,
+                            softWrap = false,
                             color = scoreColor,
                             fontWeight = FontWeight.ExtraBold
                         )
@@ -1154,7 +1197,9 @@ private fun ItemCard(
 
                             Text(
                                 text = unitText,
-                                fontSize = (20 * fontScale).sp,
+                                fontSize = (18 * cardFontScale).sp,
+                                maxLines = 1,
+                                softWrap = false,
                                 color = AppColor.textPrimary,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(bottom = 7.dp)
@@ -1164,7 +1209,9 @@ private fun ItemCard(
                 } else {
                     Text(
                         text = displayValue,
-                        fontSize = (28 * fontScale).sp,
+                        fontSize = (26 * cardFontScale).sp,
+                        maxLines = 1,
+                        softWrap = false,
                         color = AppColor.textPrimary,
                         fontWeight = FontWeight.Bold
                     )
