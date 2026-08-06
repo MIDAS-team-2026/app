@@ -465,12 +465,6 @@ fun SettingsScreen(
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
-                HorizontalDivider(
-                    color = AppColor.divider,
-                    thickness = 1.dp,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
                 SettingsRow(
                     label = "앱 버전",
                     trailingText = "1.0.0",

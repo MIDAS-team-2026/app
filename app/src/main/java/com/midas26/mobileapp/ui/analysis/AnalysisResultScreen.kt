@@ -678,7 +678,8 @@ private fun AnalysisTutorialOverlay(
             "최근 7일 동안 점수가 어떻게 변했는지 그래프로 확인할 수 있어요. 그래프를 길게 누르면 날짜별 결과를 볼 수 있어요."
 
         AnalysisTutorialStep.DETAIL_SCORES ->
-            "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+            "음성 점수와 기억력 점수를 확인해보세요!\n" +
+                    "어휘 점수는 세부 항목별 결과를 확인할 수 있어요."
 
         AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
             "하단 설정 탭에서 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
