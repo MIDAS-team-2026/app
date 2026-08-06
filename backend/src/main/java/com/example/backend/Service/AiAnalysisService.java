@@ -1,11 +1,14 @@
 package com.example.backend.Service;
 
 import com.example.backend.Model.DTO.analysis.DailyScoreDTO;
+import com.example.backend.Model.DTO.analysis.LinguisticMarkerDTO;
+import com.example.backend.Model.DTO.analysis.LinguisticMarkerHistoryItemDTO;
 import com.example.backend.Model.DTO.analysis.RecallAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecordAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.RecentRiskAnalysisResponseDTO;
 import com.example.backend.Model.DTO.analysis.RiskAnalysisDTO;
 import com.example.backend.Model.DTO.analysis.SessionAnalysisSummaryResponseDTO;
+import com.example.backend.Model.Entity.analysis.LinguisticMarkerResult;
 import com.example.backend.Model.Entity.analysis.RiskAnalysisResult;
 import com.example.backend.Model.Entity.analysis.SpeechAnalysisResult;
 import com.example.backend.Model.Entity.analysis.TextAnalysisResult;
@@ -40,6 +43,7 @@ public class AiAnalysisService {
     private final RiskAnalysisRepository riskAnalysisRepository;
     private final SpeechAnalysisResultRepository speechAnalysisResultRepository;
     private final TextAnalysisResultRepository textAnalysisResultRepository;
+    private final LinguisticMarkerRepository linguisticMarkerRepository;
 
     private final NotificationService notificationService;
     private final RestTemplate restTemplate = new RestTemplate();
@@ -103,6 +107,18 @@ public class AiAnalysisService {
             speechResult.setResponseLatency(speechDto.getResponseLatency());
             speechResult.setRepetitionCount(speechDto.getRepetitionCount());
             speechResult.setFillerCount(speechDto.getFillerCount());
+            speechResult.setEgemapsAvailable(speechDto.getEgemapsAvailable());
+            speechResult.setEgemapsError(speechDto.getEgemapsError());
+            speechResult.setF0SemitoneMean(speechDto.getF0SemitoneMean());
+            speechResult.setF0SemitoneStddevNorm(speechDto.getF0SemitoneStddevNorm());
+            speechResult.setJitterLocal(speechDto.getJitterLocal());
+            speechResult.setShimmerLocalDb(speechDto.getShimmerLocalDb());
+            speechResult.setHnrDb(speechDto.getHnrDb());
+            speechResult.setVoicedSegmentsPerSec(speechDto.getVoicedSegmentsPerSec());
+            speechResult.setMeanVoicedSegmentLength(speechDto.getMeanVoicedSegmentLength());
+            speechResult.setMeanUnvoicedSegmentLength(speechDto.getMeanUnvoicedSegmentLength());
+            speechResult.setVoiceBreakCount(speechDto.getVoiceBreakCount());
+            speechResult.setVoiceBreakRatio(speechDto.getVoiceBreakRatio());
             speechResult.setDysarthriaSimilarityScore(speechDto.getDysarthriaSimilarityScore());
             speechResult.setDistanceFromReference(speechDto.getDistanceFromReference());
             speechResult.setSpeechAbnormalityLevel(speechDto.getSpeechAbnormalityLevel());
@@ -181,6 +197,49 @@ public class AiAnalysisService {
 
             notificationService.notifyAllProtectors(patient, title, content);
         }
+    }
+
+    @Transactional
+    public void saveLinguisticMarkers(LinguisticMarkerDTO dto) {
+        ChatSession session = chatSessionRepository.findById(dto.getSessionId())
+                .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
+
+        LinguisticMarkerResult result = linguisticMarkerRepository.findByChatSession_Id(dto.getSessionId())
+                .orElseGet(LinguisticMarkerResult::new);
+        result.setChatSession(session);
+        result.setPronounNounRatio(dto.getPronounNounRatio());
+        result.setNounRatio(dto.getNounRatio());
+        result.setLexicalDiversityMattr(dto.getLexicalDiversityMattr());
+        result.setRepetitionScore(dto.getRepetitionScore());
+        result.setPronounNounRatioZScore(dto.getPronounNounRatioZScore());
+        result.setNounRatioZScore(dto.getNounRatioZScore());
+        result.setLexicalDiversityMattrZScore(dto.getLexicalDiversityMattrZScore());
+        result.setRepetitionScoreZScore(dto.getRepetitionScoreZScore());
+        result.setBaselineSampleSize(dto.getBaselineSampleSize());
+
+        linguisticMarkerRepository.save(result);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LinguisticMarkerHistoryItemDTO> getLinguisticMarkerHistory(Integer userId) {
+        return linguisticMarkerRepository.findByChatSession_User_IdOrderByAnalyzedAtDesc(userId)
+                .stream()
+                .map(result -> {
+                    LinguisticMarkerHistoryItemDTO item = new LinguisticMarkerHistoryItemDTO();
+                    item.setSessionId(result.getChatSession().getId());
+                    item.setAnalyzedAt(result.getAnalyzedAt());
+                    item.setPronounNounRatio(result.getPronounNounRatio());
+                    item.setNounRatio(result.getNounRatio());
+                    item.setLexicalDiversityMattr(result.getLexicalDiversityMattr());
+                    item.setRepetitionScore(result.getRepetitionScore());
+                    item.setPronounNounRatioZScore(result.getPronounNounRatioZScore());
+                    item.setNounRatioZScore(result.getNounRatioZScore());
+                    item.setLexicalDiversityMattrZScore(result.getLexicalDiversityMattrZScore());
+                    item.setRepetitionScoreZScore(result.getRepetitionScoreZScore());
+                    item.setBaselineSampleSize(result.getBaselineSampleSize());
+                    return item;
+                })
+                .collect(Collectors.toList());
     }
 
     @Transactional(readOnly = true)

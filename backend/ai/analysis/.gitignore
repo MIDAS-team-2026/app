@@ -2,10 +2,12 @@
 data/raw/*
 data/processed/*
 outputs/*
+artifacts/*
 
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !outputs/.gitkeep
+!artifacts/.gitkeep
 !data/sample/*.csv
 
 # AI-Hub original and derived files

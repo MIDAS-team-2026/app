@@ -26,6 +26,9 @@ import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -38,6 +41,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.midas26.mobileapp.network.LocationRepository
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianLocationTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -52,7 +60,10 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+private val GuardianTutorialAccentColor = Color(0xFFC85E48)
+
 private const val GPS_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+
 
 data class LinkedUser(
     val id: String,
@@ -77,14 +88,6 @@ data class TimelineItem(
     val isCurrent: Boolean = false
 )
 
-data class GpsState(
-    val latitude: Double = 37.5700,
-    val longitude: Double = 126.9820,
-    val isLoading: Boolean = true,
-    val hasPermission: Boolean = false,
-    val errorMsg: String = ""
-)
-
 fun com.midas26.mobileapp.network.LinkedUserInfo.toLinkedUser() = LinkedUser(
     id = userId?.toString() ?: "",
     name = name ?: "이름 없음",
@@ -101,11 +104,23 @@ fun com.midas26.mobileapp.network.LinkedUserInfo.toLinkedUser() = LinkedUser(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationListScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     users: List<LinkedUser>,
     onBack: () -> Unit,
     onUserClick: (LinkedUser) -> Unit
 ) {
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
+
+    /*
+     * 앱 설정에서 선택한 글자 크기를 위치 사용자 선택 화면에도 적용합니다.
+     * 화면 폭이 좁을 때 레이아웃이 깨지지 않도록 최대 배율을 제한합니다.
+     */
+    val fontScale = LocalFontSizeScale.current.scale
+    val screenFontScale = fontScale.coerceAtMost(1.35f)
+
     var refreshKey by remember { mutableStateOf(0) }
+    var guideBounds by remember { mutableStateOf<Rect?>(null) }
+    var firstUserBounds by remember { mutableStateOf<Rect?>(null) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -118,25 +133,14 @@ fun LocationListScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = AppColor.textPrimary,
-                            modifier = Modifier.size(31.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "GPS 위치 확인",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            color = AppColor.textPrimary
-                        )
-                    }
+                    Text(
+                        text = "GPS 위치 확인",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (22 * screenFontScale).sp,
+                        color = AppColor.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -169,7 +173,10 @@ fun LocationListScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                        .padding(horizontal = 24.dp, vertical = 8.dp)
+                        .onGloballyPositioned { coordinates ->
+                            guideBounds = coordinates.boundsInRoot()
+                        },
                     shape = RoundedCornerShape(18.dp),
                     color = Color(0xFFFFE5DF)
                 ) {
@@ -189,7 +196,7 @@ fun LocationListScreen(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "실시간 위치를 확인하세요!",
-                                fontSize = 20.sp,
+                                fontSize = (20 * screenFontScale).sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFC85E48),
                                 maxLines = 1,
@@ -200,7 +207,7 @@ fun LocationListScreen(
 
                             Text(
                                 text = "위치는 5분마다 갱신됩니다",
-                                fontSize = 14.sp,
+                                fontSize = (14 * screenFontScale).sp,
                                 color = Color(0xFFC85E48).copy(alpha = 0.7f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -209,11 +216,19 @@ fun LocationListScreen(
                     }
                 }
 
-                users.forEach { user ->
+                users.forEachIndexed { index, user ->
                     UserLocationCard(
                         user = user,
                         refreshKey = refreshKey,
-                        onClick = { onUserClick(user) }
+                        fontScale = fontScale,
+                        onBoundsChanged = { bounds ->
+                            if (index == 0) {
+                                firstUserBounds = bounds
+                            }
+                        },
+                        onClick = {
+                            onUserClick(user)
+                        }
                     )
                 }
             }
@@ -222,6 +237,44 @@ fun LocationListScreen(
                 state = scrollState,
                 modifier = Modifier.align(Alignment.TopEnd)
             )
+
+            if (
+                tutorialState.isRunning &&
+                tutorialState.currentScreen ==
+                GuardianTutorialScreen.LOCATION_SELECT &&
+                tutorialState.locationStep ==
+                GuardianLocationTutorialStep.USER_SELECT
+            ) {
+                val targetBounds =
+                    firstUserBounds
+                val firstUser = users.firstOrNull()
+
+                if (targetBounds != null && firstUser != null) {
+                    val openFirstUserLocation = {
+                        guardianTutorialViewModel.moveToLocationDetail(
+                            number = tutorialState.currentNumber + 1
+                        )
+                        onUserClick(firstUser)
+                    }
+
+                    TutorialOverlay(
+                        targetBounds = targetBounds,
+                        title = "위치를 확인할 사용자 선택",
+                        message =
+                            "연결된 사용자 중 현재 위치를 확인할 사용자를 선택해 보세요.",
+                        currentStep =
+                            tutorialState.currentNumber,
+                        totalSteps =
+                            tutorialState.totalNumber,
+                        onNext = openFirstUserLocation,
+                        onTargetClick = openFirstUserLocation,
+                        onSkip = {
+                            guardianTutorialViewModel.stopTutorial()
+                        },
+                        tutorialColor = GuardianTutorialAccentColor
+                    )
+                }
+            }
         }
     }
 }
@@ -230,6 +283,8 @@ fun LocationListScreen(
 private fun UserLocationCard(
     user: LinkedUser,
     refreshKey: Int = 0,
+    fontScale: Float,
+    onBoundsChanged: (Rect) -> Unit = {},
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -237,7 +292,13 @@ private fun UserLocationCard(
     val relation =
         if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" }
         else "사용자"
-    val pillFontSize = with(LocalDensity.current) { 14.dp.toSp() }
+    /*
+     * 사용자 위치 카드는 최대 1.25배까지만 확대해
+     * 이름, 관계, 주소가 잘리지 않도록 합니다.
+     */
+    val cardFontScale = fontScale.coerceAtMost(1.25f)
+    val cardMinHeight = (126f + ((cardFontScale - 1f) * 72f)).dp
+    val pillFontSize = (14 * cardFontScale).sp
 
     var locationText by remember { mutableStateOf("위치 불러오는 중...") }
     var timeAgoText by remember { mutableStateOf("") }
@@ -281,7 +342,12 @@ private fun UserLocationCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp, vertical = 6.dp)
-            .heightIn(min = 126.dp)
+            .heightIn(min = cardMinHeight)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(
+                    coordinates.boundsInRoot()
+                )
+            }
             .clickable { onClick() }
             .border(1.5.dp, Color(0xFFC85E48), RoundedCornerShape(18.dp)),
         shape = RoundedCornerShape(18.dp),
@@ -297,7 +363,7 @@ private fun UserLocationCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = user.name,
-                        fontSize = 25.sp,
+                        fontSize = (25 * cardFontScale).sp,
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary,
                         maxLines = 1,
@@ -328,17 +394,17 @@ private fun UserLocationCard(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 Row(verticalAlignment = Alignment.Top) {
-                    Text("📍", fontSize = 15.sp)
+                    Text("📍", fontSize = (15 * cardFontScale).sp)
 
                     Spacer(modifier = Modifier.width(5.dp))
 
                     Text(
                         text = locationText,
-                        fontSize = 14.sp,
+                        fontSize = (14 * cardFontScale).sp,
                         color = AppColor.textTertiary,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        lineHeight = 18.sp,
+                        lineHeight = (18 * cardFontScale).sp,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -348,7 +414,7 @@ private fun UserLocationCard(
 
                     Text(
                         text = "🕐 $timeAgoText 업데이트",
-                        fontSize = 14.sp,
+                        fontSize = (14 * cardFontScale).sp,
                         color = AppColor.textTertiary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -363,7 +429,7 @@ private fun UserLocationCard(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = AppColor.textTertiary,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size((26 * cardFontScale.coerceAtMost(1.15f)).dp)
             )
         }
     }
@@ -372,12 +438,19 @@ private fun UserLocationCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationDetailScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     user: LinkedUser,
     onBack: () -> Unit,
     onRouteClick: () -> Unit
 ) {
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
     val context = LocalContext.current
+
     var showCallDialog by remember { mutableStateOf(false) }
+    var mapBounds by remember { mutableStateOf<Rect?>(null) }
+    var routeButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var callButtonBounds by remember { mutableStateOf<Rect?>(null) }
+    var callDialogBounds by remember { mutableStateOf<Rect?>(null) }
 
     val userId = user.id.toIntOrNull() ?: 0
 
@@ -474,6 +547,9 @@ fun LocationDetailScreen(
                         .weight(1f)
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                         .clip(RoundedCornerShape(20.dp))
+                        .onGloballyPositioned { coordinates ->
+                            mapBounds = coordinates.boundsInRoot()
+                        }
                 )
 
                 Column(
@@ -487,6 +563,10 @@ fun LocationDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp)
+                            .onGloballyPositioned { coordinates ->
+                                routeButtonBounds =
+                                    coordinates.boundsInRoot()
+                            }
                             .clickable { onRouteClick() },
                         shape = RoundedCornerShape(14.dp),
                         color = Color(0xFFFFE5DF),
@@ -509,6 +589,10 @@ fun LocationDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp)
+                            .onGloballyPositioned { coordinates ->
+                                callButtonBounds =
+                                    coordinates.boundsInRoot()
+                            }
                             .clickable { showCallDialog = true },
                         shape = RoundedCornerShape(14.dp),
                         color = Color(0xFFFFE5DF),
@@ -531,18 +615,158 @@ fun LocationDetailScreen(
         }
 
         if (showCallDialog) {
-            CallDialog(user = user, onDismiss = { showCallDialog = false })
+            CallDialog(
+                user = user,
+                onDismiss = {
+                    showCallDialog = false
+                },
+                onBoundsChanged = {
+                    callDialogBounds = it
+                }
+            )
         }
+
+        val isLocationDetailTutorialRunning =
+            tutorialState.isRunning &&
+                    tutorialState.currentScreen ==
+                    GuardianTutorialScreen.LOCATION_DETAIL &&
+                    tutorialState.locationStep in setOf(
+                GuardianLocationTutorialStep.CURRENT_LOCATION,
+                GuardianLocationTutorialStep.ROUTE_BUTTON,
+                GuardianLocationTutorialStep.CALL_BUTTON,
+                GuardianLocationTutorialStep.CALL_DIALOG
+            )
+
+        if (isLocationDetailTutorialRunning) {
+            val targetBounds = when (tutorialState.locationStep) {
+                GuardianLocationTutorialStep.CURRENT_LOCATION ->
+                    mapBounds
+
+                GuardianLocationTutorialStep.ROUTE_BUTTON ->
+                    routeButtonBounds
+
+                GuardianLocationTutorialStep.CALL_BUTTON ->
+                    callButtonBounds
+
+                GuardianLocationTutorialStep.CALL_DIALOG ->
+                    callDialogBounds
+
+                GuardianLocationTutorialStep.USER_SELECT,
+                GuardianLocationTutorialStep.ROUTE_RESULT,
+                GuardianLocationTutorialStep.MOVE_TO_SETTINGS_TAB,
+                GuardianLocationTutorialStep.COMPLETED ->
+                    null
+            }
+
+            if (targetBounds != null) {
+                val title = when (tutorialState.locationStep) {
+                    GuardianLocationTutorialStep.CURRENT_LOCATION ->
+                        "현재 위치 확인"
+
+                    GuardianLocationTutorialStep.ROUTE_BUTTON ->
+                        "이동 경로 확인"
+
+                    GuardianLocationTutorialStep.CALL_BUTTON ->
+                        "전화 걸기"
+
+                    GuardianLocationTutorialStep.CALL_DIALOG ->
+                        "전화 연결 화면"
+
+                    else -> ""
+                }
+
+                val message = when (tutorialState.locationStep) {
+                    GuardianLocationTutorialStep.CURRENT_LOCATION ->
+                        "지도에서 선택한 사용자의 현재 위치를 확인할 수 있어요. \n위치는 5분마다 갱신돼요!"
+
+                    GuardianLocationTutorialStep.ROUTE_BUTTON ->
+                        "이 버튼에서 오늘 이동한 경로와 방문 장소를 확인할 수 있어요."
+
+                    GuardianLocationTutorialStep.CALL_BUTTON ->
+                        "버튼을 누르면 사용자에게 전화할 수 있는 화면이 열려요."
+
+                    GuardianLocationTutorialStep.CALL_DIALOG ->
+                        "전화번호를 확인하고 전화 연결 버튼으로 통화를 시작할 수 있어요."
+
+                    else -> ""
+                }
+
+                val advanceLocationTutorial = {
+                    when (tutorialState.locationStep) {
+                        GuardianLocationTutorialStep.CURRENT_LOCATION -> {
+                            guardianTutorialViewModel.moveToLocationDetail(
+                                step = GuardianLocationTutorialStep.ROUTE_BUTTON,
+                                number = tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianLocationTutorialStep.ROUTE_BUTTON -> {
+                            guardianTutorialViewModel.moveToLocationRoute(
+                                number = tutorialState.currentNumber + 1
+                            )
+                            onRouteClick()
+                        }
+
+                        GuardianLocationTutorialStep.CALL_BUTTON -> {
+                            showCallDialog = true
+                            guardianTutorialViewModel.moveToLocationDetail(
+                                step = GuardianLocationTutorialStep.CALL_DIALOG,
+                                number = tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianLocationTutorialStep.CALL_DIALOG -> {
+                            showCallDialog = false
+
+                            if (
+                                guardianTutorialViewModel
+                                    .isFullTutorial()
+                            ) {
+                                guardianTutorialViewModel
+                                    .showSettingsTabGuide(
+                                        number =
+                                            tutorialState.currentNumber + 1
+                                    )
+                            } else {
+                                guardianTutorialViewModel
+                                    .completeTutorial()
+                            }
+                        }
+
+                        else -> Unit
+                    }
+                }
+
+                TutorialOverlay(
+                    targetBounds = targetBounds,
+                    title = title,
+                    message = message,
+                    currentStep = tutorialState.currentNumber,
+                    totalSteps =
+                        tutorialState.totalNumber,
+                    onNext = advanceLocationTutorial,
+                    onTargetClick = advanceLocationTutorial,
+                    onSkip = {
+                        guardianTutorialViewModel.stopTutorial()
+                    },
+                    tutorialColor = GuardianTutorialAccentColor
+                )
+            }
+        }
+
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LocationRouteScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     user: LinkedUser,
     onBack: () -> Unit
 ) {
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
     val context = LocalContext.current
+    var routeScreenBounds by remember { mutableStateOf<Rect?>(null) }
 
     val today = remember {
         SimpleDateFormat("yyyy-MM-dd", Locale.KOREA).format(Date())
@@ -641,6 +865,9 @@ fun LocationRouteScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .onGloballyPositioned { coordinates ->
+                    routeScreenBounds = coordinates.boundsInRoot()
+                }
         ) {
             Column(
                 modifier = Modifier
@@ -723,6 +950,39 @@ fun LocationRouteScreen(
             )
         }
     }
+
+    if (
+        tutorialState.isRunning &&
+        tutorialState.currentScreen ==
+        GuardianTutorialScreen.LOCATION_ROUTE &&
+        tutorialState.locationStep ==
+        GuardianLocationTutorialStep.ROUTE_RESULT &&
+        routeScreenBounds != null
+    ) {
+        val finishRouteGuide = {
+            guardianTutorialViewModel.moveToLocationDetail(
+                step = GuardianLocationTutorialStep.CALL_BUTTON,
+                number = tutorialState.currentNumber + 1
+            )
+            onBack()
+        }
+
+        TutorialOverlay(
+            targetBounds = routeScreenBounds,
+            title = "이동 경로 상세 확인",
+            message =
+                "총 경로, 방문 장소, 이동 시간과 위치 타임라인을 확인할 수 있어요.",
+            currentStep = tutorialState.currentNumber,
+            totalSteps = tutorialState.totalNumber,
+            onNext = finishRouteGuide,
+            onTargetClick = finishRouteGuide,
+            onSkip = {
+                guardianTutorialViewModel.stopTutorial()
+            },
+            tutorialColor = GuardianTutorialAccentColor
+        )
+    }
+
 }
 
 @Composable
@@ -971,7 +1231,8 @@ private fun LoadingBar() {
 @Composable
 fun CallDialog(
     user: LinkedUser,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onBoundsChanged: (Rect) -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -984,7 +1245,9 @@ fun CallDialog(
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier.fillMaxSize()
+    ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -995,7 +1258,10 @@ fun CallDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter),
+                .align(Alignment.BottomCenter)
+                .onGloballyPositioned { coordinates ->
+                    onBoundsChanged(coordinates.boundsInRoot())
+                },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             color = Color.White
         ) {
