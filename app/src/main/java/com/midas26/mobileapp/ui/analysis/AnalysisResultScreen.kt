@@ -193,7 +193,7 @@ private fun UserAnalysisResultContent(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                val isToday = viewModel.isViewingToday && viewModel.hasTodayData
+                val isToday = viewModel.isViewingToday
 
                 val animSpec = tween<Color>(durationMillis = 400)
 
@@ -260,7 +260,7 @@ private fun UserAnalysisResultContent(
                                 .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
                         ) {
                             Text(
-                                text = viewModel.displayDateLabel,
+                                text = if (viewModel.isViewingToday) "오늘의 분석 결과" else viewModel.displayDateLabel,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color.Transparent
                             )
@@ -318,7 +318,7 @@ private fun UserAnalysisResultContent(
                     )
 
                     Text(
-                        text = viewModel.displayDateLabel,
+                        text = if (viewModel.isViewingToday) "오늘의 분석 결과" else viewModel.displayDateLabel,
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrandWhite.copy(alpha = 0.92f),
                         fontWeight = if (isDragging) FontWeight.ExtraBold else FontWeight.Normal,
@@ -369,7 +369,6 @@ private fun UserAnalysisResultContent(
 
                             TextScoreCard(
                                 item = items[3],
-                                status = viewModel.textScoreStatus,
                                 onClick = onNavigateTextScoreDetail,
                                 modifier = Modifier.fillMaxWidth()
                             )
@@ -679,7 +678,8 @@ private fun AnalysisTutorialOverlay(
             "최근 7일 동안 점수가 어떻게 변했는지 그래프로 확인할 수 있어요. 그래프를 길게 누르면 날짜별 결과를 볼 수 있어요."
 
         AnalysisTutorialStep.DETAIL_SCORES ->
-            "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+            "음성 점수와 기억력 점수를 확인해보세요!\n" +
+                    "어휘 점수는 세부 항목별 결과를 확인할 수 있어요."
 
         AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
             "하단 설정 탭에서 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
@@ -1082,111 +1082,159 @@ private fun ItemCard(
     modifier: Modifier = Modifier
 ) {
     val fontScale = LocalFontSizeScale.current.scale
+    val scoreColor = AppColor.greenPrimary
+
+    /*
+     * "64점"처럼 숫자로 시작하는 값은 숫자만 초록색으로 강조합니다.
+     * "-", "측정 전"처럼 숫자가 아닌 값은 기존 텍스트 색상으로 표시합니다.
+     */
+    val displayValue = if (
+        item.label == "음성 점수" && item.valueText == "-"
+    ) {
+        "측정 전"
+    } else {
+        item.valueText
+    }
+
+    val numberText = displayValue.takeWhile { it.isDigit() }
+    val unitText = displayValue.drop(numberText.length)
 
     Surface(
-        modifier = modifier,
+        modifier = modifier.height(168.dp),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         border = BorderStroke(1.5.dp, AppColor.divider)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 18.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = item.icon,
                     contentDescription = null,
-                    tint = AppColor.textTertiary,
-                    modifier = Modifier.size(18.dp)
+                    tint = AppColor.textPrimary,
+                    modifier = Modifier.size(25.dp)
                 )
 
-                Spacer(modifier = Modifier.size(6.dp))
+                Spacer(modifier = Modifier.size(8.dp))
 
                 Text(
                     text = item.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = (19 * fontScale).sp,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
-            Text(
-                text = item.valueText,
-                fontSize = (26 * fontScale).sp,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (numberText.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = numberText,
+                            fontSize = (46 * fontScale).sp,
+                            color = scoreColor,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+
+                        if (unitText.isNotEmpty()) {
+                            Spacer(modifier = Modifier.size(4.dp))
+
+                            Text(
+                                text = unitText,
+                                fontSize = (20 * fontScale).sp,
+                                color = AppColor.textPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 7.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = displayValue,
+                        fontSize = (28 * fontScale).sp,
+                        color = AppColor.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * 어휘 점수 카드. 백분위 점수 대신 언어 지표 4개(대명사 비율 등)를 종합한
- * 좋음/주의/위험 배지를 보여주고, 탭하면 지표별 상세 화면으로 이동한다.
+ * 어휘 점수 카드는 점수 또는 측정 상태를 표시하지 않고,
+ * 상세 화면으로 이동하는 메뉴 형태로만 표시합니다.
  */
 @Composable
 private fun TextScoreCard(
     item: AnalysisItem,
-    status: MarkerStatus,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val fontScale = LocalFontSizeScale.current.scale
 
     Surface(
-        modifier = modifier.clickable(onClick = onClick),
+        modifier = modifier
+            .height(88.dp)
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         border = BorderStroke(1.5.dp, AppColor.divider)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = AppColor.textTertiary,
-                    modifier = Modifier.size(18.dp)
-                )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = null,
+                tint = AppColor.textPrimary,
+                modifier = Modifier.size(30.dp)
+            )
 
-                Spacer(modifier = Modifier.size(6.dp))
+            Spacer(modifier = Modifier.size(14.dp))
 
-                Text(
-                    text = item.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = status.label,
-                    fontSize = (26 * fontScale).sp,
+                    text = item.label,
+                    fontSize = (20 * fontScale).sp,
                     color = AppColor.textPrimary,
                     fontWeight = FontWeight.Bold
                 )
 
-                Spacer(modifier = Modifier.weight(1f))
+                Spacer(modifier = Modifier.height(4.dp))
 
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "자세히 보기",
-                    tint = AppColor.textTertiary,
-                    modifier = Modifier.size((26 * fontScale).dp)
+                Text(
+                    text = "눌러서 상세 점수 확인하기",
+                    fontSize = (14 * fontScale).sp,
+                    color = AppColor.textSecondary,
+                    fontWeight = FontWeight.Medium
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = "눌러서 자세히 보기",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppColor.textTertiary
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "눌러서 상세 점수 확인하기",
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size((26 * fontScale).dp)
             )
         }
     }
