@@ -8,6 +8,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 from groq import Groq
@@ -25,7 +26,16 @@ from session_speech_summary import summarize_session_speech
 from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+LOG_FILE = Path(__file__).resolve().parent / "ai_server.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"),
+    ],
+)
 logger = logging.getLogger(__name__)
 
 DEFAULT_STT_MODEL = "openai/whisper-small"
