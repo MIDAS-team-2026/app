@@ -47,3 +47,4 @@ venv/
 
 # Local server logs
 backend/*.log
+backend/ai/*.log
