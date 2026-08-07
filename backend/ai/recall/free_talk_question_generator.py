@@ -1,7 +1,10 @@
 import json
+import logging
 import os
 import re
 from typing import Any, List
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
@@ -1074,6 +1077,13 @@ def generate_safe_followup_question(
         try:
             generated = _call_followup_llm(prompt)
         except Exception:
+            logger.warning(
+                "LLM 후속질문 생성 호출 실패, 폴백 사용: stage=%s attempt=%s fallback=%r",
+                stage,
+                _attempt + 1,
+                fallback_question,
+                exc_info=True,
+            )
             return {
                 "nextQuestion": fallback_question,
                 "shouldChangeTopic": is_weak_answer,
@@ -1091,16 +1101,40 @@ def generate_safe_followup_question(
         )
 
         if validated_question:
+            logger.info(
+                "LLM 후속질문 채택: stage=%s attempt=%s question=%r llmReason=%r",
+                stage,
+                _attempt + 1,
+                validated_question,
+                generated["reason"],
+            )
             return {
                 "nextQuestion": validated_question,
                 "shouldChangeTopic": should_change_topic,
                 "reason": generated["reason"],
             }
 
+        logger.info(
+            "LLM 후속질문 반려: stage=%s attempt=%s rejectionReason=%s rawQuestion=%r "
+            "llmOwnReason=%r historyTail=%r",
+            stage,
+            _attempt + 1,
+            rejection_reason,
+            generated["question"],
+            generated["reason"],
+            conversation_history[-3:],
+        )
+
         rejection_note = "\n" + _REJECTION_NOTE_TEMPLATES[rejection_reason].format(
             question=generated["question"] or "(빈 질문)"
         ) + "\n"
 
+    logger.warning(
+        "LLM 후속질문 2회 모두 반려되어 폴백 사용: stage=%s lastRejectionReason=%s fallback=%r",
+        stage,
+        rejection_reason,
+        fallback_question,
+    )
     return {
         "nextQuestion": fallback_question,
         "shouldChangeTopic": is_weak_answer,
