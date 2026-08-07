@@ -53,6 +53,7 @@ class ConversationTurnState:
     is_memory_candidate: bool
     needs_memory_detail: bool
     has_real_content: bool
+    has_anchorable_event: bool
 
 
 FIXED_QUESTIONS = [
@@ -175,6 +176,18 @@ SAFE_STAGE_FALLBACK_QUESTIONS = {
         "나중에 다시 이야기한다면 어떤 말로 떠올리면 좋을까요?",
     ],
 }
+
+# "아직 점심은 안 먹었어"처럼 아직 안 했거나 못 했거나 앞으로 할 일이라
+# has_anchorable_event가 False인 답변에는 "그때 ~"처럼 이미 벌어진 일을
+# 전제로 한 SAFE_STAGE_FALLBACK_QUESTIONS를 쓰면 안 된다. LLM이 문맥에 맞는
+# 질문을 만들지 못했을 때만 쓰이는 최후 폴백이므로, 과거/시제를 특정하지
+# 않는 범용 문구만 담는다.
+NO_EVENT_FALLBACK_QUESTIONS = [
+    "지금 기분은 좀 어떠세요?",
+    "그럼 오늘은 어떻게 시간을 보내고 계세요?",
+    "요즘 마음에 걸리는 다른 일이 있으세요?",
+    "오늘 다른 이야기도 편하게 들려주시겠어요?",
+]
 
 TOPIC_CHANGE_ACKNOWLEDGEMENTS = [
     "아하, 그렇군요.",
@@ -1610,18 +1623,30 @@ def _get_stage_fallback_candidates(
     stage: str,
     latest_text: str,
     cycle_texts: list[str],
+    has_anchorable_event: bool = True,
 ) -> list[str]:
     """주제와 무관하게, 지금 단계(DEEPEN/ANCHOR)에 쓸 수 있는 범용 폴백 질문을 고른다.
 
     실제 질문 문구는 generate_safe_followup_question(LLM)이 conversation_history
     전체를 보고 만든다 — 여기서 고르는 건 LLM 호출이 실패했을 때만 쓰이는
-    최후 폴백이라, 주제별로 정교하게 나눌 필요가 없다. 유일한 예외는
-    "저정보 응답이 반복됨" 신호로, 이건 주제 분류와 무관하게 별도로 판단한다.
+    최후 폴백이라, 주제별로 정교하게 나눌 필요가 없다. 예외가 둘 있다:
+    "저정보 응답이 반복됨"과, has_anchorable_event=False("아직 안 먹었어" 등
+    아직 벌어지지 않은/안 한 일이라 캐물을 사건이 없음) — 후자는 "그때 ~"
+    전제인 SAFE_STAGE_FALLBACK_QUESTIONS 대신 시제 무관한 폴백을 쓴다.
     """
-    if _is_low_info_response(latest_text) and _count_recent_low_info_responses(
+    is_low_info = _is_low_info_response(latest_text)
+
+    if is_low_info and _count_recent_low_info_responses(
         _build_generation_history(cycle_texts, latest_text),
     ) >= 2:
         return REPEATED_LOW_INFO_QUESTIONS.get(stage, SAFE_STAGE_FALLBACK_QUESTIONS[stage])
+
+    # "없어"류 저정보 응답은 has_anchorable_event 판정에서도 state_without_action으로
+    # 걸리지만, 저정보 응답은 위의 반복 횟수 기준으로 이미 별도로 다루고 있으므로
+    # (첫 번째는 SAFE_STAGE_FALLBACK_QUESTIONS, 반복되면 REPEATED_LOW_INFO_QUESTIONS)
+    # 여기서 다시 NO_EVENT_FALLBACK_QUESTIONS로 덮어쓰지 않는다.
+    if not has_anchorable_event and not is_low_info:
+        return NO_EVENT_FALLBACK_QUESTIONS
 
     return SAFE_STAGE_FALLBACK_QUESTIONS[stage]
 
@@ -1937,7 +1962,6 @@ def _analyze_conversation_turn(
             "future_or_wish_expression",
             "uncertain_memory",
             "state_without_action",
-            "low_info_expression",
         }
     )
     should_change_topic = (
@@ -1967,6 +1991,7 @@ def _analyze_conversation_turn(
             and not _is_negative_response(analyzed_text)
         ),
         has_real_content=has_real_content,
+        has_anchorable_event=has_anchorable_event,
     )
 
 
@@ -2096,6 +2121,7 @@ def _get_next_normal_question(
         stage,
         followup_latest_text,
         followup_cycle_texts,
+        has_anchorable_event=state.has_anchorable_event,
     )
     fallback_question = _pick_non_repeated_question(
         candidates=fallback_candidates,
