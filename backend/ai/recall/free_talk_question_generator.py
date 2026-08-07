@@ -4,12 +4,49 @@ import os
 import re
 from typing import Any, List
 
+from kiwipiepy import Kiwi
+
 logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
+
+_kiwi = Kiwi()
+_NOUN_TAGS = {"NNG", "NNP", "NNB", "NR", "NP"}
+_noun_tokenize_cache: dict[str, tuple] = {}
+
+
+def _noun_words(text: str) -> set[str]:
+    """문장에서 '사실 내용'에 해당하는 명사류 형태소만 뽑는다.
+
+    grounding 검증은 질문이 실제로 사용자가 말한 내용에 근거하는지를 봐야
+    하는데, 예전엔 공백 기준으로 자른 단어 전체(조사/어미 포함)를 비교해서
+    "들어"/"있었어요" 같은 평범한 서술어 활용형까지 "근거 없는 단어"로
+    걸러버렸다. 서술어(동사/형용사/어미)는 문법 요소일 뿐 새로운 사실을
+    주장하는 게 아니므로, 명사류(NNG/NNP/NNB/NR/NP)만 비교 대상으로 삼는다.
+    """
+    cached = _noun_tokenize_cache.get(text)
+
+    if cached is None:
+        tokens = tuple(
+            token.form
+            for token in _kiwi.tokenize(text)
+            if token.tag in _NOUN_TAGS
+        )
+
+        if len(_noun_tokenize_cache) > 2000:
+            _noun_tokenize_cache.clear()
+
+        _noun_tokenize_cache[text] = tokens
+        cached = tokens
+
+    return {
+        word
+        for word in cached
+        if len(word) >= 2 and word not in QUESTION_STOPWORDS
+    }
 
 
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
@@ -661,8 +698,8 @@ def is_question_grounded_in_history(
     if asks_about_completed_contact and not has_contact_history:
         return False
 
-    question_words = _meaningful_words(question)
-    history_words = _meaningful_words(joined_history)
+    question_words = _noun_words(question)
+    history_words = _noun_words(joined_history)
 
     has_direct_grounding = bool(question_words & history_words)
     has_pronoun_grounding = _has_pronoun_grounding(question, joined_history)
