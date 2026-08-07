@@ -1922,6 +1922,24 @@ def _analyze_conversation_turn(
     # 기존 맥락을 전제로 한 DEEPEN 이어가기도 부적절하므로 has_real_content로 구분해
     # 새 주제를 여는 흐름(OPEN_TOPIC)으로 보낸다.
     has_real_content = "too_short_or_meaningless" not in memory_evaluation["reasons"]
+    # ANCHOR는 "이미 있는 이야기에서 구체적인 장면/사람/장소를 더 캐묻는" 단계라
+    # "그때 ~"처럼 이미 벌어진 일이 있다는 걸 전제로 한다. "아직 점심은 안 먹었어"처럼
+    # 아직 일어나지 않았거나(future_or_wish_expression) 안 했거나 못 했다고
+    # 부정한(incomplete_or_negated_action) 답변, 확실치 않은 기억(uncertain_memory),
+    # 행동 없이 상태만 있는 답변(state_without_action)은 "더 캐물을 사건" 자체가
+    # 없으므로 ANCHOR로 보내면 "그때가 언제인데?" 같은 엉뚱한 질문이 나간다.
+    has_anchorable_event = not (
+        set(memory_evaluation["reasons"])
+        & {
+            "too_short_or_meaningless",
+            "forbidden_fixed_question_content",
+            "incomplete_or_negated_action",
+            "future_or_wish_expression",
+            "uncertain_memory",
+            "state_without_action",
+            "low_info_expression",
+        }
+    )
     should_change_topic = (
         _is_negated_action_response(latest_text)
         and not confirmed_text
@@ -1942,6 +1960,7 @@ def _analyze_conversation_turn(
         is_memory_candidate=bool(memory_evaluation["isValid"]),
         needs_memory_detail=(
             has_real_content
+            and has_anchorable_event
             and topic != "PERSON"
             and not memory_evaluation["isValid"]
             and not _is_low_info_response(analyzed_text)
