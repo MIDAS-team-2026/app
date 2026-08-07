@@ -1072,12 +1072,18 @@ def _validate_followup_question(
 
     question = build_fallback_with_empathy(question, conversation_history)
 
-    if (
-        stage in {"DEEPEN", "ANCHOR"}
-        and not should_change_topic
-        and not is_question_grounded_in_history(question, conversation_history)
-    ):
-        return None, "ungrounded_question"
+    # grounding 검증(is_question_grounded_in_history)은 일단 비활성화한다.
+    # 명사 단위 부분일치까지 완화했는데도 정상적인 LLM 질문을 계속
+    # ungrounded_question으로 반려하는 사례가 실제 로그에서 반복 확인돼
+    # (예: "안녕, 또박아."에 이어진 정상적인 질문까지 반려), 우선 끄고
+    # 지켜본다. 함수 자체는 지우지 않았으니 필요하면 아래 주석만 풀면 된다.
+    #
+    # if (
+    #     stage in {"DEEPEN", "ANCHOR"}
+    #     and not should_change_topic
+    #     and not is_question_grounded_in_history(question, conversation_history)
+    # ):
+    #     return None, "ungrounded_question"
 
     if not is_safe_followup_question(question):
         return None, "unsafe_question"
