@@ -701,15 +701,22 @@ def is_question_grounded_in_history(
     question_words = _noun_words(question)
     history_words = _noun_words(joined_history)
 
-    has_direct_grounding = bool(question_words & history_words)
+    # "두부찌개" 같은 복합명사는 kiwi가 하나의 형태소로 묶어서 인식하기 때문에,
+    # 질문에서 "찌개"만 지칭해도(자연스러운 축약 지칭) 완전히 다른 문자열이
+    # 되어 근거 없음으로 오판된다. 부분 문자열로도 겹치면 같은 대상을
+    # 가리키는 것으로 본다("찌개" ⊂ "두부찌개").
+    def _is_supported(word: str) -> bool:
+        return any(word in h or h in word for h in history_words)
+
+    has_direct_grounding = any(_is_supported(word) for word in question_words)
     has_pronoun_grounding = _has_pronoun_grounding(question, joined_history)
 
     if has_direct_grounding or has_pronoun_grounding:
-        unsupported_words = (
-            question_words
-            - history_words
-            - GENERIC_ANCHORED_FOLLOWUP_WORDS
-        )
+        unsupported_words = {
+            word
+            for word in question_words
+            if word not in GENERIC_ANCHORED_FOLLOWUP_WORDS and not _is_supported(word)
+        }
         return not unsupported_words
 
     anchored_followup_phrases = [
