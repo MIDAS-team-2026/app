@@ -89,6 +89,36 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
                 ],
             )
 
+    def test_cross_slot_followup_stays_in_event_but_new_topic_does_not(self):
+        records = [
+            {
+                "recordId": 50,
+                "turnOrder": 1,
+                "transcriptText": "공원에 다녀왔어",
+                "aiReplyText": "누구와 함께 가셨어요?",
+            },
+            {
+                "recordId": 51,
+                "turnOrder": 2,
+                "transcriptText": "딸이랑 갔어",
+                "aiReplyText": "오늘 보신 방송이 있나요?",
+            },
+            {
+                "recordId": 52,
+                "turnOrder": 3,
+                "transcriptText": "저녁 뉴스를 봤어",
+                "aiReplyText": "무슨 내용이 기억나세요?",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+
+        self.assertEqual("PLACE", payloads[0]["topic"])
+        self.assertEqual("PLACE", payloads[1]["topic"])
+        self.assertTrue(payloads[1]["continuesPreviousEvent"])
+        self.assertEqual("MEDIA", payloads[2]["topic"])
+        self.assertFalse(payloads[2]["continuesPreviousEvent"])
+
 
 if __name__ == "__main__":
     unittest.main()

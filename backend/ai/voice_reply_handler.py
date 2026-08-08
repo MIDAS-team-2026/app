@@ -37,7 +37,11 @@ from recall.conversation_recall_generator import (
     select_recall_memory_candidates,
 )
 from recall.memory_candidate_service import build_memory_candidate_selection
-from recall.memory_event import MemoryAnswerType, infer_answer_type
+from recall.memory_event import (
+    MemoryAnswerType,
+    infer_answer_type,
+    should_continue_memory_event,
+)
 from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
@@ -879,18 +883,18 @@ def _build_memory_evidence_payloads(
             _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
             _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
         }
-        continues_previous_event = (
-            last_event_topic is not None
-            and last_event_topic != "UNGROUPED"
-            and detected_topic == last_event_topic
-            and last_event_topic in question_topics
+        answer_type = infer_answer_type(previous_question)
+        continues_previous_event = should_continue_memory_event(
+            last_event_topic=last_event_topic,
+            detected_topic=detected_topic,
+            question_topics=question_topics,
+            answer_type=answer_type,
         )
         event_topic = (
             last_event_topic
             if continues_previous_event
             else detected_topic
         )
-        answer_type = infer_answer_type(previous_question)
 
         if answer_type == MemoryAnswerType.UNKNOWN:
             answer_type = _fallback_answer_type_for_topic(event_topic)

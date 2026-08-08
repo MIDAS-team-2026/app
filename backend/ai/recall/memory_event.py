@@ -97,6 +97,38 @@ def infer_topic(
     return str(action or "GENERAL").upper()
 
 
+def should_continue_memory_event(
+    *,
+    last_event_topic: str | None,
+    detected_topic: str | None,
+    question_topics: Iterable[str],
+    answer_type: MemoryAnswerType | str,
+) -> bool:
+    """Return True only when the current answer still describes the last event.
+
+    A follow-up can legitimately change the answer slot while keeping the same
+    event. For example, a PLACE event may be followed by a PERSON answer to
+    "who went with you?". A completely new MEDIA answer to a MEAL follow-up,
+    however, must start a new event.
+    """
+    last_topic = str(last_event_topic or "").strip().upper()
+    current_topic = str(detected_topic or "").strip().upper()
+    anchored_topics = {
+        str(topic or "").strip().upper()
+        for topic in question_topics
+        if str(topic or "").strip()
+    }
+
+    if last_topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
+        return False
+
+    if last_topic not in anchored_topics:
+        return False
+
+    answer_slot_topic = infer_topic(parse_answer_type(answer_type))
+    return current_topic in {last_topic, answer_slot_topic}
+
+
 @dataclass(frozen=True)
 class MemoryEvent:
     source_text: str
@@ -376,6 +408,15 @@ def _is_duplicate_candidate(
     current: MemoryCandidateDraft,
     selected: MemoryCandidateDraft,
 ) -> bool:
+    if set(current.source_record_ids) & set(selected.source_record_ids):
+        return True
+
+    current_texts = {item.text for item in current.evidence}
+    selected_texts = {item.text for item in selected.evidence}
+
+    if current_texts & selected_texts:
+        return True
+
     if current.topic != selected.topic:
         return False
 
@@ -393,9 +434,7 @@ def _is_duplicate_candidate(
     if current_values and selected_values:
         return bool(current_values & selected_values)
 
-    current_texts = {item.text for item in current.evidence}
-    selected_texts = {item.text for item in selected.evidence}
-    return bool(current_texts & selected_texts)
+    return False
 
 
 def select_memory_candidate_drafts(

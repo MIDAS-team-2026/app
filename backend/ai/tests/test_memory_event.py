@@ -13,6 +13,7 @@ from recall.memory_event import (  # noqa: E402
     MemoryEvidence,
     group_memory_evidence,
     select_memory_candidate_drafts,
+    should_continue_memory_event,
 )
 
 
@@ -210,6 +211,96 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         self.assertEqual(61, draft.recall_target.source_record_id)
         self.assertEqual("딸과 같이 갔어", draft.recall_target.text)
         self.assertNotIn("공원에 다녀왔어", draft.recall_target.text)
+
+    def test_detail_answer_can_change_slot_without_starting_new_event(self):
+        cases = (
+            {
+                "last_event_topic": "PLACE",
+                "detected_topic": "PERSON",
+                "question_topics": {"PLACE", "PERSON"},
+                "answer_type": MemoryAnswerType.PERSON,
+            },
+            {
+                "last_event_topic": "PERSON",
+                "detected_topic": "TIME",
+                "question_topics": {"PERSON"},
+                "answer_type": MemoryAnswerType.TIME,
+            },
+        )
+
+        for inputs in cases:
+            with self.subTest(inputs=inputs):
+                self.assertTrue(should_continue_memory_event(**inputs))
+
+    def test_unrelated_answer_starts_new_event_even_after_followup(self):
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="MEAL",
+                detected_topic="MEDIA",
+                question_topics={"MEAL"},
+                answer_type=MemoryAnswerType.FOOD,
+            )
+        )
+
+    def test_question_without_previous_event_anchor_does_not_merge(self):
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="PLACE",
+                detected_topic="PERSON",
+                question_topics={"PERSON"},
+                answer_type=MemoryAnswerType.PERSON,
+            )
+        )
+
+    def test_same_source_record_is_selected_only_once_across_topics(self):
+        drafts = [
+            self._draft(
+                70,
+                "딸과 공원에 다녀왔어",
+                "PERSON",
+                MemoryAnswerType.PERSON,
+                "딸",
+                85,
+            ),
+            self._draft(
+                70,
+                "공원에 딸과 다녀왔어",
+                "PLACE",
+                MemoryAnswerType.PLACE,
+                "공원",
+                80,
+            ),
+        ]
+
+        selected = select_memory_candidate_drafts(drafts)
+
+        self.assertEqual(1, len(selected))
+        self.assertEqual(70, selected[0].first_source_record_id)
+
+    def test_same_source_text_is_selected_only_once_across_topics(self):
+        drafts = [
+            self._draft(
+                80,
+                "딸과 공원에 다녀왔어",
+                "PERSON",
+                MemoryAnswerType.PERSON,
+                "딸",
+                85,
+            ),
+            self._draft(
+                81,
+                "딸과 공원에 다녀왔어",
+                "PLACE",
+                MemoryAnswerType.PLACE,
+                "공원",
+                80,
+            ),
+        ]
+
+        selected = select_memory_candidate_drafts(drafts)
+
+        self.assertEqual(1, len(selected))
+        self.assertEqual(80, selected[0].first_source_record_id)
 
 
 if __name__ == "__main__":
