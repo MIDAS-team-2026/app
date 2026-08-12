@@ -146,3 +146,35 @@ python conversation_recall_generator.py
 - YNU API 키는 GitHub에 업로드하지 않는다.
 - 앱에는 API 키를 포함하지 않는다.
 - GPT Gateway 호출은 서버 또는 Python 모듈에서만 수행한다.
+
+## 7. memoryPoint 후보 엔진 계약
+
+`memory_candidate_service.py`는 LLM 호출 전에 대화 원문을 사건과 기억
+단서로 구조화한다. 원문을 합치거나 새 사실을 만들지 않는다.
+
+- `eventId`: 같은 사건을 구분하는 안정적인 ID
+- `sourceRecordIds`: 사건에 포함된 원본 레코드 ID
+- `evidence`: 원문, 턴 순서, 단서와 정정 여부
+- `answerValues`: 사건에서 확인된 유형별 단서 전체
+- `recallClue`: 이번 회상 질문에 사용할 단서 하나와 원문 출처
+
+```json
+{
+  "eventId": "ACTIVITY:80",
+  "sourceRecordIds": [80, 81],
+  "answerValues": {
+    "PERSON": ["딸"],
+    "PLACE": ["공원"],
+    "ACTIVITY": ["산책"]
+  },
+  "recallClue": {
+    "sourceRecordId": 80,
+    "sourceText": "딸과 공원에서 산책했어",
+    "answerType": "ACTIVITY",
+    "answerValue": "산책"
+  }
+}
+```
+
+회상 후보는 독립 사건 2개부터 사용할 수 있다. 대화가 자연스럽게
+이어지는 동안에는 3개까지 축적하고, 주제 전환 지점에서 하나를 선택한다.

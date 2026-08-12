@@ -26,7 +26,15 @@ def parse_answer_type(value) -> MemoryAnswerType:
         return MemoryAnswerType.UNKNOWN
 
 
-PERSON_QUESTION_CUES = ("누구", "누가", "어느 분", "어떤 분", "어떤 사람")
+PERSON_QUESTION_CUES = (
+    "누구",
+    "누가",
+    "누군가",
+    "어느 분",
+    "어떤 분",
+    "어떤 사람",
+    "분이 계",
+)
 PLACE_QUESTION_CUES = ("어디", "어느 곳", "어떤 곳", "장소")
 TIME_QUESTION_CUES = ("언제", "몇 시", "몇시", "시간대")
 FOOD_QUESTION_CUES = (
@@ -220,12 +228,31 @@ class MemoryEvent:
 
 
 @dataclass(frozen=True)
+class MemoryClue:
+    answer_type: MemoryAnswerType
+    answer_value: str
+
+    @classmethod
+    def create(cls, answer_type, answer_value) -> "MemoryClue | None":
+        parsed_type = parse_answer_type(answer_type)
+        cleaned_value = " ".join(str(answer_value or "").split())
+
+        if parsed_type == MemoryAnswerType.UNKNOWN or not cleaned_value:
+            return None
+
+        return cls(parsed_type, cleaned_value)
+
+
+@dataclass(frozen=True)
 class MemoryEvidence:
     source_record_id: int
     text: str
     topic: str
+    turn_order: int | None = None
     answer_type: MemoryAnswerType = MemoryAnswerType.UNKNOWN
     answer_value: str = ""
+    clues: tuple[MemoryClue, ...] = ()
+    is_correction: bool = False
     quality_score: int = 0
     continues_previous_event: bool = False
 
@@ -236,8 +263,11 @@ class MemoryEvidence:
         source_record_id: int,
         text: str,
         topic: str,
+        turn_order: int | None = None,
         answer_type: MemoryAnswerType | str = MemoryAnswerType.UNKNOWN,
         answer_value: str = "",
+        clues: Iterable[MemoryClue | dict | tuple] = (),
+        is_correction: bool = False,
         quality_score: int = 0,
         continues_previous_event: bool = False,
     ) -> "MemoryEvidence":
@@ -250,12 +280,47 @@ class MemoryEvidence:
         if not cleaned_text:
             raise ValueError("sourceText or transcriptText is required")
 
+        parsed_type = parse_answer_type(answer_type)
+        cleaned_value = " ".join(str(answer_value or "").split())
+        normalized_clues = []
+
+        if parsed_type != MemoryAnswerType.UNKNOWN and cleaned_value:
+            normalized_clues.append(MemoryClue(parsed_type, cleaned_value))
+
+        for clue in clues or ():
+            if isinstance(clue, MemoryClue):
+                normalized = clue
+            elif isinstance(clue, dict):
+                normalized = MemoryClue.create(
+                    clue.get("answerType"),
+                    clue.get("answerValue") or clue.get("answerKeyword"),
+                )
+            else:
+                try:
+                    normalized = MemoryClue.create(clue[0], clue[1])
+                except (IndexError, TypeError):
+                    normalized = None
+
+            if normalized and normalized not in normalized_clues:
+                normalized_clues.append(normalized)
+
+        if normalized_clues and not cleaned_value:
+            parsed_type = normalized_clues[0].answer_type
+            cleaned_value = normalized_clues[0].answer_value
+
         return cls(
             source_record_id=record_id,
             text=cleaned_text,
             topic=str(topic or "GENERAL").strip().upper(),
-            answer_type=parse_answer_type(answer_type),
-            answer_value=" ".join(str(answer_value or "").split()),
+            turn_order=(
+                int(turn_order)
+                if turn_order is not None and int(turn_order) > 0
+                else None
+            ),
+            answer_type=parsed_type,
+            answer_value=cleaned_value,
+            clues=tuple(normalized_clues),
+            is_correction=bool(is_correction),
             quality_score=max(0, min(int(quality_score or 0), 100)),
             continues_previous_event=bool(continues_previous_event),
         )
@@ -275,12 +340,15 @@ class MemoryEvidence:
             source_record_id=source_record_id,
             text=text,
             topic=payload.get("topic") or "GENERAL",
+            turn_order=payload.get("turnOrder"),
             answer_type=payload.get("answerType") or MemoryAnswerType.UNKNOWN,
             answer_value=(
                 payload.get("answerKeyword")
                 or payload.get("answerValue")
                 or ""
             ),
+            clues=payload.get("clues") or (),
+            is_correction=payload.get("isCorrection", False),
             quality_score=payload.get("qualityScore") or 0,
             continues_previous_event=payload.get("continuesPreviousEvent", False),
         )
@@ -296,18 +364,24 @@ class MemoryCandidateDraft:
         return tuple(item.source_record_id for item in self.evidence)
 
     @property
+    def event_id(self) -> str:
+        return f"{self.topic}:{self.first_source_record_id}"
+
+    @property
     def answer_values(self) -> dict[str, tuple[str, ...]]:
         values: dict[str, list[str]] = {}
 
         for item in self.evidence:
-            if not item.answer_value:
-                continue
+            if item.is_correction:
+                for clue in item.clues:
+                    values.pop(clue.answer_type.value, None)
 
-            key = item.answer_type.value
-            values.setdefault(key, [])
+            for clue in item.clues:
+                key = clue.answer_type.value
+                values.setdefault(key, [])
 
-            if item.answer_value not in values[key]:
-                values[key].append(item.answer_value)
+                if clue.answer_value not in values[key]:
+                    values[key].append(clue.answer_value)
 
         return {key: tuple(items) for key, items in values.items()}
 
@@ -334,8 +408,7 @@ class MemoryCandidateDraft:
             item
             for item in self.evidence
             if (
-                item.answer_type != MemoryAnswerType.UNKNOWN
-                and item.answer_value
+                bool(item.clues)
             )
         ]
         candidates = typed_evidence or list(self.evidence)
@@ -343,11 +416,25 @@ class MemoryCandidateDraft:
         return max(
             candidates,
             key=lambda item: (
+                item.is_correction,
                 item.quality_score,
                 len(item.answer_value),
                 -item.source_record_id,
             ),
         )
+
+    @property
+    def recall_clue(self) -> MemoryClue:
+        target = self.recall_target
+
+        for clue in target.clues:
+            if (
+                clue.answer_type == target.answer_type
+                and clue.answer_value == target.answer_value
+            ):
+                return clue
+
+        return target.clues[0]
 
     def can_merge(self, item: MemoryEvidence, max_record_gap: int = 3) -> bool:
         if not self.evidence or self.topic in {"", "GENERAL", "UNKNOWN"}:
@@ -356,25 +443,29 @@ class MemoryCandidateDraft:
         if item.topic != self.topic:
             return False
 
-        if not item.continues_previous_event:
+        if not item.continues_previous_event and not item.is_correction:
             return False
 
-        record_gap = item.source_record_id - self.source_record_ids[-1]
+        previous = self.evidence[-1]
+        previous_position = previous.turn_order or previous.source_record_id
+        current_position = item.turn_order or item.source_record_id
+        record_gap = current_position - previous_position
 
         if not 0 < record_gap <= max_record_gap:
             return False
 
-        if not item.answer_value:
-            return not any(
-                existing.answer_type == item.answer_type
-                for existing in self.evidence
-            )
+        if not item.clues:
+            return True
 
-        if item.answer_type == MemoryAnswerType.UNKNOWN:
-            return False
+        if item.is_correction:
+            return True
 
-        existing_values = self.answer_values.get(item.answer_type.value, ())
-        return not existing_values or item.answer_value in existing_values
+        for clue in item.clues:
+            existing_values = self.answer_values.get(clue.answer_type.value, ())
+            if existing_values and clue.answer_value not in existing_values:
+                return False
+
+        return True
 
     def add(self, item: MemoryEvidence) -> "MemoryCandidateDraft":
         return MemoryCandidateDraft(
@@ -441,17 +532,32 @@ def select_memory_candidate_drafts(
     drafts: Iterable[MemoryCandidateDraft],
     *,
     used_source_record_ids: Iterable[int] = (),
+    used_event_ids: Iterable[str] = (),
     min_quality_score: int = 40,
     max_candidates: int = 3,
+    require_confirmed_value: bool = False,
 ) -> list[MemoryCandidateDraft]:
     used_ids = {int(record_id) for record_id in used_source_record_ids}
+    used_events = {
+        str(event_id or "").strip()
+        for event_id in used_event_ids
+        if str(event_id or "").strip()
+    }
     eligible = [
         draft
         for draft in drafts
         if (
             draft.topic not in {"", "GENERAL", "UNKNOWN"}
             and draft.quality_score >= min_quality_score
+            and (
+                not require_confirmed_value
+                or any(
+                    bool(item.clues)
+                    for item in draft.evidence
+                )
+            )
             and not used_ids.intersection(draft.source_record_ids)
+            and draft.event_id not in used_events
         )
     ]
     eligible.sort(

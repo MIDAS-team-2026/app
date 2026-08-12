@@ -8,6 +8,9 @@ sys.path.insert(0, str(AI_ROOT))
 
 
 import voice_reply_handler as handler  # noqa: E402
+from recall.memory_candidate_service import (  # noqa: E402
+    build_memory_candidate_selection,
+)
 
 
 class MemoryCandidateIntegrationTest(unittest.TestCase):
@@ -37,8 +40,29 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
 
         self.assertEqual([10, 11, 12], [item["sourceRecordId"] for item in payloads])
         self.assertEqual("MEAL", payloads[0]["topic"])
+        self.assertEqual("김치볶음밥", payloads[0]["answerValue"])
+        self.assertEqual("딸", payloads[1]["answerValue"])
+        self.assertEqual("집", payloads[2]["answerValue"])
         self.assertTrue(payloads[1]["continuesPreviousEvent"])
         self.assertTrue(payloads[2]["continuesPreviousEvent"])
+
+        candidate = build_memory_candidate_selection(payloads).to_dict()[
+            "candidates"
+        ][0]
+        self.assertEqual("MEAL:10", candidate["eventId"])
+        self.assertEqual([10, 11, 12], candidate["sourceRecordIds"])
+        self.assertEqual(
+            ["김치볶음밥을 먹었어", "딸과 같이 먹었어", "집에서 먹었어"],
+            [item["sourceText"] for item in candidate["evidence"]],
+        )
+        self.assertEqual(
+            {
+                "FOOD": ["김치볶음밥"],
+                "PERSON": ["딸"],
+                "PLACE": ["집"],
+            },
+            candidate["answerValues"],
+        )
 
     def test_structured_context_returns_original_text_and_record_id(self):
         records = [
@@ -118,6 +142,109 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
         self.assertTrue(payloads[1]["continuesPreviousEvent"])
         self.assertEqual("MEDIA", payloads[2]["topic"])
         self.assertFalse(payloads[2]["continuesPreviousEvent"])
+
+    def test_low_information_answer_never_becomes_confirmed_candidate(self):
+        records = [
+            {
+                "recordId": 60,
+                "turnOrder": 1,
+                "transcriptText": "아직은 없어",
+                "aiReplyText": "오늘 기억에 남는 일이 있으셨어요?",
+            },
+            {
+                "recordId": 61,
+                "turnOrder": 2,
+                "transcriptText": "없다니까",
+                "aiReplyText": "요즘 즐겨 보는 방송이 있으세요?",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertTrue(all(not item["answerValue"] for item in payloads))
+        self.assertEqual([], result["candidates"])
+
+    def test_untyped_followups_keep_one_meal_event(self):
+        records = [
+            {
+                "recordId": 70,
+                "turnOrder": 1,
+                "transcriptText": "엽기 떡볶이와 치킨을 먹었어",
+                "aiReplyText": "드셨을 때 맛은 어떠셨어요?",
+            },
+            {
+                "recordId": 71,
+                "turnOrder": 2,
+                "transcriptText": "맛있었어",
+                "aiReplyText": "같이 드신 분이 계셨어요?",
+            },
+            {
+                "recordId": 72,
+                "turnOrder": 3,
+                "transcriptText": "혼자 먹었어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            },
+            {
+                "recordId": 73,
+                "turnOrder": 4,
+                "transcriptText": "집에서 먹었어",
+                "aiReplyText": "식사 후에는 뭘 하셨어요?",
+            },
+            {
+                "recordId": 74,
+                "turnOrder": 5,
+                "transcriptText": "식사 후에는 잤어",
+                "aiReplyText": "오늘 보신 방송이 있으세요?",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual("MEAL:70", candidate["eventId"])
+        self.assertEqual([70, 71, 72, 73, 74], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "FOOD": ["엽기 떡볶이와 치킨"],
+                "PERSON": ["혼자"],
+                "PLACE": ["집"],
+                "TIME": ["식사 후"],
+            },
+            candidate["answerValues"],
+        )
+
+    def test_correction_turn_updates_the_same_event(self):
+        records = [
+            {
+                "recordId": 80,
+                "turnOrder": 1,
+                "transcriptText": "공원에 갔어",
+                "aiReplyText": "누구와 같이 가셨어요?",
+            },
+            {
+                "recordId": 81,
+                "turnOrder": 2,
+                "transcriptText": "딸과 갔어",
+                "aiReplyText": "딸과 함께 가셨군요.",
+            },
+            {
+                "recordId": 82,
+                "turnOrder": 3,
+                "transcriptText": "아니, 아들과 갔어",
+                "aiReplyText": "그곳에서 무엇을 하셨어요?",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual([80, 81, 82], candidate["sourceRecordIds"])
+        self.assertEqual(["아들"], candidate["answerValues"]["PERSON"])
 
 
 if __name__ == "__main__":
