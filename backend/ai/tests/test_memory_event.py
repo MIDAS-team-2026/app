@@ -388,6 +388,121 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         self.assertEqual(1, len(selected))
         self.assertEqual(80, selected[0].first_source_record_id)
 
+    def test_shared_person_does_not_hide_distinct_events(self):
+        drafts = [
+            MemoryCandidateDraft(
+                topic="ACTIVITY",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=90,
+                        text="딸과 공원에서 산책했어",
+                        topic="ACTIVITY",
+                        clues=(
+                            (MemoryAnswerType.PERSON, "딸"),
+                            (MemoryAnswerType.PLACE, "공원"),
+                            (MemoryAnswerType.ACTIVITY, "산책"),
+                        ),
+                        quality_score=80,
+                    ),
+                ),
+            ),
+            MemoryCandidateDraft(
+                topic="ACTIVITY",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=91,
+                        text="딸과 시장에서 장을 봤어",
+                        topic="ACTIVITY",
+                        clues=(
+                            (MemoryAnswerType.PERSON, "딸"),
+                            (MemoryAnswerType.PLACE, "시장"),
+                            (MemoryAnswerType.ACTIVITY, "장"),
+                        ),
+                        quality_score=80,
+                    ),
+                ),
+            ),
+        ]
+
+        selected = select_memory_candidate_drafts(drafts)
+
+        self.assertEqual([90, 91], [item.first_source_record_id for item in selected])
+
+    def test_multiple_shared_clues_remove_a_fragmented_duplicate(self):
+        drafts = [
+            MemoryCandidateDraft(
+                topic="ACTIVITY",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=92,
+                        text="딸과 공원에서 산책했어",
+                        topic="ACTIVITY",
+                        clues=(
+                            (MemoryAnswerType.PERSON, "딸"),
+                            (MemoryAnswerType.PLACE, "공원"),
+                            (MemoryAnswerType.ACTIVITY, "산책"),
+                        ),
+                        quality_score=90,
+                    ),
+                ),
+            ),
+            MemoryCandidateDraft(
+                topic="ACTIVITY",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=93,
+                        text="딸하고 공원에 갔어",
+                        topic="ACTIVITY",
+                        clues=(
+                            (MemoryAnswerType.PERSON, "딸"),
+                            (MemoryAnswerType.PLACE, "공원"),
+                        ),
+                        quality_score=70,
+                    ),
+                ),
+            ),
+        ]
+
+        selected = select_memory_candidate_drafts(drafts)
+
+        self.assertEqual([92], [item.first_source_record_id for item in selected])
+
+    def test_selected_candidates_return_in_turn_order(self):
+        drafts = [
+            MemoryCandidateDraft(
+                topic="MEDIA",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=10,
+                        turn_order=2,
+                        text="뉴스를 봤어",
+                        topic="MEDIA",
+                        answer_type=MemoryAnswerType.MEDIA,
+                        answer_value="뉴스",
+                        quality_score=80,
+                    ),
+                ),
+            ),
+            MemoryCandidateDraft(
+                topic="MEAL",
+                evidence=(
+                    MemoryEvidence.create(
+                        source_record_id=100,
+                        turn_order=1,
+                        text="김밥을 먹었어",
+                        topic="MEAL",
+                        answer_type=MemoryAnswerType.FOOD,
+                        answer_value="김밥",
+                        quality_score=80,
+                    ),
+                ),
+            ),
+        ]
+
+        selected = select_memory_candidate_drafts(drafts)
+
+        self.assertEqual([100, 10], [item.first_source_record_id for item in selected])
+
 
 if __name__ == "__main__":
     unittest.main()
