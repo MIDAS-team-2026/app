@@ -12,6 +12,7 @@ from recall.memory_event import (  # noqa: E402
     MemoryCandidateDraft,
     MemoryEvidence,
     group_memory_evidence,
+    infer_answer_type,
     select_memory_candidate_drafts,
     should_continue_memory_event,
 )
@@ -110,7 +111,7 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         self.assertEqual((20,), drafts[0].source_record_ids)
         self.assertEqual((21,), drafts[1].source_record_ids)
 
-    def test_same_untyped_detail_kind_is_not_merged_twice(self):
+    def test_untyped_detail_does_not_split_a_continuing_event(self):
         evidence = [
             MemoryEvidence.create(
                 source_record_id=22,
@@ -131,7 +132,8 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
 
         drafts = group_memory_evidence(evidence)
 
-        self.assertEqual(2, len(drafts))
+        self.assertEqual(1, len(drafts))
+        self.assertEqual((22, 23), drafts[0].source_record_ids)
 
     def test_payload_contract_accepts_hyeongseop_analysis_fields(self):
         evidence = MemoryEvidence.from_payload(
@@ -231,6 +233,40 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         for inputs in cases:
             with self.subTest(inputs=inputs):
                 self.assertTrue(should_continue_memory_event(**inputs))
+
+    def test_person_existence_question_is_classified_as_person(self):
+        self.assertEqual(
+            MemoryAnswerType.PERSON,
+            infer_answer_type("같이 드신 분이 계셨어요?"),
+        )
+
+    def test_turn_order_keeps_event_connected_despite_record_id_gap(self):
+        evidence = [
+            MemoryEvidence.create(
+                source_record_id=100,
+                turn_order=1,
+                text="김치볶음밥을 먹었어",
+                topic="MEAL",
+                answer_type=MemoryAnswerType.FOOD,
+                answer_value="김치볶음밥",
+                quality_score=80,
+            ),
+            MemoryEvidence.create(
+                source_record_id=250,
+                turn_order=2,
+                text="딸과 먹었어",
+                topic="MEAL",
+                answer_type=MemoryAnswerType.PERSON,
+                answer_value="딸",
+                quality_score=80,
+                continues_previous_event=True,
+            ),
+        ]
+
+        drafts = group_memory_evidence(evidence)
+
+        self.assertEqual(1, len(drafts))
+        self.assertEqual((100, 250), drafts[0].source_record_ids)
 
     def test_unrelated_answer_starts_new_event_even_after_followup(self):
         self.assertFalse(

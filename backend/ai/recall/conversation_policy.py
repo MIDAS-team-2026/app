@@ -17,6 +17,7 @@ class RecallTimingAction(str, Enum):
 
 
 MAX_CONSECUTIVE_TOPIC_TURNS = 3
+MIN_MATURED_RECALL_CANDIDATES = 2
 
 
 @dataclass(frozen=True)
@@ -98,7 +99,7 @@ def decide_recall_timing(
     latest_is_low_info: bool,
     latest_is_negative: bool,
 ) -> RecallTimingDecision:
-    if matured_candidate_count < 2:
+    if matured_candidate_count < MIN_MATURED_RECALL_CANDIDATES:
         return RecallTimingDecision(
             action=RecallTimingAction.WAIT,
             reason="not_enough_matured_memories",
@@ -111,7 +112,7 @@ def decide_recall_timing(
         )
 
     if (
-        matured_candidate_count == 2
+        matured_candidate_count == MIN_MATURED_RECALL_CANDIDATES
         and latest_has_followup_context
         and not latest_is_memory_candidate
         and not latest_is_low_info

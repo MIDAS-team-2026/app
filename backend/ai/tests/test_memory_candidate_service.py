@@ -13,6 +13,109 @@ from recall.memory_candidate_service import (  # noqa: E402
 
 
 class MemoryCandidateServiceTest(unittest.TestCase):
+    def test_excludes_candidate_without_confirmed_type_and_value(self):
+        result = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 1,
+                    "sourceText": "그냥 쉬었어",
+                    "topic": "ACTIVITY",
+                    "answerType": "UNKNOWN",
+                    "qualityScore": 90,
+                }
+            ]
+        ).to_dict()
+
+        self.assertEqual([], result["candidates"])
+
+    def test_preserves_multiple_clues_from_one_source_record(self):
+        result = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 5,
+                    "sourceText": "딸과 공원에서 산책했어",
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "산책",
+                    "clues": [
+                        {"answerType": "PERSON", "answerValue": "딸"},
+                        {"answerType": "PLACE", "answerValue": "공원"},
+                        {"answerType": "ACTIVITY", "answerValue": "산책"},
+                    ],
+                    "qualityScore": 90,
+                }
+            ]
+        ).to_dict()
+
+        candidate = result["candidates"][0]
+        self.assertEqual([5], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "PERSON": ["딸"],
+                "PLACE": ["공원"],
+                "ACTIVITY": ["산책"],
+            },
+            candidate["answerValues"],
+        )
+        self.assertEqual(
+            {
+                "sourceRecordId": 5,
+                "sourceText": "딸과 공원에서 산책했어",
+                "answerType": "ACTIVITY",
+                "answerValue": "산책",
+            },
+            candidate["recallClue"],
+        )
+
+    def test_used_event_is_not_selected_again(self):
+        payload = {
+            "sourceRecordId": 15,
+            "sourceText": "김치볶음밥을 먹었어",
+            "topic": "MEAL",
+            "answerType": "FOOD",
+            "answerValue": "김치볶음밥",
+            "qualityScore": 90,
+        }
+
+        result = build_memory_candidate_selection(
+            [payload],
+            used_event_ids={"MEAL:15"},
+        ).to_dict()
+
+        self.assertEqual([], result["candidates"])
+
+    def test_later_correction_replaces_clue_without_splitting_event(self):
+        result = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 20,
+                    "turnOrder": 1,
+                    "sourceText": "딸과 공원에 갔어",
+                    "topic": "ACTIVITY",
+                    "answerType": "PERSON",
+                    "answerValue": "딸",
+                    "qualityScore": 80,
+                },
+                {
+                    "sourceRecordId": 21,
+                    "turnOrder": 2,
+                    "sourceText": "아니, 아들과 갔어",
+                    "topic": "ACTIVITY",
+                    "answerType": "PERSON",
+                    "answerValue": "아들",
+                    "qualityScore": 80,
+                    "continuesPreviousEvent": True,
+                    "isCorrection": True,
+                },
+            ]
+        ).to_dict()
+
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual([20, 21], candidate["sourceRecordIds"])
+        self.assertEqual({"PERSON": ["아들"]}, candidate["answerValues"])
+        self.assertEqual(21, candidate["recallClue"]["sourceRecordId"])
+
     def test_builds_grouped_candidates_from_analysis_payloads(self):
         result = build_memory_candidate_selection(
             [
@@ -54,6 +157,7 @@ class MemoryCandidateServiceTest(unittest.TestCase):
         ).to_dict()
 
         self.assertEqual(2, len(result["candidates"]))
+        self.assertEqual("MEAL:10", result["candidates"][0]["eventId"])
         self.assertEqual([10, 11, 12], result["candidates"][0]["sourceRecordIds"])
         self.assertEqual(
             [
@@ -70,9 +174,15 @@ class MemoryCandidateServiceTest(unittest.TestCase):
             {
                 "sourceRecordId": 10,
                 "sourceText": "김치볶음밥 먹었어",
-                "answerType": "FOOD",
-                "answerValue": "김치볶음밥",
-                "qualityScore": 75,
+                    "answerType": "FOOD",
+                    "answerValue": "김치볶음밥",
+                    "clues": [
+                        {
+                            "answerType": "FOOD",
+                            "answerValue": "김치볶음밥",
+                        }
+                    ],
+                    "qualityScore": 75,
                 "continuesPreviousEvent": False,
             },
             result["candidates"][0]["recallTarget"],

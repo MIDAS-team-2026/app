@@ -42,6 +42,10 @@ from recall.memory_event import (
     infer_answer_type,
     should_continue_memory_event,
 )
+from recall.memory_evidence_extractor import (
+    extract_memory_clues,
+    is_correction_utterance,
+)
 from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
@@ -884,12 +888,19 @@ def _build_memory_evidence_payloads(
             _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
         }
         answer_type = infer_answer_type(previous_question)
+        is_correction = is_correction_utterance(text)
         continues_previous_event = should_continue_memory_event(
             last_event_topic=last_event_topic,
             detected_topic=detected_topic,
             question_topics=question_topics,
             answer_type=answer_type,
         )
+        if (
+            is_correction
+            and last_event_topic
+            and last_event_topic not in {"UNGROUPED", "UNKNOWN", "GENERAL"}
+        ):
+            continues_previous_event = True
         event_topic = (
             last_event_topic
             if continues_previous_event
@@ -899,15 +910,29 @@ def _build_memory_evidence_payloads(
         if answer_type == MemoryAnswerType.UNKNOWN:
             answer_type = _fallback_answer_type_for_topic(event_topic)
 
+        clues = extract_memory_clues(text, answer_type)
+        answer_value = next(
+            (
+                clue["answerValue"]
+                for clue in clues
+                if clue["answerType"] == answer_type.value
+            ),
+            "",
+        )
+
         evaluation = score_recall_memory_candidate(text)
         payloads.append(
             {
                 "sourceRecordId": record_id,
+                "turnOrder": int(record.get("turnOrder") or 0) or None,
                 "sourceText": text,
                 "topic": event_topic,
                 "answerType": answer_type.value,
+                "answerValue": answer_value,
+                "clues": list(clues),
                 "qualityScore": evaluation["recallScore"],
                 "continuesPreviousEvent": continues_previous_event,
+                "isCorrection": is_correction,
             }
         )
         last_event_topic = event_topic
