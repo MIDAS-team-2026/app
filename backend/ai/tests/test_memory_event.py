@@ -268,6 +268,56 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
         self.assertEqual(1, len(drafts))
         self.assertEqual((100, 250), drafts[0].source_record_ids)
 
+    def test_turn_order_controls_grouping_when_record_ids_are_out_of_order(self):
+        evidence = [
+            MemoryEvidence.create(
+                source_record_id=300,
+                turn_order=1,
+                text="공원에 갔어",
+                topic="PLACE",
+                answer_type=MemoryAnswerType.PLACE,
+                answer_value="공원",
+                quality_score=80,
+            ),
+            MemoryEvidence.create(
+                source_record_id=100,
+                turn_order=2,
+                text="딸과 갔어",
+                topic="PLACE",
+                answer_type=MemoryAnswerType.PERSON,
+                answer_value="딸",
+                quality_score=80,
+                continues_previous_event=True,
+            ),
+        ]
+
+        drafts = group_memory_evidence(evidence)
+
+        self.assertEqual(1, len(drafts))
+        self.assertEqual((300, 100), drafts[0].source_record_ids)
+
+    def test_correction_without_question_anchor_keeps_compatible_event(self):
+        self.assertTrue(
+            should_continue_memory_event(
+                last_event_topic="PLACE",
+                detected_topic="PLACE",
+                question_topics=set(),
+                answer_type=MemoryAnswerType.PLACE,
+                is_correction=True,
+            )
+        )
+
+    def test_correction_does_not_merge_an_unrelated_topic(self):
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="MEAL",
+                detected_topic="MEDIA",
+                question_topics={"MEAL"},
+                answer_type=MemoryAnswerType.MEDIA,
+                is_correction=True,
+            )
+        )
+
     def test_unrelated_answer_starts_new_event_even_after_followup(self):
         self.assertFalse(
             should_continue_memory_event(

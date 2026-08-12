@@ -111,6 +111,7 @@ def should_continue_memory_event(
     detected_topic: str | None,
     question_topics: Iterable[str],
     answer_type: MemoryAnswerType | str,
+    is_correction: bool = False,
 ) -> bool:
     """Return True only when the current answer still describes the last event.
 
@@ -130,11 +131,19 @@ def should_continue_memory_event(
     if last_topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
         return False
 
+    answer_slot_topic = infer_topic(parse_answer_type(answer_type))
+    compatible_topics = {last_topic, answer_slot_topic}
+
+    if is_correction:
+        return (
+            current_topic == last_topic
+            or current_topic in anchored_topics
+        )
+
     if last_topic not in anchored_topics:
         return False
 
-    answer_slot_topic = infer_topic(parse_answer_type(answer_type))
-    return current_topic in {last_topic, answer_slot_topic}
+    return current_topic in compatible_topics
 
 
 @dataclass(frozen=True)
@@ -480,7 +489,17 @@ def group_memory_evidence(
 ) -> list[MemoryCandidateDraft]:
     drafts: list[MemoryCandidateDraft] = []
 
-    for item in sorted(items, key=lambda current: current.source_record_id):
+    ordered_items = sorted(
+        items,
+        key=lambda current: (
+            current.turn_order
+            if current.turn_order is not None
+            else current.source_record_id,
+            current.source_record_id,
+        ),
+    )
+
+    for item in ordered_items:
         if drafts and drafts[-1].can_merge(item, max_record_gap=max_record_gap):
             drafts[-1] = drafts[-1].add(item)
             continue
