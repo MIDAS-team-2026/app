@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Iterable, Optional
@@ -253,6 +254,14 @@ class MemoryClue:
 
 
 @dataclass(frozen=True)
+class MemoryRecallClue:
+    clue_id: str
+    source_record_id: int
+    source_text: str
+    clue: MemoryClue
+
+
+@dataclass(frozen=True)
 class MemoryEvidence:
     source_record_id: int
     text: str
@@ -434,16 +443,69 @@ class MemoryCandidateDraft:
 
     @property
     def recall_clue(self) -> MemoryClue:
+        return self.select_recall_clue().clue
+
+    @property
+    def recall_clues(self) -> tuple[MemoryRecallClue, ...]:
+        active_values = self.answer_values
+        candidates = []
+        seen = set()
+
+        for item in reversed(self.evidence):
+            for clue in item.clues:
+                identity = (clue.answer_type, clue.answer_value)
+
+                if identity in seen:
+                    continue
+
+                if clue.answer_value not in active_values.get(
+                    clue.answer_type.value,
+                    (),
+                ):
+                    continue
+
+                digest = hashlib.sha1(
+                    clue.answer_value.casefold().encode("utf-8")
+                ).hexdigest()[:12]
+                candidates.append(
+                    MemoryRecallClue(
+                        clue_id=(
+                            f"{self.event_id}:{clue.answer_type.value}:{digest}"
+                        ),
+                        source_record_id=item.source_record_id,
+                        source_text=item.text,
+                        clue=clue,
+                    )
+                )
+                seen.add(identity)
+
         target = self.recall_target
+        candidates.sort(
+            key=lambda candidate: (
+                candidate.source_record_id == target.source_record_id
+                and candidate.clue.answer_type == target.answer_type
+                and candidate.clue.answer_value == target.answer_value,
+                candidate.source_record_id,
+            ),
+            reverse=True,
+        )
+        return tuple(candidates)
 
-        for clue in target.clues:
-            if (
-                clue.answer_type == target.answer_type
-                and clue.answer_value == target.answer_value
-            ):
-                return clue
+    def select_recall_clue(
+        self,
+        used_clue_ids: Iterable[str] = (),
+    ) -> MemoryRecallClue:
+        used_ids = {
+            str(clue_id or "").strip()
+            for clue_id in used_clue_ids
+            if str(clue_id or "").strip()
+        }
 
-        return target.clues[0]
+        for candidate in self.recall_clues:
+            if candidate.clue_id not in used_ids:
+                return candidate
+
+        raise ValueError("memory event has no available recall clue")
 
     def can_merge(self, item: MemoryEvidence, max_record_gap: int = 3) -> bool:
         if not self.evidence or self.topic in {"", "GENERAL", "UNKNOWN"}:
@@ -552,6 +614,7 @@ def select_memory_candidate_drafts(
     *,
     used_source_record_ids: Iterable[int] = (),
     used_event_ids: Iterable[str] = (),
+    used_clue_ids: Iterable[str] = (),
     min_quality_score: int = 40,
     max_candidates: int = 3,
     require_confirmed_value: bool = False,
@@ -561,6 +624,11 @@ def select_memory_candidate_drafts(
         str(event_id or "").strip()
         for event_id in used_event_ids
         if str(event_id or "").strip()
+    }
+    used_clues = {
+        str(clue_id or "").strip()
+        for clue_id in used_clue_ids
+        if str(clue_id or "").strip()
     }
     eligible = [
         draft
@@ -577,6 +645,13 @@ def select_memory_candidate_drafts(
             )
             and not used_ids.intersection(draft.source_record_ids)
             and draft.event_id not in used_events
+            and (
+                not draft.recall_clues
+                or any(
+                    clue.clue_id not in used_clues
+                    for clue in draft.recall_clues
+                )
+            )
         )
     ]
     eligible.sort(
