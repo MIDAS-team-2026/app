@@ -57,15 +57,75 @@ class MemoryCandidateServiceTest(unittest.TestCase):
             },
             candidate["answerValues"],
         )
+        self.assertEqual(5, candidate["recallClue"]["sourceRecordId"])
         self.assertEqual(
-            {
-                "sourceRecordId": 5,
-                "sourceText": "딸과 공원에서 산책했어",
-                "answerType": "ACTIVITY",
-                "answerValue": "산책",
-            },
-            candidate["recallClue"],
+            "딸과 공원에서 산책했어",
+            candidate["recallClue"]["sourceText"],
         )
+        self.assertEqual("ACTIVITY", candidate["recallClue"]["answerType"])
+        self.assertEqual("산책", candidate["recallClue"]["answerValue"])
+        self.assertTrue(
+            candidate["recallClue"]["clueId"].startswith("ACTIVITY:5:ACTIVITY:")
+        )
+
+    def test_used_clue_selects_another_clue_from_the_same_event(self):
+        payload = {
+            "sourceRecordId": 6,
+            "sourceText": "딸과 공원에서 산책했어",
+            "topic": "ACTIVITY",
+            "answerType": "ACTIVITY",
+            "answerValue": "산책",
+            "clues": [
+                {"answerType": "PERSON", "answerValue": "딸"},
+                {"answerType": "PLACE", "answerValue": "공원"},
+                {"answerType": "ACTIVITY", "answerValue": "산책"},
+            ],
+            "qualityScore": 90,
+        }
+        initial = build_memory_candidate_selection([payload]).to_dict()
+        used_clue_id = initial["candidates"][0]["recallClue"]["clueId"]
+
+        result = build_memory_candidate_selection(
+            [payload],
+            used_clue_ids={used_clue_id},
+        ).to_dict()
+
+        candidate = result["candidates"][0]
+        self.assertNotEqual(used_clue_id, candidate["recallClue"]["clueId"])
+        self.assertEqual(
+            "USED",
+            next(
+                clue["status"]
+                for clue in candidate["recallClues"]
+                if clue["clueId"] == used_clue_id
+            ),
+        )
+
+    def test_event_is_excluded_after_all_of_its_clues_are_used(self):
+        payload = {
+            "sourceRecordId": 7,
+            "sourceText": "공원에서 산책했어",
+            "topic": "ACTIVITY",
+            "answerType": "ACTIVITY",
+            "answerValue": "산책",
+            "clues": [
+                {"answerType": "PLACE", "answerValue": "공원"},
+                {"answerType": "ACTIVITY", "answerValue": "산책"},
+            ],
+            "qualityScore": 90,
+        }
+        initial = build_memory_candidate_selection([payload]).to_dict()
+        used_clue_ids = {
+            clue["clueId"]
+            for clue in initial["candidates"][0]["recallClues"]
+        }
+
+        result = build_memory_candidate_selection(
+            [payload],
+            used_clue_ids=used_clue_ids,
+        ).to_dict()
+
+        self.assertEqual([], result["candidates"])
 
     def test_used_event_is_not_selected_again(self):
         payload = {
@@ -115,6 +175,10 @@ class MemoryCandidateServiceTest(unittest.TestCase):
         self.assertEqual([20, 21], candidate["sourceRecordIds"])
         self.assertEqual({"PERSON": ["아들"]}, candidate["answerValues"])
         self.assertEqual(21, candidate["recallClue"]["sourceRecordId"])
+        self.assertEqual(
+            ["아들"],
+            [clue["answerValue"] for clue in candidate["recallClues"]],
+        )
 
     def test_builds_grouped_candidates_from_analysis_payloads(self):
         result = build_memory_candidate_selection(

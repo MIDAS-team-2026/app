@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import asdict, dataclass
 from enum import Enum
 from typing import Iterable, Optional
@@ -111,6 +112,7 @@ def should_continue_memory_event(
     detected_topic: str | None,
     question_topics: Iterable[str],
     answer_type: MemoryAnswerType | str,
+    is_correction: bool = False,
 ) -> bool:
     """Return True only when the current answer still describes the last event.
 
@@ -130,11 +132,19 @@ def should_continue_memory_event(
     if last_topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
         return False
 
+    answer_slot_topic = infer_topic(parse_answer_type(answer_type))
+    compatible_topics = {last_topic, answer_slot_topic}
+
+    if is_correction:
+        return (
+            current_topic == last_topic
+            or current_topic in anchored_topics
+        )
+
     if last_topic not in anchored_topics:
         return False
 
-    answer_slot_topic = infer_topic(parse_answer_type(answer_type))
-    return current_topic in {last_topic, answer_slot_topic}
+    return current_topic in compatible_topics
 
 
 @dataclass(frozen=True)
@@ -241,6 +251,14 @@ class MemoryClue:
             return None
 
         return cls(parsed_type, cleaned_value)
+
+
+@dataclass(frozen=True)
+class MemoryRecallClue:
+    clue_id: str
+    source_record_id: int
+    source_text: str
+    clue: MemoryClue
 
 
 @dataclass(frozen=True)
@@ -403,6 +421,14 @@ class MemoryCandidateDraft:
         return self.source_record_ids[0] if self.source_record_ids else 0
 
     @property
+    def first_position(self) -> int:
+        if not self.evidence:
+            return 0
+
+        first = self.evidence[0]
+        return first.turn_order or first.source_record_id
+
+    @property
     def recall_target(self) -> MemoryEvidence:
         typed_evidence = [
             item
@@ -425,16 +451,69 @@ class MemoryCandidateDraft:
 
     @property
     def recall_clue(self) -> MemoryClue:
+        return self.select_recall_clue().clue
+
+    @property
+    def recall_clues(self) -> tuple[MemoryRecallClue, ...]:
+        active_values = self.answer_values
+        candidates = []
+        seen = set()
+
+        for item in reversed(self.evidence):
+            for clue in item.clues:
+                identity = (clue.answer_type, clue.answer_value)
+
+                if identity in seen:
+                    continue
+
+                if clue.answer_value not in active_values.get(
+                    clue.answer_type.value,
+                    (),
+                ):
+                    continue
+
+                digest = hashlib.sha1(
+                    clue.answer_value.casefold().encode("utf-8")
+                ).hexdigest()[:12]
+                candidates.append(
+                    MemoryRecallClue(
+                        clue_id=(
+                            f"{self.event_id}:{clue.answer_type.value}:{digest}"
+                        ),
+                        source_record_id=item.source_record_id,
+                        source_text=item.text,
+                        clue=clue,
+                    )
+                )
+                seen.add(identity)
+
         target = self.recall_target
+        candidates.sort(
+            key=lambda candidate: (
+                candidate.source_record_id == target.source_record_id
+                and candidate.clue.answer_type == target.answer_type
+                and candidate.clue.answer_value == target.answer_value,
+                candidate.source_record_id,
+            ),
+            reverse=True,
+        )
+        return tuple(candidates)
 
-        for clue in target.clues:
-            if (
-                clue.answer_type == target.answer_type
-                and clue.answer_value == target.answer_value
-            ):
-                return clue
+    def select_recall_clue(
+        self,
+        used_clue_ids: Iterable[str] = (),
+    ) -> MemoryRecallClue:
+        used_ids = {
+            str(clue_id or "").strip()
+            for clue_id in used_clue_ids
+            if str(clue_id or "").strip()
+        }
 
-        return target.clues[0]
+        for candidate in self.recall_clues:
+            if candidate.clue_id not in used_ids:
+                return candidate
+
+        raise ValueError("memory event has no available recall clue")
 
     def can_merge(self, item: MemoryEvidence, max_record_gap: int = 3) -> bool:
         if not self.evidence or self.topic in {"", "GENERAL", "UNKNOWN"}:
@@ -480,7 +559,17 @@ def group_memory_evidence(
 ) -> list[MemoryCandidateDraft]:
     drafts: list[MemoryCandidateDraft] = []
 
-    for item in sorted(items, key=lambda current: current.source_record_id):
+    ordered_items = sorted(
+        items,
+        key=lambda current: (
+            current.turn_order
+            if current.turn_order is not None
+            else current.source_record_id,
+            current.source_record_id,
+        ),
+    )
+
+    for item in ordered_items:
         if drafts and drafts[-1].can_merge(item, max_record_gap=max_record_gap):
             drafts[-1] = drafts[-1].add(item)
             continue
@@ -502,8 +591,14 @@ def _is_duplicate_candidate(
     if set(current.source_record_ids) & set(selected.source_record_ids):
         return True
 
-    current_texts = {item.text for item in current.evidence}
-    selected_texts = {item.text for item in selected.evidence}
+    current_texts = {
+        "".join(item.text.casefold().split())
+        for item in current.evidence
+    }
+    selected_texts = {
+        "".join(item.text.casefold().split())
+        for item in selected.evidence
+    }
 
     if current_texts & selected_texts:
         return True
@@ -511,21 +606,26 @@ def _is_duplicate_candidate(
     if current.topic != selected.topic:
         return False
 
-    current_values = {
-        value
-        for values in current.answer_values.values()
+    current_clues = {
+        (answer_type, value.casefold())
+        for answer_type, values in current.answer_values.items()
         for value in values
     }
-    selected_values = {
-        value
-        for values in selected.answer_values.values()
+    selected_clues = {
+        (answer_type, value.casefold())
+        for answer_type, values in selected.answer_values.items()
         for value in values
     }
 
-    if current_values and selected_values:
-        return bool(current_values & selected_values)
+    if not current_clues or not selected_clues:
+        return False
 
-    return False
+    shared_clues = current_clues & selected_clues
+    smaller_clue_count = min(len(current_clues), len(selected_clues))
+    return (
+        len(shared_clues) >= 2
+        and len(shared_clues) == smaller_clue_count
+    )
 
 
 def select_memory_candidate_drafts(
@@ -533,6 +633,7 @@ def select_memory_candidate_drafts(
     *,
     used_source_record_ids: Iterable[int] = (),
     used_event_ids: Iterable[str] = (),
+    used_clue_ids: Iterable[str] = (),
     min_quality_score: int = 40,
     max_candidates: int = 3,
     require_confirmed_value: bool = False,
@@ -542,6 +643,11 @@ def select_memory_candidate_drafts(
         str(event_id or "").strip()
         for event_id in used_event_ids
         if str(event_id or "").strip()
+    }
+    used_clues = {
+        str(clue_id or "").strip()
+        for clue_id in used_clue_ids
+        if str(clue_id or "").strip()
     }
     eligible = [
         draft
@@ -558,6 +664,13 @@ def select_memory_candidate_drafts(
             )
             and not used_ids.intersection(draft.source_record_ids)
             and draft.event_id not in used_events
+            and (
+                not draft.recall_clues
+                or any(
+                    clue.clue_id not in used_clues
+                    for clue in draft.recall_clues
+                )
+            )
         )
     ]
     eligible.sort(
@@ -580,4 +693,4 @@ def select_memory_candidate_drafts(
         if len(selected) >= max(0, int(max_candidates)):
             break
 
-    return sorted(selected, key=lambda draft: draft.first_source_record_id)
+    return sorted(selected, key=lambda draft: draft.first_position)

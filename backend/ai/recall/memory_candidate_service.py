@@ -21,10 +21,30 @@ class RejectedMemoryPayload:
 class MemoryCandidateSelection:
     candidates: tuple[MemoryCandidateDraft, ...]
     rejected: tuple[RejectedMemoryPayload, ...]
+    used_clue_ids: tuple[str, ...] = ()
 
     def to_dict(self) -> dict:
-        return {
-            "candidates": [
+        used_clue_ids = set(self.used_clue_ids)
+        candidates = []
+
+        for candidate in self.candidates:
+            selected_clue = candidate.select_recall_clue(used_clue_ids)
+            recall_clues = [
+                {
+                    "clueId": item.clue_id,
+                    "sourceRecordId": item.source_record_id,
+                    "sourceText": item.source_text,
+                    "answerType": item.clue.answer_type.value,
+                    "answerValue": item.clue.answer_value,
+                    "status": (
+                        "USED"
+                        if item.clue_id in used_clue_ids
+                        else "AVAILABLE"
+                    ),
+                }
+                for item in candidate.recall_clues
+            ]
+            candidates.append(
                 {
                     "eventId": candidate.event_id,
                     "topic": candidate.topic,
@@ -85,19 +105,23 @@ class MemoryCandidateSelection:
                         ),
                     },
                     "recallClue": {
-                        "sourceRecordId": candidate.recall_target.source_record_id,
-                        "sourceText": candidate.recall_target.text,
-                        "answerType": candidate.recall_clue.answer_type.value,
-                        "answerValue": candidate.recall_clue.answer_value,
+                        "clueId": selected_clue.clue_id,
+                        "sourceRecordId": selected_clue.source_record_id,
+                        "sourceText": selected_clue.source_text,
+                        "answerType": selected_clue.clue.answer_type.value,
+                        "answerValue": selected_clue.clue.answer_value,
                     },
+                    "recallClues": recall_clues,
                     "answerValues": {
                         key: list(values)
                         for key, values in candidate.answer_values.items()
                     },
                     "qualityScore": candidate.quality_score,
                 }
-                for candidate in self.candidates
-            ],
+            )
+
+        return {
+            "candidates": candidates,
             "rejected": [
                 {
                     "index": item.index,
@@ -113,6 +137,7 @@ def build_memory_candidate_selection(
     *,
     used_source_record_ids: Iterable[int] = (),
     used_event_ids: Iterable[str] = (),
+    used_clue_ids: Iterable[str] = (),
     min_quality_score: int = 40,
     max_candidates: int = 3,
     max_record_gap: int = 3,
@@ -139,6 +164,7 @@ def build_memory_candidate_selection(
         drafts,
         used_source_record_ids=used_source_record_ids,
         used_event_ids=used_event_ids,
+        used_clue_ids=used_clue_ids,
         min_quality_score=min_quality_score,
         max_candidates=max_candidates,
         require_confirmed_value=True,
@@ -147,4 +173,5 @@ def build_memory_candidate_selection(
     return MemoryCandidateSelection(
         candidates=tuple(candidates),
         rejected=tuple(rejected),
+        used_clue_ids=tuple(used_clue_ids),
     )

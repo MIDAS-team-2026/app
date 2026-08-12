@@ -894,13 +894,8 @@ def _build_memory_evidence_payloads(
             detected_topic=detected_topic,
             question_topics=question_topics,
             answer_type=answer_type,
+            is_correction=is_correction,
         )
-        if (
-            is_correction
-            and last_event_topic
-            and last_event_topic not in {"UNGROUPED", "UNKNOWN", "GENERAL"}
-        ):
-            continues_previous_event = True
         event_topic = (
             last_event_topic
             if continues_previous_event
