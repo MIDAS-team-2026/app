@@ -68,8 +68,14 @@ ACTIVITY_QUESTION_CUES = (
 OBJECT_QUESTION_CUES = (
     "어떤 물건",
     "무슨 물건",
+    "어떤 선물",
+    "무슨 선물",
     "무엇을 샀",
     "뭘 샀",
+    "무엇을 받",
+    "뭘 받",
+    "무엇을 주",
+    "뭘 주",
 )
 
 
@@ -545,11 +551,6 @@ class MemoryCandidateDraft:
 
         if item.is_correction:
             return True
-
-        for clue in item.clues:
-            existing_values = self.answer_values.get(clue.answer_type.value, ())
-            if existing_values and clue.answer_value not in existing_values:
-                return False
 
         return True
 

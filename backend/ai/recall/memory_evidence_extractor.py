@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from kiwipiepy import Kiwi
@@ -265,9 +266,12 @@ def extract_memory_clues(
         if value and clue not in clues:
             clues.append(clue)
 
-    for token in tokens:
-        if token.form in _STANDALONE_TIME_WORDS:
-            add(MemoryAnswerType.TIME, token.form)
+    for time_word in sorted(_STANDALONE_TIME_WORDS):
+        if re.search(
+            rf"(?<![가-힣]){re.escape(time_word)}(?![가-힣])",
+            analysis_text,
+        ):
+            add(MemoryAnswerType.TIME, time_word)
 
     for index, token in enumerate(tokens):
         if token.tag == "JKB" and token.form in {

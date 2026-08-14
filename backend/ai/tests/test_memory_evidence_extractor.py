@@ -143,6 +143,14 @@ class MemoryEvidenceExtractorTest(unittest.TestCase):
             ),
         )
 
+        self.assertIn(
+            {"answerType": "TIME", "answerValue": "어제"},
+            extract_memory_clues(
+                "어제 손주에게 선물을 줬어",
+                MemoryAnswerType.PERSON,
+            ),
+        )
+
     def test_media_source_is_not_mistaken_for_place(self):
         self.assertEqual(
             (

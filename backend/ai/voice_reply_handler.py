@@ -857,6 +857,8 @@ _MEMORY_FOLLOWUP_REFERENCE_CUES = (
     "그 방송",
     "그 물건",
     "그 선물",
+    "무슨 선물",
+    "어떤 선물",
 )
 _MEMORY_TOPIC_TRANSITION_CUES = (
     "그 뒤",
