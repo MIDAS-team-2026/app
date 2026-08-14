@@ -154,6 +154,30 @@ class MemoryEvidenceExtractorTest(unittest.TestCase):
             ),
         )
 
+    def test_recipient_and_given_object_are_kept_as_separate_clues(self):
+        cases = (
+            (
+                "손주에게 선물을 줬어",
+                "손주",
+                "선물",
+            ),
+            (
+                "딸한테 책을 받았어",
+                "딸",
+                "책",
+            ),
+        )
+
+        for text, person, object_value in cases:
+            with self.subTest(text=text):
+                self.assertEqual(
+                    (
+                        {"answerType": "PERSON", "answerValue": person},
+                        {"answerType": "OBJECT", "answerValue": object_value},
+                    ),
+                    extract_memory_clues(text, MemoryAnswerType.PERSON),
+                )
+
     def test_negative_statement_does_not_create_clue(self):
         self.assertEqual(
             (),

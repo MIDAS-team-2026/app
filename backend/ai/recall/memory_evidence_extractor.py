@@ -32,6 +32,8 @@ _MEDIA_SOURCE_NOUNS = {
     "휴대폰",
     "핸드폰",
 }
+_RECIPIENT_PARTICLES = {"에게", "한테"}
+_TRANSFER_ACTION_VERBS = {"건네", "보내", "받", "선물하", "주"}
 _NEGATION_FORMS = {"안", "못", "않"}
 _CORRECTION_MARKERS = ("아니,", "아니 ", "정정하면", "다시 말하면")
 
@@ -268,7 +270,13 @@ def extract_memory_clues(
             add(MemoryAnswerType.TIME, token.form)
 
     for index, token in enumerate(tokens):
-        if token.tag == "JKB" and token.form in {"와", "과", "랑", "이랑"}:
+        if token.tag == "JKB" and token.form in {
+            "와",
+            "과",
+            "랑",
+            "이랑",
+            *_RECIPIENT_PARTICLES,
+        }:
             add(
                 MemoryAnswerType.PERSON,
                 _span_before_particle(
@@ -339,6 +347,20 @@ def extract_memory_clues(
         add(
             MemoryAnswerType.TIME if is_time else MemoryAnswerType.PLACE,
             value,
+        )
+
+    has_recipient = any(
+        token.tag == "JKB" and token.form in _RECIPIENT_PARTICLES
+        for token in tokens
+    )
+    has_transfer_action = any(
+        token.tag.startswith("VV") and token.form in _TRANSFER_ACTION_VERBS
+        for token in tokens
+    )
+    if has_recipient and has_transfer_action:
+        add(
+            MemoryAnswerType.OBJECT,
+            extract_answer_value(analysis_text, MemoryAnswerType.OBJECT),
         )
 
     if preferred_type != MemoryAnswerType.UNKNOWN:
