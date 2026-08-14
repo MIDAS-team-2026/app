@@ -116,6 +116,44 @@ class MemoryEvidenceExtractorTest(unittest.TestCase):
             extract_memory_clues("오후 세 시에 병원에 갔어"),
         )
 
+    def test_time_place_person_and_food_are_separated_in_one_utterance(self):
+        self.assertEqual(
+            (
+                {"answerType": "TIME", "answerValue": "오전"},
+                {"answerType": "PLACE", "answerValue": "카페"},
+                {"answerType": "PERSON", "answerValue": "친구"},
+                {"answerType": "FOOD", "answerValue": "커피"},
+            ),
+            extract_memory_clues(
+                "오전에 카페에서 친구와 커피를 마셨어",
+                MemoryAnswerType.FOOD,
+            ),
+        )
+
+    def test_standalone_day_word_is_time_clue(self):
+        self.assertEqual(
+            (
+                {"answerType": "TIME", "answerValue": "어제"},
+                {"answerType": "PLACE", "answerValue": "시장"},
+                {"answerType": "OBJECT", "answerValue": "사과"},
+            ),
+            extract_memory_clues(
+                "어제 시장에서 사과를 샀어",
+                MemoryAnswerType.OBJECT,
+            ),
+        )
+
+    def test_media_source_is_not_mistaken_for_place(self):
+        self.assertEqual(
+            (
+                {"answerType": "MEDIA", "answerValue": "뉴스"},
+            ),
+            extract_memory_clues(
+                "텔레비전에서 뉴스를 봤어",
+                MemoryAnswerType.MEDIA,
+            ),
+        )
+
     def test_negative_statement_does_not_create_clue(self):
         self.assertEqual(
             (),

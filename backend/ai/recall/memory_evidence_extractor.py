@@ -10,7 +10,28 @@ from recall.memory_event import MemoryAnswerType, parse_answer_type
 _kiwi = Kiwi()
 _NOUN_TAG_PREFIXES = ("NN",)
 _VALUE_TAGS = {"SL", "SH", "SN", "MM"}
-_TIME_NOUNS = {"후", "전", "동안", "때"}
+_TIME_NOUNS = {
+    "후",
+    "전",
+    "동안",
+    "때",
+    "새벽",
+    "아침",
+    "오전",
+    "점심",
+    "오후",
+    "저녁",
+    "밤",
+}
+_STANDALONE_TIME_WORDS = {"그제", "어제", "내일", "모레"}
+_MEDIA_SOURCE_NOUNS = {
+    "TV",
+    "라디오",
+    "유튜브",
+    "텔레비전",
+    "휴대폰",
+    "핸드폰",
+}
 _NEGATION_FORMS = {"안", "못", "않"}
 _CORRECTION_MARKERS = ("아니,", "아니 ", "정정하면", "다시 말하면")
 
@@ -242,6 +263,10 @@ def extract_memory_clues(
         if value and clue not in clues:
             clues.append(clue)
 
+    for token in tokens:
+        if token.form in _STANDALONE_TIME_WORDS:
+            add(MemoryAnswerType.TIME, token.form)
+
     for index, token in enumerate(tokens):
         if token.tag == "JKB" and token.form in {"와", "과", "랑", "이랑"}:
             add(
@@ -303,6 +328,14 @@ def extract_memory_clues(
             or current.form in _TIME_NOUNS
             for current in span_tokens
         )
+
+        if (
+            not is_time
+            and span_tokens
+            and span_tokens[-1].form in _MEDIA_SOURCE_NOUNS
+        ):
+            continue
+
         add(
             MemoryAnswerType.TIME if is_time else MemoryAnswerType.PLACE,
             value,
