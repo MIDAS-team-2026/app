@@ -847,6 +847,36 @@ def _fallback_answer_type_for_topic(topic: str) -> MemoryAnswerType:
     return topic_map.get(topic, MemoryAnswerType.UNKNOWN)
 
 
+_MEMORY_FOLLOWUP_REFERENCE_CUES = (
+    "그때",
+    "그곳",
+    "같이",
+    "함께",
+    "다녀오",
+    "그 음식",
+    "그 방송",
+    "그 물건",
+    "그 선물",
+)
+_MEMORY_TOPIC_TRANSITION_CUES = (
+    "그 뒤",
+    "그 다음",
+    "다른 이야기",
+    "이번에는",
+    "이어서",
+    "요즘",
+)
+
+
+def _is_referential_memory_followup(question: str) -> bool:
+    normalized = " ".join(str(question or "").split())
+
+    if any(cue in normalized for cue in _MEMORY_TOPIC_TRANSITION_CUES):
+        return False
+
+    return any(cue in normalized for cue in _MEMORY_FOLLOWUP_REFERENCE_CUES)
+
+
 def _build_memory_evidence_payloads(
     session_records: list[dict],
 ) -> list[dict]:
@@ -895,6 +925,9 @@ def _build_memory_evidence_payloads(
             question_topics=question_topics,
             answer_type=question_answer_type,
             is_correction=is_correction,
+            is_referential_followup=(
+                _is_referential_memory_followup(previous_question)
+            ),
         )
         event_topic = (
             last_event_topic

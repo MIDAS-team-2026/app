@@ -307,6 +307,49 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
             candidate["answerValues"],
         )
 
+    def test_activity_followups_keep_person_and_time_in_one_event(self):
+        records = [
+            {
+                "recordId": 120,
+                "turnOrder": 1,
+                "transcriptText": "공원에서 산책했어",
+                "aiReplyText": "누구와 같이 가셨어요?",
+            },
+            {
+                "recordId": 121,
+                "turnOrder": 2,
+                "transcriptText": "친구와 갔어",
+                "aiReplyText": "언제 다녀오셨어요?",
+            },
+            {
+                "recordId": 122,
+                "turnOrder": 3,
+                "transcriptText": "오전에 갔어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertTrue(payloads[1]["continuesPreviousEvent"])
+        self.assertTrue(payloads[2]["continuesPreviousEvent"])
+        self.assertEqual("PERSON", payloads[1]["answerType"])
+        self.assertEqual("TIME", payloads[2]["answerType"])
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual("ACTIVITY:120", candidate["eventId"])
+        self.assertEqual([120, 121, 122], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "PLACE": ["공원"],
+                "ACTIVITY": ["산책"],
+                "PERSON": ["친구"],
+                "TIME": ["오전"],
+            },
+            candidate["answerValues"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

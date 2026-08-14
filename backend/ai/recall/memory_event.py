@@ -113,6 +113,7 @@ def should_continue_memory_event(
     question_topics: Iterable[str],
     answer_type: MemoryAnswerType | str,
     is_correction: bool = False,
+    is_referential_followup: bool = False,
 ) -> bool:
     """Return True only when the current answer still describes the last event.
 
@@ -142,7 +143,13 @@ def should_continue_memory_event(
         )
 
     if last_topic not in anchored_topics:
-        return False
+        if not is_referential_followup:
+            return False
+
+        return (
+            current_topic in compatible_topics
+            or current_topic in anchored_topics
+        )
 
     return current_topic in compatible_topics
 
