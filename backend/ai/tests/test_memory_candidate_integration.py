@@ -246,6 +246,67 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
         self.assertEqual([80, 81, 82], candidate["sourceRecordIds"])
         self.assertEqual(["아들"], candidate["answerValues"]["PERSON"])
 
+    def test_real_meal_session_keeps_concrete_clues_in_one_event(self):
+        records = [
+            {
+                "recordId": 107,
+                "turnOrder": 1,
+                "answerRole": "FIXED",
+                "transcriptText": "김용희",
+                "aiReplyText": "좋아요, 그럼 오늘 하루는 뭘 하면서 지내셨는지 이야기해주시겠어요?",
+            },
+            {
+                "recordId": 108,
+                "turnOrder": 2,
+                "transcriptText": "김치볶음밥을 먹었어.",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            },
+            {
+                "recordId": 109,
+                "turnOrder": 3,
+                "transcriptText": "집에서 먹었어.",
+                "aiReplyText": "그때 누구와 같이 드셨어요?",
+            },
+            {
+                "recordId": 110,
+                "turnOrder": 4,
+                "transcriptText": "딸과 같이 먹었어.",
+                "aiReplyText": "밥 먹으면서 무슨 이야기 나누셨어요?",
+            },
+            {
+                "recordId": 111,
+                "turnOrder": 5,
+                "transcriptText": "일상 얘기했어.",
+                "aiReplyText": "딸이랑 밥 드시면서 분위기가 어땠어요?",
+            },
+            {
+                "recordId": 112,
+                "turnOrder": 6,
+                "transcriptText": "분위기는 좋았어.",
+                "aiReplyText": "그 음식을 떠올리면 제일 먼저 생각나는 게 무엇인가요?",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertEqual("FOOD", payloads[0]["answerType"])
+        self.assertEqual("김치볶음밥", payloads[0]["answerValue"])
+        self.assertEqual([], payloads[3]["clues"])
+        self.assertEqual([], payloads[4]["clues"])
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual("MEAL:108", candidate["eventId"])
+        self.assertEqual([108, 109, 110, 111, 112], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "FOOD": ["김치볶음밥"],
+                "PLACE": ["집"],
+                "PERSON": ["딸"],
+            },
+            candidate["answerValues"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -887,13 +887,13 @@ def _build_memory_evidence_payloads(
             _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
             _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
         }
-        answer_type = infer_answer_type(previous_question)
+        question_answer_type = infer_answer_type(previous_question)
         is_correction = is_correction_utterance(text)
         continues_previous_event = should_continue_memory_event(
             last_event_topic=last_event_topic,
             detected_topic=detected_topic,
             question_topics=question_topics,
-            answer_type=answer_type,
+            answer_type=question_answer_type,
             is_correction=is_correction,
         )
         event_topic = (
@@ -902,8 +902,16 @@ def _build_memory_evidence_payloads(
             else detected_topic
         )
 
-        if answer_type == MemoryAnswerType.UNKNOWN:
-            answer_type = _fallback_answer_type_for_topic(event_topic)
+        event_answer_type = _fallback_answer_type_for_topic(event_topic)
+        if (
+            not continues_previous_event
+            and event_answer_type != MemoryAnswerType.UNKNOWN
+        ):
+            answer_type = event_answer_type
+        elif question_answer_type != MemoryAnswerType.UNKNOWN:
+            answer_type = question_answer_type
+        else:
+            answer_type = event_answer_type
 
         clues = extract_memory_clues(text, answer_type)
         answer_value = next(
