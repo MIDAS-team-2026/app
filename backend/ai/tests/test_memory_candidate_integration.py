@@ -307,6 +307,90 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
             candidate["answerValues"],
         )
 
+    def test_activity_followups_keep_person_and_time_in_one_event(self):
+        records = [
+            {
+                "recordId": 120,
+                "turnOrder": 1,
+                "transcriptText": "공원에서 산책했어",
+                "aiReplyText": "누구와 같이 가셨어요?",
+            },
+            {
+                "recordId": 121,
+                "turnOrder": 2,
+                "transcriptText": "친구와 갔어",
+                "aiReplyText": "언제 다녀오셨어요?",
+            },
+            {
+                "recordId": 122,
+                "turnOrder": 3,
+                "transcriptText": "오전에 갔어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertTrue(payloads[1]["continuesPreviousEvent"])
+        self.assertTrue(payloads[2]["continuesPreviousEvent"])
+        self.assertEqual("PERSON", payloads[1]["answerType"])
+        self.assertEqual("TIME", payloads[2]["answerType"])
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual("ACTIVITY:120", candidate["eventId"])
+        self.assertEqual([120, 121, 122], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "PLACE": ["공원"],
+                "ACTIVITY": ["산책"],
+                "PERSON": ["친구"],
+                "TIME": ["오전"],
+            },
+            candidate["answerValues"],
+        )
+
+    def test_followup_can_refine_an_object_clue_in_the_same_event(self):
+        records = [
+            {
+                "recordId": 130,
+                "turnOrder": 1,
+                "transcriptText": "어제 손주에게 선물을 줬어",
+                "aiReplyText": "무슨 선물을 주셨어요?",
+            },
+            {
+                "recordId": 131,
+                "turnOrder": 2,
+                "transcriptText": "장난감을 줬어",
+                "aiReplyText": "손주 반응은 어땠어요?",
+            },
+            {
+                "recordId": 132,
+                "turnOrder": 3,
+                "transcriptText": "아주 좋아했어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+
+        self.assertTrue(payloads[1]["continuesPreviousEvent"])
+        self.assertEqual("OBJECT", payloads[1]["answerType"])
+        self.assertEqual("장난감", payloads[1]["answerValue"])
+        self.assertEqual(1, len(result["candidates"]))
+        candidate = result["candidates"][0]
+        self.assertEqual("PERSON:130", candidate["eventId"])
+        self.assertEqual([130, 131, 132], candidate["sourceRecordIds"])
+        self.assertEqual(
+            {
+                "TIME": ["어제"],
+                "PERSON": ["손주"],
+                "OBJECT": ["선물", "장난감"],
+            },
+            candidate["answerValues"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

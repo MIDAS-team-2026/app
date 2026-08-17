@@ -68,8 +68,14 @@ ACTIVITY_QUESTION_CUES = (
 OBJECT_QUESTION_CUES = (
     "어떤 물건",
     "무슨 물건",
+    "어떤 선물",
+    "무슨 선물",
     "무엇을 샀",
     "뭘 샀",
+    "무엇을 받",
+    "뭘 받",
+    "무엇을 주",
+    "뭘 주",
 )
 
 
@@ -113,6 +119,7 @@ def should_continue_memory_event(
     question_topics: Iterable[str],
     answer_type: MemoryAnswerType | str,
     is_correction: bool = False,
+    is_referential_followup: bool = False,
 ) -> bool:
     """Return True only when the current answer still describes the last event.
 
@@ -142,7 +149,13 @@ def should_continue_memory_event(
         )
 
     if last_topic not in anchored_topics:
-        return False
+        if not is_referential_followup:
+            return False
+
+        return (
+            current_topic in compatible_topics
+            or current_topic in anchored_topics
+        )
 
     return current_topic in compatible_topics
 
@@ -538,11 +551,6 @@ class MemoryCandidateDraft:
 
         if item.is_correction:
             return True
-
-        for clue in item.clues:
-            existing_values = self.answer_values.get(clue.answer_type.value, ())
-            if existing_values and clue.answer_value not in existing_values:
-                return False
 
         return True
 

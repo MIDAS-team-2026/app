@@ -338,6 +338,28 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
             )
         )
 
+    def test_referential_followup_can_add_a_different_answer_slot(self):
+        self.assertTrue(
+            should_continue_memory_event(
+                last_event_topic="ACTIVITY",
+                detected_topic="PERSON",
+                question_topics={"PLACE", "PERSON"},
+                answer_type=MemoryAnswerType.PERSON,
+                is_referential_followup=True,
+            )
+        )
+
+    def test_referential_followup_rejects_an_unrelated_strong_topic(self):
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="ACTIVITY",
+                detected_topic="MEDIA",
+                question_topics={"PLACE", "PERSON"},
+                answer_type=MemoryAnswerType.PERSON,
+                is_referential_followup=True,
+            )
+        )
+
     def test_same_source_record_is_selected_only_once_across_topics(self):
         drafts = [
             self._draft(

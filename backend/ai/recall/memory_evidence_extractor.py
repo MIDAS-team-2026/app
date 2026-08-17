@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from kiwipiepy import Kiwi
@@ -10,7 +11,30 @@ from recall.memory_event import MemoryAnswerType, parse_answer_type
 _kiwi = Kiwi()
 _NOUN_TAG_PREFIXES = ("NN",)
 _VALUE_TAGS = {"SL", "SH", "SN", "MM"}
-_TIME_NOUNS = {"후", "전", "동안", "때"}
+_TIME_NOUNS = {
+    "후",
+    "전",
+    "동안",
+    "때",
+    "새벽",
+    "아침",
+    "오전",
+    "점심",
+    "오후",
+    "저녁",
+    "밤",
+}
+_STANDALONE_TIME_WORDS = {"그제", "어제", "내일", "모레"}
+_MEDIA_SOURCE_NOUNS = {
+    "TV",
+    "라디오",
+    "유튜브",
+    "텔레비전",
+    "휴대폰",
+    "핸드폰",
+}
+_RECIPIENT_PARTICLES = {"에게", "한테"}
+_TRANSFER_ACTION_VERBS = {"건네", "보내", "받", "선물하", "주"}
 _NEGATION_FORMS = {"안", "못", "않"}
 _CORRECTION_MARKERS = ("아니,", "아니 ", "정정하면", "다시 말하면")
 
@@ -242,8 +266,21 @@ def extract_memory_clues(
         if value and clue not in clues:
             clues.append(clue)
 
+    for time_word in sorted(_STANDALONE_TIME_WORDS):
+        if re.search(
+            rf"(?<![가-힣]){re.escape(time_word)}(?![가-힣])",
+            analysis_text,
+        ):
+            add(MemoryAnswerType.TIME, time_word)
+
     for index, token in enumerate(tokens):
-        if token.tag == "JKB" and token.form in {"와", "과", "랑", "이랑"}:
+        if token.tag == "JKB" and token.form in {
+            "와",
+            "과",
+            "랑",
+            "이랑",
+            *_RECIPIENT_PARTICLES,
+        }:
             add(
                 MemoryAnswerType.PERSON,
                 _span_before_particle(
@@ -303,9 +340,31 @@ def extract_memory_clues(
             or current.form in _TIME_NOUNS
             for current in span_tokens
         )
+
+        if (
+            not is_time
+            and span_tokens
+            and span_tokens[-1].form in _MEDIA_SOURCE_NOUNS
+        ):
+            continue
+
         add(
             MemoryAnswerType.TIME if is_time else MemoryAnswerType.PLACE,
             value,
+        )
+
+    has_recipient = any(
+        token.tag == "JKB" and token.form in _RECIPIENT_PARTICLES
+        for token in tokens
+    )
+    has_transfer_action = any(
+        token.tag.startswith("VV") and token.form in _TRANSFER_ACTION_VERBS
+        for token in tokens
+    )
+    if has_recipient and has_transfer_action:
+        add(
+            MemoryAnswerType.OBJECT,
+            extract_answer_value(analysis_text, MemoryAnswerType.OBJECT),
         )
 
     if preferred_type != MemoryAnswerType.UNKNOWN:
