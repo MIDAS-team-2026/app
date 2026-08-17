@@ -36,6 +36,13 @@ _GENERIC_NOUNS = {
     "오늘",
     "아까",
     "이야기",
+    "얘기",
+    "일상",
+    "분위기",
+    "느낌",
+    "기분",
+    "생각",
+    "말",
     "기억",
 }
 
@@ -133,7 +140,10 @@ def _nominal_action_candidate(text: str) -> str:
 
         next_token = tokens[index + 1]
 
-        if next_token.tag.startswith("XSV"):
+        if (
+            next_token.tag.startswith("XSV")
+            and token.form not in _GENERIC_NOUNS
+        ):
             return token.form
 
     return ""
