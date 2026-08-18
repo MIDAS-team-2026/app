@@ -1931,12 +1931,20 @@ def save_recall_question_to_spring(
     answer_keywords: Optional[List[str]] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
+    expected_answer = next(
+        (
+            str(keyword).strip()
+            for keyword in answer_keywords or []
+            if str(keyword).strip()
+        ),
+        memory_point,
+    )
     body = {
         "userId": user_id,
         "questionText": question_text,
         "questionType": "RECALL",
         "category": "CONVERSATION",
-        "expectedAnswer": memory_point,
+        "expectedAnswer": expected_answer,
     }
 
     response = requests.post(

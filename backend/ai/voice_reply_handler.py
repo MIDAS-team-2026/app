@@ -869,6 +869,23 @@ _MEMORY_TOPIC_TRANSITION_CUES = (
     "요즘",
 )
 
+_MEMORY_EVENT_REFERENCE_TOPICS = (
+    ("그 음식", "MEAL"),
+    ("그 방송", "MEDIA"),
+    ("그 물건", "OBJECT"),
+    ("그 선물", "OBJECT"),
+)
+
+
+def _detect_memory_event_reference_topic(question: str) -> str | None:
+    normalized = " ".join(str(question or "").split())
+
+    for cue, topic in _MEMORY_EVENT_REFERENCE_TOPICS:
+        if cue in normalized:
+            return topic
+
+    return None
+
 
 def _is_referential_memory_followup(question: str) -> bool:
     normalized = " ".join(str(question or "").split())
@@ -919,8 +936,26 @@ def _build_memory_evidence_payloads(
             _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
             _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
         }
+        question_context_topic = _normalize_memory_event_topic(
+            _detect_topic_from_question(previous_question)
+        )
         question_answer_type = infer_answer_type(previous_question)
+        question_clues = extract_memory_clues(text, question_answer_type)
+        has_question_answer = (
+            question_answer_type
+            not in {
+                MemoryAnswerType.UNKNOWN,
+                MemoryAnswerType.ACTIVITY,
+            }
+            and any(
+                clue["answerType"] == question_answer_type.value
+                for clue in question_clues
+            )
+        )
         is_correction = is_correction_utterance(text)
+        referenced_event_topic = _detect_memory_event_reference_topic(
+            previous_question
+        )
         continues_previous_event = should_continue_memory_event(
             last_event_topic=last_event_topic,
             detected_topic=detected_topic,
@@ -929,22 +964,40 @@ def _build_memory_evidence_payloads(
             is_correction=is_correction,
             is_referential_followup=(
                 _is_referential_memory_followup(previous_question)
+                and referenced_event_topic in {None, last_event_topic}
             ),
         )
         event_topic = (
             last_event_topic
             if continues_previous_event
-            else detected_topic
+            else (
+                referenced_event_topic
+                or (
+                    question_context_topic
+                    if (
+                        has_question_answer
+                        and question_context_topic != "UNGROUPED"
+                    )
+                    else detected_topic
+                )
+            )
         )
 
         event_answer_type = _fallback_answer_type_for_topic(event_topic)
         if (
+            question_answer_type != MemoryAnswerType.UNKNOWN
+            and (
+                continues_previous_event
+                or has_question_answer
+                or event_topic in question_topics
+            )
+        ):
+            answer_type = question_answer_type
+        elif (
             not continues_previous_event
             and event_answer_type != MemoryAnswerType.UNKNOWN
         ):
             answer_type = event_answer_type
-        elif question_answer_type != MemoryAnswerType.UNKNOWN:
-            answer_type = question_answer_type
         else:
             answer_type = event_answer_type
 
@@ -1956,6 +2009,10 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
+            "유튜브",
+            "넷플릭스",
+            "영상",
+            "라디오",
         ),
     )
     has_media_consumption = (
@@ -2224,6 +2281,10 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
+            "유튜브",
+            "넷플릭스",
+            "영상",
+            "라디오",
         ),
     ):
         return "MEDIA"
@@ -2247,7 +2308,22 @@ def _detect_topic_from_question(question: str) -> str | None:
     topic_cues = (
         ("HEALTH", ("병원", "약", "몸", "아프", "불편", "괜찮")),
         ("FOOD", ("음식", "드셨어", "먹었", "마셨어", "식사", "맛")),
-        ("MEDIA", ("방송", "프로그램", "노래", "가수", "드라마", "뉴스", "티비")),
+        (
+            "MEDIA",
+            (
+                "방송",
+                "프로그램",
+                "노래",
+                "가수",
+                "드라마",
+                "뉴스",
+                "티비",
+                "유튜브",
+                "넷플릭스",
+                "영상",
+                "라디오",
+            ),
+        ),
         ("SHOPPING", ("사신", "샀", "고르셨어", "장 보", "마트", "시장")),
         ("OBJECT", ("물건", "손에 자주", "자주 잡", "어디에 두")),
         ("HOME", ("집에서", "집 안", "집에 계실", "어느 방", "머문 자리")),

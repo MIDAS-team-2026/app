@@ -2897,7 +2897,12 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         put_response = SimpleNamespace(raise_for_status=lambda: None)
 
         with (
-            patch.object(recall_generator.requests, "post", return_value=post_response, create=True),
+            patch.object(
+                recall_generator.requests,
+                "post",
+                return_value=post_response,
+                create=True,
+            ) as post_mock,
             patch.object(recall_generator.requests, "put", return_value=put_response, create=True) as put_mock,
         ):
             saved = recall_generator.save_recall_question_to_spring(
@@ -2908,6 +2913,10 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
 
         self.assertEqual(["김치볶음밥"], saved["keywords"])
+        self.assertEqual(
+            "김치볶음밥",
+            post_mock.call_args.kwargs["json"]["expectedAnswer"],
+        )
         self.assertEqual({"keywords": ["김치볶음밥"]}, put_mock.call_args.kwargs["json"])
 
     def test_keyword_update_failure_keeps_saved_question_usable(self):
