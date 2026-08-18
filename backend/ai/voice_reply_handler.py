@@ -69,6 +69,7 @@ class ConversationTurnState:
 class RecallCandidateContext:
     conversation_history: tuple[str, ...] = ()
     source_record_ids: tuple[tuple[str, int], ...] = ()
+    memory_candidates: tuple[dict, ...] = ()
 
     def find_source_record_id(self, source_text: str) -> int | None:
         normalized_source = _normalize_text(source_text)
@@ -1067,12 +1068,28 @@ def _get_structured_recall_ready_context(
     if timing.action != RecallTimingAction.ASK_RECALL:
         return RecallCandidateContext()
 
-    targets = tuple(candidate.recall_target for candidate in selection.candidates)
+    selected_clues = tuple(
+        (candidate, candidate.select_recall_clue())
+        for candidate in selection.candidates
+    )
     return RecallCandidateContext(
-        conversation_history=tuple(target.text for target in targets),
+        conversation_history=tuple(
+            selected_clue.source_text
+            for _candidate, selected_clue in selected_clues
+        ),
         source_record_ids=tuple(
-            (target.text, target.source_record_id)
-            for target in targets
+            (selected_clue.source_text, selected_clue.source_record_id)
+            for _candidate, selected_clue in selected_clues
+        ),
+        memory_candidates=tuple(
+            {
+                "eventId": candidate.event_id,
+                "sourceRecordId": selected_clue.source_record_id,
+                "sourceText": selected_clue.source_text,
+                "answerType": selected_clue.clue.answer_type.value,
+                "answerValue": selected_clue.clue.answer_value,
+            }
+            for candidate, selected_clue in selected_clues
         ),
     )
 
@@ -3805,6 +3822,9 @@ def process_voice_reply(
             result = generate_and_save_recall_question(
                 user_id=user_id,
                 conversation_history=recall_ready_history,
+                memory_candidates=list(
+                    recall_candidate_context.memory_candidates
+                ),
                 base_url=SPRING_BASE_URL,
             )
         except Exception as e:
@@ -3835,9 +3855,14 @@ def process_voice_reply(
             return
 
         recall_question_id = (saved_question or {}).get("questionId")
-        source_record_id = recall_candidate_context.find_source_record_id(
-            source_text
-        )
+        source_record_id = (
+            result.get("memoryCandidate") or {}
+        ).get("sourceRecordId")
+
+        if source_record_id is None:
+            source_record_id = recall_candidate_context.find_source_record_id(
+                source_text
+            )
 
         if source_record_id is None:
             source_record_id = _find_memory_source_record_id(

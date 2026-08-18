@@ -101,6 +101,10 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
         context = handler._get_structured_recall_ready_context(records)
 
         self.assertGreaterEqual(len(context.conversation_history), 2)
+        self.assertEqual(
+            len(context.conversation_history),
+            len(context.memory_candidates),
+        )
         for source_text in context.conversation_history:
             source_record_id = context.find_source_record_id(source_text)
             self.assertIsNotNone(source_record_id)
@@ -112,6 +116,15 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
                     if record["recordId"] == source_record_id
                 ],
             )
+
+        for candidate in context.memory_candidates:
+            self.assertEqual(
+                candidate["sourceRecordId"],
+                context.find_source_record_id(candidate["sourceText"]),
+            )
+            self.assertTrue(candidate["eventId"])
+            self.assertTrue(candidate["answerType"])
+            self.assertTrue(candidate["answerValue"])
 
     def test_cross_slot_followup_stays_in_event_but_new_topic_does_not(self):
         records = [
