@@ -35,8 +35,33 @@ _MEDIA_SOURCE_NOUNS = {
 }
 _RECIPIENT_PARTICLES = {"에게", "한테"}
 _TRANSFER_ACTION_VERBS = {"건네", "보내", "받", "선물하", "주"}
-_NEGATION_FORMS = {"안", "못", "않"}
+_NEGATION_FORMS = {"안", "못", "않", "아니"}
 _CORRECTION_MARKERS = ("아니,", "아니 ", "정정하면", "다시 말하면")
+_NEGATION_CONTRAST_ENDINGS = {"고", "지만", "는데", "라"}
+_NON_NEGATING_PHRASES = ("안 그래도",)
+_PERSON_REFERENCE_NOUNS = {
+    "가족",
+    "친구",
+    "동생",
+    "형",
+    "누나",
+    "언니",
+    "오빠",
+    "아들",
+    "딸",
+    "손주",
+    "손자",
+    "손녀",
+    "남편",
+    "아내",
+    "배우자",
+    "어머니",
+    "아버지",
+    "엄마",
+    "아빠",
+    "조카",
+    "사촌",
+}
 
 
 def is_correction_utterance(text: str) -> bool:
@@ -62,12 +87,19 @@ _GENERIC_NOUNS = {
     "이야기",
     "얘기",
     "일상",
+    "곳",
+    "주변",
     "분위기",
     "느낌",
     "기분",
     "생각",
     "말",
     "기억",
+    "사람",
+    "장소",
+    "음식",
+    "물건",
+    "방송",
 }
 
 
@@ -121,6 +153,49 @@ def _has_specific_tokens(tokens) -> bool:
     return bool(nouns)
 
 
+def _confirmed_segment_after_negation(text: str, tokens) -> str:
+    """Keep only an explicit affirmative clause following a negated clause."""
+    for phrase in _NON_NEGATING_PHRASES:
+        if phrase in text:
+            text = text.replace(phrase, " ", 1).strip()
+            tokens = _tokens(text)
+
+    negation_indexes = [
+        index
+        for index, token in enumerate(tokens)
+        if token.form in _NEGATION_FORMS or token.form.startswith("않")
+    ]
+
+    if not negation_indexes:
+        return text
+
+    for negation_index in reversed(negation_indexes):
+        for token in tokens[negation_index + 1 :]:
+            if (
+                token.tag == "EC"
+                and token.form in _NEGATION_CONTRAST_ENDINGS
+            ):
+                start = token.start + token.len
+                confirmed = text[start:].strip(" ,.?!")
+                if confirmed:
+                    return confirmed
+
+    return ""
+
+
+def _strip_leading_person_companion(value: str) -> str:
+    """Remove a companion accidentally joined to a following object phrase."""
+    person_pattern = "|".join(
+        re.escape(noun)
+        for noun in sorted(_PERSON_REFERENCE_NOUNS, key=len, reverse=True)
+    )
+    match = re.match(
+        rf"^(?:{person_pattern})(?:와|과|랑|이랑)\s+(.+)$",
+        value,
+    )
+    return match.group(1).strip() if match else value
+
+
 def _particle_candidates(text: str, answer_type: MemoryAnswerType) -> list[str]:
     tokens = _tokens(text)
     allowed = {
@@ -150,6 +225,14 @@ def _particle_candidates(text: str, answer_type: MemoryAnswerType) -> list[str]:
         value = _span_before_particle(text, tokens, index)
 
         if value:
+            if answer_type in {
+                MemoryAnswerType.PLACE,
+                MemoryAnswerType.FOOD,
+                MemoryAnswerType.MEDIA,
+                MemoryAnswerType.OBJECT,
+            }:
+                value = _strip_leading_person_companion(value)
+
             candidates.append(value)
 
     return candidates
@@ -176,17 +259,25 @@ def _nominal_action_candidate(text: str) -> str:
 def _standalone_noun_phrase(text: str, *, max_nouns: int | None = None) -> str:
     tokens = _tokens(text)
     noun_tokens = [token for token in tokens if _is_value_token(token)]
+    specific_tokens = [
+        token
+        for token in noun_tokens
+        if not (
+            token.tag.startswith(_NOUN_TAG_PREFIXES)
+            and token.form in _GENERIC_NOUNS
+        )
+    ]
 
-    if not noun_tokens:
+    if not specific_tokens:
         return ""
 
-    if max_nouns is not None and len(noun_tokens) > max_nouns:
+    if max_nouns is not None and len(specific_tokens) > max_nouns:
         return ""
 
-    start = noun_tokens[0].start
-    end_token = noun_tokens[-1]
+    start = specific_tokens[0].start
+    end_token = specific_tokens[-1]
     value = text[start : end_token.start + end_token.len].strip()
-    return value if _has_specific_tokens(noun_tokens) else ""
+    return value if _has_specific_tokens(specific_tokens) else ""
 
 
 def extract_answer_value(
@@ -215,6 +306,12 @@ def extract_answer_value(
                 return timed[0]
 
         return candidates[-1]
+
+    if answer_type == MemoryAnswerType.PLACE and any(
+        token.tag == "JKB" and token.form in {"에", "에서", "으로", "로"}
+        for token in _tokens(text)
+    ):
+        return ""
 
     if answer_type == MemoryAnswerType.ACTIVITY:
         action = _nominal_action_candidate(text)
@@ -247,12 +344,14 @@ def extract_memory_clues(
 
     tokens = _tokens(analysis_text)
 
-    if any(
-        token.form in _NEGATION_FORMS
-        or token.form.startswith("않")
-        for token in tokens
-    ):
+    confirmed_text = _confirmed_segment_after_negation(analysis_text, tokens)
+
+    if not confirmed_text:
         return ()
+
+    if confirmed_text != analysis_text:
+        analysis_text = confirmed_text
+        tokens = _tokens(analysis_text)
 
     clues = []
 
@@ -295,11 +394,8 @@ def extract_memory_clues(
         if (
             token.tag == "JC"
             and token.form in {"와", "과", "랑", "이랑"}
-            and preferred_type
-            in {
-                MemoryAnswerType.ACTIVITY,
-                MemoryAnswerType.PLACE,
-            }
+            and index > 0
+            and tokens[index - 1].form in _PERSON_REFERENCE_NOUNS
         ):
             add(
                 MemoryAnswerType.PERSON,

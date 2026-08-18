@@ -391,6 +391,100 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
             candidate["answerValues"],
         )
 
+    def test_media_answer_starts_a_new_event_after_a_meal(self):
+        records = [
+            {
+                "recordId": 134,
+                "turnOrder": 1,
+                "transcriptText": "오늘 집에서 토스트를 먹었어.",
+                "aiReplyText": "그때 누구와 같이 드셨어요?",
+            },
+            {
+                "recordId": 135,
+                "turnOrder": 2,
+                "transcriptText": "나 혼자 먹었어",
+                "aiReplyText": "드셨을 때 맛은 어떠셨어요?",
+            },
+            {
+                "recordId": 136,
+                "turnOrder": 3,
+                "transcriptText": "정말 맛있었어",
+                "aiReplyText": (
+                    "토스트 드시면서 뭔가 보거나 들으신 게 있으세요?"
+                ),
+            },
+            {
+                "recordId": 137,
+                "turnOrder": 4,
+                "transcriptText": "유튜브 봤어",
+                "aiReplyText": "유튜브에서 어떤 걸 보셨어요?",
+            },
+            {
+                "recordId": 138,
+                "turnOrder": 5,
+                "transcriptText": "리셋을 봤어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            },
+            {
+                "recordId": 139,
+                "turnOrder": 6,
+                "transcriptText": "토스트는 집에서 먹었어.",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        by_record_id = {
+            payload["sourceRecordId"]: payload
+            for payload in payloads
+        }
+
+        self.assertEqual("MEDIA", by_record_id[137]["topic"])
+        self.assertEqual("MEDIA", by_record_id[137]["answerType"])
+        self.assertEqual("유튜브", by_record_id[137]["answerValue"])
+        self.assertFalse(by_record_id[137]["continuesPreviousEvent"])
+
+        self.assertEqual("MEDIA", by_record_id[138]["topic"])
+        self.assertEqual("MEDIA", by_record_id[138]["answerType"])
+        self.assertEqual("리셋", by_record_id[138]["answerValue"])
+        self.assertTrue(by_record_id[138]["continuesPreviousEvent"])
+
+        self.assertEqual("MEAL", by_record_id[139]["topic"])
+        self.assertEqual("PLACE", by_record_id[139]["answerType"])
+        self.assertEqual("집", by_record_id[139]["answerValue"])
+        self.assertFalse(by_record_id[139]["continuesPreviousEvent"])
+
+    def test_explicit_question_slot_wins_during_topic_transition(self):
+        records = [
+            {
+                "recordId": 140,
+                "turnOrder": 1,
+                "transcriptText": "밥을 먹었어",
+                "aiReplyText": "어디에 다녀오셨어요?",
+            },
+            {
+                "recordId": 141,
+                "turnOrder": 2,
+                "transcriptText": "아들과 시장에 갔어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        answer = payloads[-1]
+
+        self.assertEqual("PLACE", answer["topic"])
+        self.assertEqual("PLACE", answer["answerType"])
+        self.assertEqual("시장", answer["answerValue"])
+        self.assertEqual(
+            [
+                {"answerType": "PERSON", "answerValue": "아들"},
+                {"answerType": "PLACE", "answerValue": "시장"},
+            ],
+            answer["clues"],
+        )
+        self.assertFalse(answer["continuesPreviousEvent"])
+
 
 if __name__ == "__main__":
     unittest.main()

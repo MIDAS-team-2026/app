@@ -58,6 +58,11 @@ MEDIA_QUESTION_CUES = (
     "어떤 노래",
     "어떤 음악",
     "어느 가수",
+    "유튜브에서",
+    "넷플릭스에서",
+    "어떤 영상",
+    "무슨 영상",
+    "라디오에서",
 )
 ACTIVITY_QUESTION_CUES = (
     "무엇을 하",
@@ -152,10 +157,7 @@ def should_continue_memory_event(
         if not is_referential_followup:
             return False
 
-        return (
-            current_topic in compatible_topics
-            or current_topic in anchored_topics
-        )
+        return current_topic in compatible_topics or current_topic in anchored_topics
 
     return current_topic in compatible_topics
 
