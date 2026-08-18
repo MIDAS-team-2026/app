@@ -1357,6 +1357,80 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual(history[0], correct_result["sourceText"])
         self.assertEqual(["라면"], correct_result["answerKeywords"])
 
+    def test_structured_memory_candidate_controls_keyword_and_question_type(self):
+        history = [
+            "아들과 시장에 갔어",
+            "점심에 김치찌개를 먹었어",
+        ]
+        candidates = [
+            {
+                "eventId": "PLACE:10",
+                "sourceRecordId": 10,
+                "sourceText": history[0],
+                "answerType": "PLACE",
+                "answerValue": "시장",
+            },
+            {
+                "eventId": "MEAL:11",
+                "sourceRecordId": 11,
+                "sourceText": history[1],
+                "answerType": "FOOD",
+                "answerValue": "김치찌개",
+            },
+        ]
+        wrong_client = self._recall_client(
+            history[0],
+            "아까 누구와 함께 다녀오셨는지 기억나세요?",
+            answer_keyword="아들",
+        )
+
+        with patch.object(recall_generator, "_get_client", return_value=wrong_client):
+            wrong_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=candidates,
+            )
+
+        self.assertEqual("SKIPPED", wrong_result["status"])
+        self.assertIn("엔진이 확정한 단서", wrong_result["reason"])
+
+        wrong_type_client = self._recall_client(
+            history[0],
+            "아까 누구와 함께 다녀오셨는지 기억나세요?",
+            answer_keyword="시장",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=wrong_type_client,
+        ):
+            wrong_type_result = (
+                recall_generator.generate_recall_question_from_conversation(
+                    history,
+                    memory_candidates=candidates,
+                )
+            )
+
+        self.assertEqual("SKIPPED", wrong_type_result["status"])
+        self.assertIn("단서 유형", wrong_type_result["reason"])
+
+        correct_client = self._recall_client(
+            history[0],
+            "아까 어디에 다녀오셨는지 기억나세요?",
+            answer_keyword="시장",
+        )
+
+        with patch.object(recall_generator, "_get_client", return_value=correct_client):
+            correct_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=candidates,
+            )
+
+        self.assertEqual("CREATED", correct_result["status"])
+        self.assertEqual(candidates[0], correct_result["memoryCandidate"])
+        self.assertEqual(10, correct_result["memoryEvent"]["sourceRecordId"])
+        self.assertEqual(["시장"], correct_result["answerKeywords"])
+
     def test_last_correction_controls_topic_and_empathy(self):
         corrected_to_person = "피자를 먹었어. 아니, 동생과 통화했어"
         corrected_to_food = "동생과 통화했어. 아니, 피자를 먹었어"
