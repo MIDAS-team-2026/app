@@ -1679,18 +1679,25 @@ def build_structured_memory_candidates_text(
     blocks = []
 
     for index, candidate in enumerate(memory_candidates, start=1):
-        blocks.append(
-            "\n".join(
-                (
-                    f"후보 {index}",
-                    f"eventId: {candidate['eventId']}",
-                    f"sourceRecordId: {candidate['sourceRecordId']}",
-                    f"sourceText: {candidate['sourceText']}",
-                    f"answerType: {candidate['answerType']}",
-                    f"answerValue: {candidate['answerValue']}",
-                )
+        lines = [
+            f"후보 {index}",
+            f"eventId: {candidate['eventId']}",
+            f"sourceRecordId: {candidate['sourceRecordId']}",
+            f"sourceText: {candidate['sourceText']}",
+            f"answerType: {candidate['answerType']}",
+            f"answerValue: {candidate['answerValue']}",
+        ]
+        evidence = candidate.get("evidence")
+
+        if candidate.get("topic") and isinstance(evidence, list):
+            lines.append(f"eventTopic: {candidate['topic']}")
+            lines.append("eventEvidence:")
+            lines.extend(
+                f"- [{item['sourceRecordId']}] {item['sourceText']}"
+                for item in evidence
             )
-        )
+
+        blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks)
 
@@ -1816,6 +1823,9 @@ def generate_recall_question_from_conversation(
 16. answerKeyword는 선택한 후보의 answerValue를 그대로 작성합니다.
 17. 질문은 선택한 후보의 answerType에 해당하는 정보만 묻습니다.
 18. eventId와 sourceRecordId는 출력하지 않습니다.
+19. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
+20. 서로 다른 후보의 사람, 장소, 음식, 행동을 한 질문에 섞지 않습니다.
+21. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
 """.strip()
         if structured_candidates
         else ""
@@ -2030,6 +2040,27 @@ question: 자연스러운 회상 질문
                 "answerKeyword": answer_keyword,
                 "question": question,
             }
+
+        evidence = structured_candidate.get("evidence")
+        if isinstance(evidence, list):
+            event_actions = set().union(
+                *(
+                    extract_memory_action_concepts(item.get("sourceText") or "")
+                    for item in evidence
+                )
+            )
+            question_actions = extract_memory_action_concepts(question)
+
+            if question_actions and not question_actions <= event_actions:
+                return {
+                    "status": "SKIPPED",
+                    "reason": (
+                        "회상 질문에 memoryPoint 사건에 없는 행동이 포함되었습니다."
+                    ),
+                    "memoryPoint": memory_point,
+                    "answerKeyword": answer_keyword,
+                    "question": question,
+                }
 
         memory_point = structured_candidate["sourceText"]
         answer_keyword = expected_answer

@@ -1529,6 +1529,110 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             ),
         )
 
+    def test_structured_candidate_prompt_keeps_event_evidence_together(self):
+        candidate = {
+            "eventId": "ACTIVITY:153",
+            "sourceRecordId": 156,
+            "sourceText": "한 시쯤 했어",
+            "answerType": "TIME",
+            "answerValue": "한 시쯤",
+            "topic": "ACTIVITY",
+            "evidence": [
+                {"sourceRecordId": 153, "sourceText": "오늘 청소했어"},
+                {"sourceRecordId": 156, "sourceText": "한 시쯤 했어"},
+            ],
+        }
+
+        text = recall_generator.build_structured_memory_candidates_text(
+            [candidate]
+        )
+
+        self.assertIn("eventTopic: ACTIVITY", text)
+        self.assertIn("[153] 오늘 청소했어", text)
+        self.assertIn("[156] 한 시쯤 했어", text)
+
+    def test_structured_candidate_rejects_action_from_another_event(self):
+        history = ["한 시쯤 했어", "저녁에 뉴스를 봤어"]
+        candidate = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 153,
+                    "turnOrder": 1,
+                    "sourceText": "오늘 청소했어",
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "청소",
+                    "qualityScore": 80,
+                },
+                {
+                    "sourceRecordId": 156,
+                    "turnOrder": 2,
+                    "sourceText": history[0],
+                    "topic": "ACTIVITY",
+                    "answerType": "TIME",
+                    "answerValue": "한 시쯤",
+                    "qualityScore": 90,
+                    "continuesPreviousEvent": True,
+                },
+            ]
+        ).to_dict()["candidates"][0]
+        selected = next(
+            clue
+            for clue in candidate["recallClues"]
+            if clue["answerType"] == "TIME"
+        )
+        full_contract = {
+            **candidate,
+            "sourceRecordId": selected["sourceRecordId"],
+            "sourceText": selected["sourceText"],
+            "answerType": selected["answerType"],
+            "answerValue": selected["answerValue"],
+            "recallClue": selected,
+        }
+        second_candidate = {
+            "eventId": "MEDIA:160",
+            "sourceRecordId": 160,
+            "sourceText": history[1],
+            "answerType": "MEDIA",
+            "answerValue": "뉴스",
+        }
+        wrong_client = self._recall_client(
+            history[0],
+            "아까 점심은 몇 시쯤 드셨어요?",
+            answer_keyword="한 시쯤",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=wrong_client,
+        ):
+            wrong_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=[full_contract, second_candidate],
+            )
+
+        self.assertEqual("SKIPPED", wrong_result["status"])
+        self.assertIn("사건에 없는 행동", wrong_result["reason"])
+
+        correct_client = self._recall_client(
+            history[0],
+            "아까 청소는 몇 시쯤 하셨어요?",
+            answer_keyword="한 시쯤",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=correct_client,
+        ):
+            correct_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=[full_contract, second_candidate],
+            )
+
+        self.assertEqual("CREATED", correct_result["status"])
+
     def test_last_correction_controls_topic_and_empathy(self):
         corrected_to_person = "피자를 먹었어. 아니, 동생과 통화했어"
         corrected_to_food = "동생과 통화했어. 아니, 피자를 먹었어"
