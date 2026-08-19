@@ -441,6 +441,61 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
             result["candidates"][0]["answerValues"]["TIME"],
         )
 
+    def test_habit_question_starts_a_new_event_after_a_specific_meal(self):
+        records = [
+            {
+                "recordId": 161,
+                "turnOrder": 1,
+                "transcriptText": "점심에 짜파게티를 먹었어",
+                "aiReplyText": "같이 드신 분이 계셨나요?",
+            },
+            {
+                "recordId": 163,
+                "turnOrder": 2,
+                "transcriptText": "혼자 먹었어",
+                "aiReplyText": "평소에 즐겨 드시는 매운 음식이 또 있으세요?",
+            },
+            {
+                "recordId": 169,
+                "turnOrder": 3,
+                "transcriptText": "나는 엽기 떡볶이를 좋아해",
+                "aiReplyText": "엽기 떡볶이는 주로 어디서 드세요?",
+            },
+            {
+                "recordId": 170,
+                "turnOrder": 4,
+                "transcriptText": "보통 집에서 배달 시켜 먹어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+        by_record_id = {
+            payload["sourceRecordId"]: payload
+            for payload in payloads
+        }
+
+        self.assertFalse(by_record_id[169]["continuesPreviousEvent"])
+        self.assertTrue(by_record_id[170]["continuesPreviousEvent"])
+        self.assertEqual("MEAL", by_record_id[170]["topic"])
+        self.assertEqual(2, len(result["candidates"]))
+        self.assertEqual(
+            [161, 163],
+            result["candidates"][0]["sourceRecordIds"],
+        )
+        self.assertEqual(
+            [169, 170],
+            result["candidates"][1]["sourceRecordIds"],
+        )
+        self.assertEqual(
+            {
+                "FOOD": ["엽기 떡볶이"],
+                "PLACE": ["집"],
+            },
+            result["candidates"][1]["answerValues"],
+        )
+
     def test_followup_can_refine_an_object_clue_in_the_same_event(self):
         records = [
             {

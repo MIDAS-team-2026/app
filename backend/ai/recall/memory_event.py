@@ -147,6 +147,9 @@ def should_continue_memory_event(
     if last_topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
         return False
 
+    if is_topic_transition:
+        return False
+
     answer_slot_topic = infer_topic(parse_answer_type(answer_type))
     compatible_topics = {last_topic, answer_slot_topic}
 

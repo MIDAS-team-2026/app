@@ -898,6 +898,8 @@ _MEMORY_TOPIC_TRANSITION_CUES = (
     "이번에는",
     "이어서",
     "요즘",
+    "평소",
+    "최근에는",
 )
 
 _MEMORY_EVENT_REFERENCE_TOPICS = (
@@ -957,6 +959,7 @@ def _build_memory_evidence_payloads(
     cycle_texts = []
     payloads = []
     last_event_topic = None
+    last_event_clue_values: set[str] = set()
 
     for index, record in enumerate(sorted_records):
         record_id = int(record.get("recordId") or 0)
@@ -1002,6 +1005,10 @@ def _build_memory_evidence_payloads(
         referenced_event_topic = _detect_memory_event_reference_topic(
             previous_question
         )
+        references_previous_clue = any(
+            _keyword_occurs(value, previous_question)
+            for value in last_event_clue_values
+        )
         question_actions = extract_memory_action_concepts(previous_question)
         answer_actions = extract_memory_action_concepts(text)
         continues_previous_event = should_continue_memory_event(
@@ -1011,7 +1018,10 @@ def _build_memory_evidence_payloads(
             answer_type=question_answer_type,
             is_correction=is_correction,
             is_referential_followup=(
-                _is_referential_memory_followup(previous_question)
+                (
+                    _is_referential_memory_followup(previous_question)
+                    or references_previous_clue
+                )
                 and referenced_event_topic in {None, last_event_topic}
             ),
             has_conflicting_action=bool(
@@ -1081,6 +1091,15 @@ def _build_memory_evidence_payloads(
                 "isCorrection": is_correction,
             }
         )
+        current_clue_values = {
+            clue["answerValue"]
+            for clue in clues
+            if clue.get("answerValue")
+        }
+        if continues_previous_event:
+            last_event_clue_values.update(current_clue_values)
+        else:
+            last_event_clue_values = current_clue_values
         last_event_topic = event_topic
 
     return payloads
