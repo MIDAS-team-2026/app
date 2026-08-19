@@ -11,7 +11,13 @@ import java.util.List;
 @Getter
 @Setter
 @Entity
-@Table(name = "recall_questions")
+@Table(
+        name = "recall_questions",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_recall_question_user_clue",
+                columnNames = {"user_id", "clue_id"}
+        )
+)
 public class RecallQuestion {
 
     @Id
@@ -37,6 +43,18 @@ public class RecallQuestion {
 
     @Column(name = "expected_answer", columnDefinition = "TEXT", nullable = true)
     private String expectedAnswer;
+
+    @Column(name = "event_id", length = 100)
+    private String eventId;
+
+    @Column(name = "clue_id", length = 200)
+    private String clueId;
+
+    @Column(name = "source_record_id")
+    private Long sourceRecordId;
+
+    @Column(name = "answer_type", length = 30)
+    private String answerType;
 
     @OneToMany(mappedBy = "recallQuestion", cascade = CascadeType.ALL)
     private List<RecallKeyword> keywords = new ArrayList<>();

@@ -946,6 +946,22 @@ def extract_memory_action_concepts(text: str) -> set[str]:
     return actions
 
 
+def extract_recall_question_action_concepts(question: str) -> set[str]:
+    """Extract the recalled event action without treating an intro as evidence."""
+    question_units = [
+        unit.strip()
+        for unit in re.split(r"[,.!?]+\s*", clean_text(question))
+        if unit.strip()
+    ]
+
+    for unit in reversed(question_units):
+        actions = extract_memory_action_concepts(unit)
+        if actions:
+            return actions
+
+    return set()
+
+
 def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bool:
     current = _comparison_text(memory_point)
     previous = _comparison_text(previous_memory_point)
@@ -1353,6 +1369,22 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     text = _get_confirmed_action_after_negation(text) or text
     evaluation = evaluate_memory_candidate(text)
 
+    if text.endswith("?"):
+        return {
+            **evaluation,
+            "isValid": False,
+            "recallScore": 0,
+            "reasons": [*evaluation.get("reasons", []), "interrogative_utterance"],
+        }
+
+    if re.search(r"(?:감사합니다|감사해요|고맙습니다|고마워요)[.!]*$", text):
+        return {
+            **evaluation,
+            "isValid": False,
+            "recallScore": 0,
+            "reasons": [*evaluation.get("reasons", []), "social_utterance"],
+        }
+
     hard_failure_reasons = {
         "too_short_or_meaningless",
         "forbidden_fixed_question_content",
@@ -1702,6 +1734,13 @@ def build_structured_memory_candidates_text(
     return "\n\n".join(blocks)
 
 
+def select_structured_recall_target(
+    memory_candidates: List[Dict],
+) -> Optional[Dict]:
+    """Select the single engine-ranked clue that the LLM may verbalize."""
+    return memory_candidates[0] if memory_candidates else None
+
+
 def parse_recall_generation_content(content: str) -> Dict[str, str]:
     parsed = {
         "memoryPoint": "",
@@ -1783,12 +1822,15 @@ def generate_recall_question_from_conversation(
     used_memory_points: Optional[List[str]] = None,
     memory_candidates: Optional[List[Dict]] = None,
 ) -> Dict[str, str]:
-    structured_candidates = normalize_structured_memory_candidates(
+    normalized_structured_candidates = normalize_structured_memory_candidates(
         memory_candidates,
         conversation_history,
     )
     valid_conversation_history = (
-        [candidate["sourceText"] for candidate in structured_candidates]
+        [
+            candidate["sourceText"]
+            for candidate in normalized_structured_candidates
+        ]
         if memory_candidates is not None
         else select_recall_memory_candidates(conversation_history)
     )
@@ -1813,19 +1855,28 @@ def generate_recall_question_from_conversation(
 
     previous_questions_text = build_previous_questions_text(previous_questions)
     used_memory_points_text = build_used_memory_points_text(used_memory_points)
+    structured_recall_target = select_structured_recall_target(
+        normalized_structured_candidates
+    )
+    structured_candidates = (
+        [structured_recall_target]
+        if structured_recall_target is not None
+        else []
+    )
     structured_candidates_text = build_structured_memory_candidates_text(
         structured_candidates
     )
     structured_candidate_instructions = (
         """
-14. 아래 구조화 memoryPoint 후보 중 정확히 1개를 선택합니다.
-15. memoryPoint는 선택한 후보의 sourceText를 그대로 작성합니다.
-16. answerKeyword는 선택한 후보의 answerValue를 그대로 작성합니다.
-17. 질문은 선택한 후보의 answerType에 해당하는 정보만 묻습니다.
-18. eventId와 sourceRecordId는 출력하지 않습니다.
-19. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
-20. 서로 다른 후보의 사람, 장소, 음식, 행동을 한 질문에 섞지 않습니다.
-21. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
+14. 아래에는 memoryPoint 엔진이 이번 회상 대상으로 확정한 후보 1개만 제공됩니다.
+15. 다른 대화 내용으로 대상을 바꾸지 말고 이 후보만 질문으로 표현합니다.
+16. memoryPoint는 확정 후보의 sourceText를 그대로 작성합니다.
+17. answerKeyword는 확정 후보의 answerValue를 그대로 작성합니다.
+18. 질문은 확정 후보의 answerType에 해당하는 정보만 묻습니다.
+19. eventId와 sourceRecordId는 출력하지 않습니다.
+20. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
+21. 다른 사건의 사람, 장소, 음식, 행동을 질문에 섞지 않습니다.
+22. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
 """.strip()
         if structured_candidates
         else ""
@@ -2049,7 +2100,7 @@ question: 자연스러운 회상 질문
                     for item in evidence
                 )
             )
-            question_actions = extract_memory_action_concepts(question)
+            question_actions = extract_recall_question_action_concepts(question)
 
             if question_actions and not question_actions <= event_actions:
                 return {
@@ -2151,6 +2202,7 @@ def save_recall_question_to_spring(
     memory_point: str,
     question_text: str,
     answer_keywords: Optional[List[str]] = None,
+    memory_candidate: Optional[Dict] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
     expected_answer = next(
@@ -2168,6 +2220,16 @@ def save_recall_question_to_spring(
         "category": "CONVERSATION",
         "expectedAnswer": expected_answer,
     }
+    if memory_candidate:
+        recall_clue = memory_candidate.get("recallClue") or {}
+        body.update(
+            {
+                "eventId": memory_candidate.get("eventId"),
+                "clueId": recall_clue.get("clueId"),
+                "sourceRecordId": memory_candidate.get("sourceRecordId"),
+                "answerType": memory_candidate.get("answerType"),
+            }
+        )
 
     response = requests.post(
         f"{base_url}/api/recall/questions",
@@ -2243,6 +2305,7 @@ def generate_and_save_recall_question(
         memory_point=result["memoryPoint"],
         question_text=result["question"],
         answer_keywords=result.get("answerKeywords"),
+        memory_candidate=result.get("memoryCandidate"),
         base_url=base_url,
     )
 
