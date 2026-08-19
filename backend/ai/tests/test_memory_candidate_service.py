@@ -9,6 +9,7 @@ sys.path.insert(0, str(AI_ROOT))
 
 from recall.memory_candidate_service import (  # noqa: E402
     build_memory_candidate_selection,
+    validate_recall_candidate_contract,
 )
 
 
@@ -310,6 +311,49 @@ class MemoryCandidateServiceTest(unittest.TestCase):
             [50, 60, 70],
             [item["sourceRecordIds"][0] for item in result["candidates"]],
         )
+
+    def test_full_candidate_contract_matches_its_event_evidence(self):
+        candidate = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 80,
+                    "sourceText": "딸과 공원에서 산책했어",
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "산책",
+                    "clues": [
+                        {"answerType": "PERSON", "answerValue": "딸"},
+                        {"answerType": "PLACE", "answerValue": "공원"},
+                        {"answerType": "ACTIVITY", "answerValue": "산책"},
+                    ],
+                    "qualityScore": 90,
+                }
+            ]
+        ).to_dict()["candidates"][0]
+        selected = candidate["recallClue"]
+        full_contract = {
+            **candidate,
+            "sourceRecordId": selected["sourceRecordId"],
+            "sourceText": selected["sourceText"],
+            "answerType": selected["answerType"],
+            "answerValue": selected["answerValue"],
+        }
+
+        validate_recall_candidate_contract(full_contract)
+
+        tampered = {
+            **full_contract,
+            "answerValue": "시장",
+        }
+        with self.assertRaisesRegex(ValueError, "recallClue"):
+            validate_recall_candidate_contract(tampered)
+
+        tampered_evidence = {
+            **full_contract,
+            "sourceRecordIds": [999],
+        }
+        with self.assertRaisesRegex(ValueError, "sourceRecordIds"):
+            validate_recall_candidate_contract(tampered_evidence)
 
 
 if __name__ == "__main__":

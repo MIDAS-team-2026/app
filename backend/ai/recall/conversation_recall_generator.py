@@ -8,6 +8,7 @@ import requests
 from kiwipiepy import Kiwi
 from openai import OpenAI
 
+from recall.memory_candidate_service import validate_recall_candidate_contract
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
 from recall.recall_score_calculator import calculate_similarity_score
 
@@ -172,7 +173,7 @@ MEMORY_ACTION_HINTS = [
 
 
 MEMORY_ACTION_CONCEPTS = {
-    "EAT": ("먹", "식사"),
+    "EAT": ("먹", "식사", "드시", "드셨"),
     "DRINK": ("마시",),
     "GO": ("갔", "다녀오", "왔", "가서"),
     "SEE": ("봤", "보았", "보고", "시청"),
@@ -940,6 +941,11 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
     return actions, concrete
 
 
+def extract_memory_action_concepts(text: str) -> set[str]:
+    actions, _concrete = _memory_signature(text)
+    return actions
+
+
 def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bool:
     current = _comparison_text(memory_point)
     previous = _comparison_text(previous_memory_point)
@@ -1609,6 +1615,11 @@ def normalize_structured_memory_candidates(
         if not isinstance(candidate, dict):
             continue
 
+        try:
+            validate_recall_candidate_contract(candidate)
+        except (TypeError, ValueError):
+            continue
+
         source_text = clean_text(candidate.get("sourceText"))
         answer_value = clean_text(candidate.get("answerValue"))
 
@@ -1634,15 +1645,26 @@ def normalize_structured_memory_candidates(
         ):
             continue
 
-        normalized.append(
-            {
-                "eventId": event_id,
-                "sourceRecordId": source_record_id,
-                "sourceText": history_by_text[source_text],
-                "answerType": answer_type.value,
-                "answerValue": answer_value,
-            }
-        )
+        normalized_candidate = {
+            "eventId": event_id,
+            "sourceRecordId": source_record_id,
+            "sourceText": history_by_text[source_text],
+            "answerType": answer_type.value,
+            "answerValue": answer_value,
+        }
+        for context_field in (
+            "topic",
+            "sourceRecordIds",
+            "evidence",
+            "recallClue",
+            "recallClues",
+            "answerValues",
+            "qualityScore",
+        ):
+            if context_field in candidate:
+                normalized_candidate[context_field] = candidate[context_field]
+
+        normalized.append(normalized_candidate)
         seen.add(identity)
 
     return normalized
@@ -1657,18 +1679,25 @@ def build_structured_memory_candidates_text(
     blocks = []
 
     for index, candidate in enumerate(memory_candidates, start=1):
-        blocks.append(
-            "\n".join(
-                (
-                    f"후보 {index}",
-                    f"eventId: {candidate['eventId']}",
-                    f"sourceRecordId: {candidate['sourceRecordId']}",
-                    f"sourceText: {candidate['sourceText']}",
-                    f"answerType: {candidate['answerType']}",
-                    f"answerValue: {candidate['answerValue']}",
-                )
+        lines = [
+            f"후보 {index}",
+            f"eventId: {candidate['eventId']}",
+            f"sourceRecordId: {candidate['sourceRecordId']}",
+            f"sourceText: {candidate['sourceText']}",
+            f"answerType: {candidate['answerType']}",
+            f"answerValue: {candidate['answerValue']}",
+        ]
+        evidence = candidate.get("evidence")
+
+        if candidate.get("topic") and isinstance(evidence, list):
+            lines.append(f"eventTopic: {candidate['topic']}")
+            lines.append("eventEvidence:")
+            lines.extend(
+                f"- [{item['sourceRecordId']}] {item['sourceText']}"
+                for item in evidence
             )
-        )
+
+        blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks)
 
@@ -1794,6 +1823,9 @@ def generate_recall_question_from_conversation(
 16. answerKeyword는 선택한 후보의 answerValue를 그대로 작성합니다.
 17. 질문은 선택한 후보의 answerType에 해당하는 정보만 묻습니다.
 18. eventId와 sourceRecordId는 출력하지 않습니다.
+19. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
+20. 서로 다른 후보의 사람, 장소, 음식, 행동을 한 질문에 섞지 않습니다.
+21. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
 """.strip()
         if structured_candidates
         else ""
@@ -2009,6 +2041,28 @@ question: 자연스러운 회상 질문
                 "question": question,
             }
 
+        evidence = structured_candidate.get("evidence")
+        if isinstance(evidence, list):
+            event_actions = set().union(
+                *(
+                    extract_memory_action_concepts(item.get("sourceText") or "")
+                    for item in evidence
+                )
+            )
+            question_actions = extract_memory_action_concepts(question)
+
+            if question_actions and not question_actions <= event_actions:
+                return {
+                    "status": "SKIPPED",
+                    "reason": (
+                        "회상 질문에 memoryPoint 사건에 없는 행동이 포함되었습니다."
+                    ),
+                    "memoryPoint": memory_point,
+                    "answerKeyword": answer_keyword,
+                    "question": question,
+                }
+
+        memory_point = structured_candidate["sourceText"]
         answer_keyword = expected_answer
 
     if not is_answer_keyword_compatible_with_question(
@@ -2063,6 +2117,11 @@ question: 자연스러운 회상 질문
         action=",".join(sorted(action_concepts)),
         source_record_id=(
             structured_candidate["sourceRecordId"]
+            if structured_candidate
+            else None
+        ),
+        answer_type=(
+            structured_candidate["answerType"]
             if structured_candidate
             else None
         ),

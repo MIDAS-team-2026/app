@@ -125,6 +125,9 @@ def should_continue_memory_event(
     answer_type: MemoryAnswerType | str,
     is_correction: bool = False,
     is_referential_followup: bool = False,
+    has_conflicting_action: bool = False,
+    has_confirmed_clue: bool = True,
+    is_topic_transition: bool = False,
 ) -> bool:
     """Return True only when the current answer still describes the last event.
 
@@ -144,8 +147,21 @@ def should_continue_memory_event(
     if last_topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
         return False
 
+    if is_topic_transition:
+        return False
+
     answer_slot_topic = infer_topic(parse_answer_type(answer_type))
     compatible_topics = {last_topic, answer_slot_topic}
+
+    if has_conflicting_action and current_topic != last_topic:
+        return False
+
+    if (
+        not has_confirmed_clue
+        and not is_topic_transition
+        and current_topic == last_topic
+    ):
+        return True
 
     if is_correction:
         return (
@@ -189,37 +205,42 @@ class MemoryEvent:
         question: str,
         action: str = "",
         source_record_id: Optional[int] = None,
+        answer_type: MemoryAnswerType | str | None = None,
         quality_score: int = 0,
     ) -> "MemoryEvent":
-        answer_type = infer_answer_type(question)
+        resolved_answer_type = (
+            parse_answer_type(answer_type)
+            if answer_type is not None
+            else infer_answer_type(question)
+        )
 
         return cls(
             source_text=str(source_text or "").strip(),
             memory_point=str(memory_point or "").strip(),
             answer_keyword=str(answer_keyword or "").strip(),
-            answer_type=answer_type,
-            topic=infer_topic(answer_type, action),
+            answer_type=resolved_answer_type,
+            topic=infer_topic(resolved_answer_type, action),
             question=str(question or "").strip(),
             action=str(action or "").strip(),
             source_record_id=source_record_id,
             person=(
                 answer_keyword
-                if answer_type == MemoryAnswerType.PERSON
+                if resolved_answer_type == MemoryAnswerType.PERSON
                 else None
             ),
             place=(
                 answer_keyword
-                if answer_type == MemoryAnswerType.PLACE
+                if resolved_answer_type == MemoryAnswerType.PLACE
                 else None
             ),
             time_expression=(
                 answer_keyword
-                if answer_type == MemoryAnswerType.TIME
+                if resolved_answer_type == MemoryAnswerType.TIME
                 else None
             ),
             object_name=(
                 answer_keyword
-                if answer_type
+                if resolved_answer_type
                 in {
                     MemoryAnswerType.FOOD,
                     MemoryAnswerType.MEDIA,
