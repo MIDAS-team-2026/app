@@ -8,6 +8,7 @@ import requests
 from kiwipiepy import Kiwi
 from openai import OpenAI
 
+from recall.memory_candidate_service import validate_recall_candidate_contract
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
 from recall.recall_score_calculator import calculate_similarity_score
 
@@ -1614,6 +1615,11 @@ def normalize_structured_memory_candidates(
         if not isinstance(candidate, dict):
             continue
 
+        try:
+            validate_recall_candidate_contract(candidate)
+        except (TypeError, ValueError):
+            continue
+
         source_text = clean_text(candidate.get("sourceText"))
         answer_value = clean_text(candidate.get("answerValue"))
 
@@ -1639,15 +1645,26 @@ def normalize_structured_memory_candidates(
         ):
             continue
 
-        normalized.append(
-            {
-                "eventId": event_id,
-                "sourceRecordId": source_record_id,
-                "sourceText": history_by_text[source_text],
-                "answerType": answer_type.value,
-                "answerValue": answer_value,
-            }
-        )
+        normalized_candidate = {
+            "eventId": event_id,
+            "sourceRecordId": source_record_id,
+            "sourceText": history_by_text[source_text],
+            "answerType": answer_type.value,
+            "answerValue": answer_value,
+        }
+        for context_field in (
+            "topic",
+            "sourceRecordIds",
+            "evidence",
+            "recallClue",
+            "recallClues",
+            "answerValues",
+            "qualityScore",
+        ):
+            if context_field in candidate:
+                normalized_candidate[context_field] = candidate[context_field]
+
+        normalized.append(normalized_candidate)
         seen.add(identity)
 
     return normalized

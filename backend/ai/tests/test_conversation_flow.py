@@ -37,6 +37,7 @@ from recall import conversation_recall_generator as recall_generator
 from recall import free_talk_question_generator as free_talk_generator
 from recall import memory_event
 from recall import recall_score_calculator
+from recall.memory_candidate_service import build_memory_candidate_selection
 
 
 recall_api_spec = importlib.util.spec_from_file_location(
@@ -1476,6 +1477,57 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual(history[0], natural_result["memoryPoint"])
         self.assertEqual("PLACE", natural_result["memoryEvent"]["answerType"])
         self.assertEqual("PLACE", natural_result["memoryEvent"]["topic"])
+
+    def test_structured_candidate_normalization_preserves_valid_event_context(self):
+        history = ["딸과 공원에서 산책했어"]
+        candidate = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 10,
+                    "sourceText": history[0],
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "산책",
+                    "clues": [
+                        {"answerType": "PERSON", "answerValue": "딸"},
+                        {"answerType": "PLACE", "answerValue": "공원"},
+                        {"answerType": "ACTIVITY", "answerValue": "산책"},
+                    ],
+                    "qualityScore": 90,
+                }
+            ]
+        ).to_dict()["candidates"][0]
+        selected = candidate["recallClue"]
+        full_contract = {
+            **candidate,
+            "sourceRecordId": selected["sourceRecordId"],
+            "sourceText": selected["sourceText"],
+            "answerType": selected["answerType"],
+            "answerValue": selected["answerValue"],
+        }
+
+        normalized = recall_generator.normalize_structured_memory_candidates(
+            [full_contract],
+            history,
+        )
+
+        self.assertEqual(1, len(normalized))
+        self.assertEqual("ACTIVITY", normalized[0]["topic"])
+        self.assertEqual([10], normalized[0]["sourceRecordIds"])
+        self.assertEqual(candidate["evidence"], normalized[0]["evidence"])
+        self.assertEqual(candidate["recallClue"], normalized[0]["recallClue"])
+
+        invalid_contract = {
+            **full_contract,
+            "answerValues": {"PLACE": ["시장"]},
+        }
+        self.assertEqual(
+            [],
+            recall_generator.normalize_structured_memory_candidates(
+                [invalid_contract],
+                history,
+            ),
+        )
 
     def test_last_correction_controls_topic_and_empathy(self):
         corrected_to_person = "피자를 먹었어. 아니, 동생과 통화했어"
@@ -3856,6 +3908,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", return_value=records),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
             patch.object(
                 handler,
                 "_get_structured_recall_ready_context",
