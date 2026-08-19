@@ -45,6 +45,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STT_MODEL = "openai/whisper-small"
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
+# llama-3.3-70b-versatile은 Groq 무료/개발자 요금제에서 2026-08-16 종료되어
+# 공식 권장 대체 모델인 GPT-OSS 120B로 변경했습니다. 필요하면 환경변수로 교체합니다.
+GROQ_REFINEMENT_MODEL = os.getenv("GROQ_REFINEMENT_MODEL", "openai/gpt-oss-120b")
 
 app = FastAPI(title="MIDAS AI Server")
 groq_client = Groq()
@@ -295,7 +298,7 @@ def transcribe(request: SttRequest):
         if not raw_text:
             return SttResponse(transcriptText="", confidence=None, modelName="groq-whisper-large-v3")
 
-        # 4. Groq 무료 LLM(Llama 3)을 사용해 AI 텍스트 정제 수행
+        # 4. Groq LLM을 사용해 AI 텍스트 정제 수행
         # (간투사 제거, 오타 교정, 핵심 정보 보존)
         refine_prompt = f"""
         당신은 텍스트 정제 전문 AI입니다. 
@@ -311,20 +314,35 @@ def transcribe(request: SttRequest):
         정제된 문장:
         """.strip()
 
-        # llama-3.3-70b-versatile 또는 llama3-8b-8192 모델 사용
-        llm_response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[{"role": "user", "content": refine_prompt}],
-            temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
-        )
-
-        clean_text = llm_response.choices[0].message.content.strip()
+        clean_text = raw_text
+        refinement_model = None
+        try:
+            llm_response = groq_client.chat.completions.create(
+                model=GROQ_REFINEMENT_MODEL,
+                messages=[{"role": "user", "content": refine_prompt}],
+                temperature=0.1,
+                reasoning_effort="low",
+                max_completion_tokens=256,
+            )
+            refined_text = llm_response.choices[0].message.content.strip()
+            if refined_text:
+                clean_text = refined_text
+                refinement_model = GROQ_REFINEMENT_MODEL
+        except Exception as exc:
+            logger.warning(
+                "STT text refinement failed; using the Whisper transcript: %s",
+                exc,
+            )
 
         # 5. 스프링이 원하는 포맷에 맞춰 정제된 텍스트 리턴
         return SttResponse(
             transcriptText=clean_text,
             confidence=None,
-            modelName="groq-whisper-large-v3 + llama3"
+            modelName=(
+                f"groq-whisper-large-v3 + {refinement_model}"
+                if refinement_model
+                else "groq-whisper-large-v3"
+            )
         )
 
     except requests.RequestException as exc:

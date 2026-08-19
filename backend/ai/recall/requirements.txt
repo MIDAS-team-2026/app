@@ -10,6 +10,7 @@ torch
 gradio
 python-dotenv
 openai
+groq
 fastapi
 uvicorn
 requests
