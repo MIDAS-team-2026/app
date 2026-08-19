@@ -55,6 +55,7 @@ class MemoryEvidenceExtractorTest(unittest.TestCase):
         cases = (
             "주변에 친구가 있다고 했어요.",
             "자주 가는 곳이야",
+            "처음엔 귀찮았는데 하고 나니까 뿌듯했어.",
         )
 
         for text in cases:

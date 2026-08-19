@@ -125,6 +125,31 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
             self.assertTrue(candidate["eventId"])
             self.assertTrue(candidate["answerType"])
             self.assertTrue(candidate["answerValue"])
+            self.assertTrue(candidate["topic"])
+            self.assertIn(
+                candidate["sourceRecordId"],
+                candidate["sourceRecordIds"],
+            )
+            self.assertEqual(
+                candidate["sourceRecordIds"],
+                [item["sourceRecordId"] for item in candidate["evidence"]],
+            )
+            self.assertEqual(
+                candidate["sourceRecordId"],
+                candidate["recallClue"]["sourceRecordId"],
+            )
+            self.assertEqual(
+                candidate["answerType"],
+                candidate["recallClue"]["answerType"],
+            )
+            self.assertEqual(
+                candidate["answerValue"],
+                candidate["recallClue"]["answerValue"],
+            )
+            self.assertIn(
+                candidate["answerValue"],
+                candidate["answerValues"][candidate["answerType"]],
+            )
 
     def test_cross_slot_followup_stays_in_event_but_new_topic_does_not(self):
         records = [
@@ -361,6 +386,59 @@ class MemoryCandidateIntegrationTest(unittest.TestCase):
                 "TIME": ["오전"],
             },
             candidate["answerValues"],
+        )
+
+    def test_activity_time_followup_stays_with_the_referenced_event(self):
+        records = [
+            {
+                "recordId": 153,
+                "turnOrder": 1,
+                "transcriptText": "오늘 청소했어",
+                "aiReplyText": "하실 때 기분은 어떠셨어요?",
+            },
+            {
+                "recordId": 154,
+                "turnOrder": 2,
+                "transcriptText": "처음엔 귀찮았는데 하고 나니까 뿌듯했어.",
+                "aiReplyText": "그때 가장 먼저 기억나는 장면이 있으세요?",
+            },
+            {
+                "recordId": 155,
+                "turnOrder": 3,
+                "transcriptText": "쌓여 있는 설거지거리",
+                "aiReplyText": "그 일은 언제쯤 하셨어요?",
+            },
+            {
+                "recordId": 156,
+                "turnOrder": 4,
+                "transcriptText": "한 시쯤 했어",
+                "aiReplyText": "",
+            },
+        ]
+
+        payloads = handler._build_memory_evidence_payloads(records)
+        result = build_memory_candidate_selection(payloads).to_dict()
+        by_record_id = {
+            payload["sourceRecordId"]: payload
+            for payload in payloads
+        }
+
+        self.assertNotIn(
+            {"answerType": "PLACE", "answerValue": "처음"},
+            by_record_id[154]["clues"],
+        )
+        self.assertTrue(by_record_id[156]["continuesPreviousEvent"])
+        self.assertEqual("ACTIVITY", by_record_id[156]["topic"])
+        self.assertEqual("TIME", by_record_id[156]["answerType"])
+        self.assertEqual("한 시쯤", by_record_id[156]["answerValue"])
+        self.assertEqual(1, len(result["candidates"]))
+        self.assertEqual(
+            [153, 154, 155, 156],
+            result["candidates"][0]["sourceRecordIds"],
+        )
+        self.assertEqual(
+            ["한 시쯤"],
+            result["candidates"][0]["answerValues"]["TIME"],
         )
 
     def test_followup_can_refine_an_object_clue_in_the_same_event(self):

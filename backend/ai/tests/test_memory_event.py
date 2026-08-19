@@ -360,6 +360,51 @@ class MemoryEvidenceGroupingTest(unittest.TestCase):
             )
         )
 
+    def test_conflicting_action_starts_a_new_event(self):
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="MEAL",
+                detected_topic="PERSON",
+                question_topics={"MEAL"},
+                answer_type=MemoryAnswerType.PERSON,
+                is_referential_followup=True,
+                has_conflicting_action=True,
+            )
+        )
+
+        self.assertTrue(
+            should_continue_memory_event(
+                last_event_topic="MEAL",
+                detected_topic="PERSON",
+                question_topics={"MEAL"},
+                answer_type=MemoryAnswerType.PERSON,
+                is_referential_followup=True,
+                has_conflicting_action=False,
+            )
+        )
+
+    def test_untyped_description_keeps_the_current_event(self):
+        self.assertTrue(
+            should_continue_memory_event(
+                last_event_topic="ACTIVITY",
+                detected_topic="ACTIVITY",
+                question_topics=set(),
+                answer_type=MemoryAnswerType.ACTIVITY,
+                has_confirmed_clue=False,
+            )
+        )
+
+        self.assertFalse(
+            should_continue_memory_event(
+                last_event_topic="ACTIVITY",
+                detected_topic="ACTIVITY",
+                question_topics=set(),
+                answer_type=MemoryAnswerType.ACTIVITY,
+                has_confirmed_clue=False,
+                is_topic_transition=True,
+            )
+        )
+
     def test_same_source_record_is_selected_only_once_across_topics(self):
         drafts = [
             self._draft(

@@ -172,7 +172,7 @@ MEMORY_ACTION_HINTS = [
 
 
 MEMORY_ACTION_CONCEPTS = {
-    "EAT": ("먹", "식사"),
+    "EAT": ("먹", "식사", "드시", "드셨"),
     "DRINK": ("마시",),
     "GO": ("갔", "다녀오", "왔", "가서"),
     "SEE": ("봤", "보았", "보고", "시청"),
@@ -938,6 +938,11 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
         if _memory_hint_occurs(hint, text)
     }
     return actions, concrete
+
+
+def extract_memory_action_concepts(text: str) -> set[str]:
+    actions, _concrete = _memory_signature(text)
+    return actions
 
 
 def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bool:
@@ -2009,6 +2014,7 @@ question: 자연스러운 회상 질문
                 "question": question,
             }
 
+        memory_point = structured_candidate["sourceText"]
         answer_keyword = expected_answer
 
     if not is_answer_keyword_compatible_with_question(
@@ -2063,6 +2069,11 @@ question: 자연스러운 회상 질문
         action=",".join(sorted(action_concepts)),
         source_record_id=(
             structured_candidate["sourceRecordId"]
+            if structured_candidate
+            else None
+        ),
+        answer_type=(
+            structured_candidate["answerType"]
             if structured_candidate
             else None
         ),
