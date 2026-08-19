@@ -16,6 +16,10 @@ class RecallTimingAction(str, Enum):
     ASK_RECALL = "ASK_RECALL"
 
 
+MAX_CONSECUTIVE_TOPIC_TURNS = 3
+MIN_MATURED_RECALL_CANDIDATES = 2
+
+
 @dataclass(frozen=True)
 class ConversationDecision:
     action: ConversationAction
@@ -36,6 +40,7 @@ def decide_conversation_action(
     should_change_topic: bool,
     needs_memory_detail: bool = False,
     has_followup_context: bool = False,
+    consecutive_topic_turns: int = 0,
 ) -> ConversationDecision:
     if after_recall_answer:
         return ConversationDecision(
@@ -49,6 +54,16 @@ def decide_conversation_action(
             action=ConversationAction.CHANGE_TOPIC,
             stage="OPEN",
             reason="latest_answer_cannot_support_a_followup",
+        )
+
+    if (
+        has_followup_context
+        and consecutive_topic_turns >= MAX_CONSECUTIVE_TOPIC_TURNS
+    ):
+        return ConversationDecision(
+            action=ConversationAction.CHANGE_TOPIC,
+            stage="OPEN",
+            reason="current_topic_has_enough_detail",
         )
 
     if needs_memory_detail:
@@ -84,7 +99,7 @@ def decide_recall_timing(
     latest_is_low_info: bool,
     latest_is_negative: bool,
 ) -> RecallTimingDecision:
-    if matured_candidate_count < 2:
+    if matured_candidate_count < MIN_MATURED_RECALL_CANDIDATES:
         return RecallTimingDecision(
             action=RecallTimingAction.WAIT,
             reason="not_enough_matured_memories",
@@ -97,7 +112,7 @@ def decide_recall_timing(
         )
 
     if (
-        matured_candidate_count == 2
+        matured_candidate_count == MIN_MATURED_RECALL_CANDIDATES
         and latest_has_followup_context
         and not latest_is_memory_candidate
         and not latest_is_low_info

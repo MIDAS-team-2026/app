@@ -5,8 +5,10 @@ import unicodedata
 from typing import Dict, List, Optional
 
 import requests
+from kiwipiepy import Kiwi
 from openai import OpenAI
 
+from recall.memory_candidate_service import validate_recall_candidate_contract
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
 from recall.recall_score_calculator import calculate_similarity_score
 
@@ -71,7 +73,7 @@ MEMORY_DETAIL_HINTS = [
     "썼",
     "줬",
     "갔",
-    "다녀",
+    "다녀오",
     "왔",
     "만났",
     "봤",
@@ -171,9 +173,9 @@ MEMORY_ACTION_HINTS = [
 
 
 MEMORY_ACTION_CONCEPTS = {
-    "EAT": ("먹", "식사"),
+    "EAT": ("먹", "식사", "드시", "드셨"),
     "DRINK": ("마시",),
-    "GO": ("갔", "다녀", "왔", "가서"),
+    "GO": ("갔", "다녀오", "왔", "가서"),
     "SEE": ("봤", "보았", "보고", "시청"),
     "HEAR": ("들었", "들어", "노래"),
     "BUY": ("샀", "사왔", "장 봤", "장봤"),
@@ -229,12 +231,12 @@ STATE_PREDICATE_PREFIXES = (
     "맛있",
     "맛없",
     "재미있",
-    "재미없",
-    "즐거",
+    "재미없다",
+    "즐겁",
     "기쁘",
     "반갑",
     "무섭",
-    "속상",
+    "속상하",
     "우울",
     "걱정",
 )
@@ -507,10 +509,10 @@ STATE_ONLY_MEMORY_PHRASES = (
     "피곤",
     "어려웠",
     "힘들",
-    "속상",
+    "속상하",
     "슬펐",
     "우울",
-    "외로",
+    "외롭",
     "불안",
     "걱정",
     "괜찮았",
@@ -709,26 +711,114 @@ def _normalize_keyword_word(word: str) -> str:
     return word
 
 
+_kiwi = Kiwi()
+
+# voice_reply_handler와 동일한 원칙: 키워드 리스트 항목은 활용 조각이
+# 아니라 사전형 어간으로 관리하고, 매칭은 부분 문자열이 아니라
+# 형태소(토큰) 단위로만 한다.
+_NOUN_TAGS = {"NNG", "NNP", "NNB", "NR", "NP"}
+_EXACT_MATCH_TAGS = _NOUN_TAGS | {"MAG", "XR", "SL", "SH", "SN", "IC"}
+# 동사/형용사는 접두사로 비교한다. "듣다/눕다/어렵다/덥다/춥다" 같은
+# 불규칙 활용 어간은 kiwi가 "VV-I"/"VA-I"처럼 -I가 붙은 태그를 쓴다.
+_PREDICATE_TAG_PREFIXES = ("VV", "VA", "VX", "XSA", "XSV")
+_tokenize_cache: dict[str, tuple] = {}
+
+
+def _is_match_tag(tag: str) -> bool:
+    return tag in _EXACT_MATCH_TAGS or tag.startswith(_PREDICATE_TAG_PREFIXES)
+
+
+def _tokenize_cached(text: str) -> tuple:
+    text = str(text or "")
+    cached = _tokenize_cache.get(text)
+
+    if cached is not None:
+        return cached
+
+    tokens = tuple(_kiwi.tokenize(text))
+
+    if len(_tokenize_cache) > 2000:
+        _tokenize_cache.clear()
+
+    _tokenize_cache[text] = tokens
+    return tokens
+
+
+def _match_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text) if _is_match_tag(token.tag)]
+
+
+def _full_token_forms(text: str) -> list[str]:
+    return [token.form for token in _tokenize_cached(text)]
+
+
+def _is_contiguous_subsequence(needle: list[str], haystack: list[str]) -> bool:
+    if not needle:
+        return False
+
+    span = len(needle)
+
+    return any(
+        haystack[start:start + span] == needle
+        for start in range(len(haystack) - span + 1)
+    )
+
+
+# 조사(격조사/보조사/접속조사)는 의미를 가른다("집에만" vs "집을").
+# 어미(EP/EF/EC 등 활용형 꼬리)는 그냥 시제/문체 차이라 무시해도 된다.
+_PARTICLE_TAG_PREFIXES = ("JK", "JX", "JC")
+
+
+def _keyword_has_meaningful_particle(word: str) -> bool:
+    return any(
+        token.tag.startswith(_PARTICLE_TAG_PREFIXES)
+        for token in _tokenize_cached(word)
+    )
+
+
+def _word_occurs_as_token(word: str, text: str, strict: bool = False) -> bool:
+    """word(키워드 하나 또는 구)가 text 안에 실제 단어(형태소)로 등장하는지 확인한다.
+
+    조사가 붙은 활용("형이", "형을")은 형태소 분석으로 정확히 잡아내고,
+    "형섭"처럼 다른 단어 속에 우연히 낀 글자는 매칭되지 않는다.
+
+    strict=True는 어미(시제/의향 등)까지 그대로 지켜야 하는 키워드용이다.
+    예: FUTURE_OR_WISH_PHRASES의 "먹으려고"는 "먹었어"(과거)와는 달라야
+    하므로, 어간만 남기는 느슨한 매칭을 쓰면 안 된다.
+    """
+    # "약과"(과자)를 "약"+"과"(조사)로, "국가"를 "국"+"가"(조사)로 잘못
+    # 쪼개는 것처럼 형태소 분석기 자체가 헷갈리는 소수의 복합어는
+    # 별도로 관리한다(NON_PARTICLE_COMPOUND_WORDS).
+    for compound in NON_PARTICLE_COMPOUND_WORDS:
+        if compound != word and compound.startswith(word) and compound in text:
+            return False
+
+    keyword_content_forms = _match_token_forms(word)
+
+    if not keyword_content_forms:
+        return False
+
+    if (
+        not strict
+        and len(keyword_content_forms) == 1
+        and not _keyword_has_meaningful_particle(word)
+    ):
+        # 단일 형태소 키워드는 조사/어미와 무관하게 그 형태소가
+        # 문장 안에 등장하는지만 본다(활용형에 안정적).
+        return keyword_content_forms[0] in _match_token_forms(text)
+
+    # 조사·어미가 의미를 가르는 키워드는 그걸 빼면 의미가 사라지거나
+    # ("집에만"→"집") 다른 뜻이 되므로("먹으려고"→"먹", 과거와 충돌)
+    # 어미·조사를 포함한 전체 토큰 나열이 연속으로 등장하는지 확인한다.
+    return _is_contiguous_subsequence(_full_token_forms(word), _full_token_forms(text))
+
+
 def _single_syllable_keyword_occurs(answer_keyword: str, text: str) -> bool:
-    allowed_endings = set(KEYWORD_PARTICLE_SUFFIXES) | set(KEYWORD_POLITE_SUFFIXES)
-    allowed_endings.update(f"{particle}요" for particle in KEYWORD_PARTICLE_SUFFIXES)
+    return _word_occurs_as_token(answer_keyword, text)
 
-    for token in clean_text(text).split():
-        token = _comparison_text(token)
 
-        if token == answer_keyword:
-            return True
-
-        if answer_keyword not in SHORT_MEMORY_CONTENT_WORDS:
-            continue
-
-        if token in NON_PARTICLE_COMPOUND_WORDS or not token.startswith(answer_keyword):
-            continue
-
-        if token[len(answer_keyword):] in allowed_endings:
-            return True
-
-    return False
+def _contains_any(text: str, keywords, strict: bool = False) -> bool:
+    return any(_word_occurs_as_token(keyword, text, strict=strict) for keyword in keywords)
 
 
 def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
@@ -769,17 +859,14 @@ def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
 
 
 def _memory_hint_occurs(hint: str, text: str) -> bool:
-    if len(_comparison_text(hint)) == 1:
-        return _single_syllable_keyword_occurs(hint, text)
-
-    return hint in text
+    return _word_occurs_as_token(hint, text)
 
 
 def _memory_detail_hint_occurs(hint: str, text: str) -> bool:
     if hint in MEMORY_CONCRETE_HINTS:
         return _memory_hint_occurs(hint, text)
 
-    return hint in text
+    return _word_occurs_as_token(hint, text)
 
 
 def _has_completed_generic_object_action(text: str) -> bool:
@@ -844,7 +931,7 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
     actions = {
         concept
         for concept, patterns in MEMORY_ACTION_CONCEPTS.items()
-        if any(pattern in text for pattern in patterns)
+        if _contains_any(text, patterns)
     }
     concrete = {
         hint
@@ -852,6 +939,11 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
         if _memory_hint_occurs(hint, text)
     }
     return actions, concrete
+
+
+def extract_memory_action_concepts(text: str) -> set[str]:
+    actions, _concrete = _memory_signature(text)
+    return actions
 
 
 def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bool:
@@ -965,7 +1057,8 @@ def is_memory_point_grounded(memory_point: str, source_text: str) -> bool:
     )
 
     if any(
-        hint in memory_point and hint not in original_source_text
+        _word_occurs_as_token(hint, memory_point)
+        and not _word_occurs_as_token(hint, original_source_text)
         for hint in explicit_time_hints
     ):
         return False
@@ -1110,7 +1203,7 @@ def is_forbidden_recall_content(text: str) -> bool:
     if not text:
         return True
 
-    return any(keyword in text for keyword in FORBIDDEN_RECALL_KEYWORDS)
+    return _contains_any(text, FORBIDDEN_RECALL_KEYWORDS)
 
 
 def is_valid_recall_question_format(question: str) -> bool:
@@ -1175,7 +1268,7 @@ def evaluate_memory_candidate(text: str) -> Dict[str, object]:
             "reasons": ["forbidden_fixed_question_content"],
         }
 
-    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+    if _contains_any(text, WEAK_MEMORY_PHRASES, strict=True):
         reasons.append("weak_or_uncertain_expression")
         score -= 20
 
@@ -1276,7 +1369,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     recall_score = int(evaluation["score"])
     reasons = list(evaluation["reasons"])
 
-    action_hits = [hint for hint in MEMORY_ACTION_HINTS if hint in text]
+    action_hits = [hint for hint in MEMORY_ACTION_HINTS if _word_occurs_as_token(hint, text)]
     action_concepts, _concrete_concepts = _memory_signature(text)
     has_generic_object_action = _has_completed_generic_object_action(text)
     has_generic_food_action = _has_completed_generic_food_action(text)
@@ -1316,7 +1409,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     future_or_wish_hits = [
         phrase
         for phrase in FUTURE_OR_WISH_PHRASES
-        if phrase in text
+        if _word_occurs_as_token(phrase, text, strict=True)
     ]
     has_only_wish_hits = bool(future_or_wish_hits) and all(
         "싶" in phrase
@@ -1330,19 +1423,19 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
         and _has_confirmed_action_after_wish(text)
     )
     has_incomplete_or_negated_action = (
-        any(phrase in text for phrase in INCOMPLETE_OR_NEGATED_ACTION_PHRASES)
+        _contains_any(text, INCOMPLETE_OR_NEGATED_ACTION_PHRASES, strict=True)
         or bool(NEGATED_ACTION_PATTERN.search(text))
         or bool(UNCOMPLETED_ACTION_PATTERN.search(text))
     )
     has_uncertain_memory = (
-        any(phrase in text for phrase in UNCERTAIN_MEMORY_PHRASES)
+        _contains_any(text, UNCERTAIN_MEMORY_PHRASES, strict=True)
         or bool(UNCERTAIN_ACTION_PATTERN.search(text))
         or bool(HEARSAY_PATTERN.search(text))
     )
     has_state_without_action = (
         _has_state_only_predicate(text)
         or (
-            any(phrase in text for phrase in STATE_ONLY_MEMORY_PHRASES)
+            _contains_any(text, STATE_ONLY_MEMORY_PHRASES, strict=True)
             and not action_hits
             and not action_concepts
             and not has_generic_object_action
@@ -1365,7 +1458,7 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
         recall_score -= 70
         reasons.append("state_without_action")
 
-    if any(phrase in text for phrase in WEAK_MEMORY_PHRASES):
+    if _contains_any(text, WEAK_MEMORY_PHRASES, strict=True):
         recall_score -= 35
         reasons.append("low_info_expression")
 
@@ -1506,6 +1599,109 @@ def build_used_memory_points_text(
     return "\n".join(lines) if lines else "없음"
 
 
+def normalize_structured_memory_candidates(
+    memory_candidates: Optional[List[Dict]],
+    conversation_history: List[str],
+) -> List[Dict]:
+    history_by_text = {
+        clean_text(text): str(text or "").strip()
+        for text in conversation_history
+        if clean_text(text)
+    }
+    normalized = []
+    seen = set()
+
+    for candidate in memory_candidates or []:
+        if not isinstance(candidate, dict):
+            continue
+
+        try:
+            validate_recall_candidate_contract(candidate)
+        except (TypeError, ValueError):
+            continue
+
+        source_text = clean_text(candidate.get("sourceText"))
+        answer_value = clean_text(candidate.get("answerValue"))
+
+        try:
+            source_record_id = int(candidate.get("sourceRecordId") or 0)
+            answer_type = MemoryAnswerType(
+                str(candidate.get("answerType") or "").strip().upper()
+            )
+        except (TypeError, ValueError):
+            continue
+
+        event_id = str(candidate.get("eventId") or "").strip()
+        identity = (event_id, source_record_id, answer_type.value, answer_value)
+
+        if (
+            not event_id
+            or source_record_id <= 0
+            or not source_text
+            or source_text not in history_by_text
+            or not answer_value
+            or answer_type == MemoryAnswerType.UNKNOWN
+            or identity in seen
+        ):
+            continue
+
+        normalized_candidate = {
+            "eventId": event_id,
+            "sourceRecordId": source_record_id,
+            "sourceText": history_by_text[source_text],
+            "answerType": answer_type.value,
+            "answerValue": answer_value,
+        }
+        for context_field in (
+            "topic",
+            "sourceRecordIds",
+            "evidence",
+            "recallClue",
+            "recallClues",
+            "answerValues",
+            "qualityScore",
+        ):
+            if context_field in candidate:
+                normalized_candidate[context_field] = candidate[context_field]
+
+        normalized.append(normalized_candidate)
+        seen.add(identity)
+
+    return normalized
+
+
+def build_structured_memory_candidates_text(
+    memory_candidates: List[Dict],
+) -> str:
+    if not memory_candidates:
+        return "없음"
+
+    blocks = []
+
+    for index, candidate in enumerate(memory_candidates, start=1):
+        lines = [
+            f"후보 {index}",
+            f"eventId: {candidate['eventId']}",
+            f"sourceRecordId: {candidate['sourceRecordId']}",
+            f"sourceText: {candidate['sourceText']}",
+            f"answerType: {candidate['answerType']}",
+            f"answerValue: {candidate['answerValue']}",
+        ]
+        evidence = candidate.get("evidence")
+
+        if candidate.get("topic") and isinstance(evidence, list):
+            lines.append(f"eventTopic: {candidate['topic']}")
+            lines.append("eventEvidence:")
+            lines.extend(
+                f"- [{item['sourceRecordId']}] {item['sourceText']}"
+                for item in evidence
+            )
+
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
+
+
 def parse_recall_generation_content(content: str) -> Dict[str, str]:
     parsed = {
         "memoryPoint": "",
@@ -1585,9 +1781,16 @@ def generate_recall_question_from_conversation(
     conversation_history: List[str],
     previous_questions: Optional[List[str]] = None,
     used_memory_points: Optional[List[str]] = None,
+    memory_candidates: Optional[List[Dict]] = None,
 ) -> Dict[str, str]:
-    valid_conversation_history = select_recall_memory_candidates(
-        conversation_history
+    structured_candidates = normalize_structured_memory_candidates(
+        memory_candidates,
+        conversation_history,
+    )
+    valid_conversation_history = (
+        [candidate["sourceText"] for candidate in structured_candidates]
+        if memory_candidates is not None
+        else select_recall_memory_candidates(conversation_history)
     )
 
     if len(valid_conversation_history) < MIN_RECALL_MEMORY_CANDIDATES:
@@ -1610,6 +1813,23 @@ def generate_recall_question_from_conversation(
 
     previous_questions_text = build_previous_questions_text(previous_questions)
     used_memory_points_text = build_used_memory_points_text(used_memory_points)
+    structured_candidates_text = build_structured_memory_candidates_text(
+        structured_candidates
+    )
+    structured_candidate_instructions = (
+        """
+14. 아래 구조화 memoryPoint 후보 중 정확히 1개를 선택합니다.
+15. memoryPoint는 선택한 후보의 sourceText를 그대로 작성합니다.
+16. answerKeyword는 선택한 후보의 answerValue를 그대로 작성합니다.
+17. 질문은 선택한 후보의 answerType에 해당하는 정보만 묻습니다.
+18. eventId와 sourceRecordId는 출력하지 않습니다.
+19. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
+20. 서로 다른 후보의 사람, 장소, 음식, 행동을 한 질문에 섞지 않습니다.
+21. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
+""".strip()
+        if structured_candidates
+        else ""
+    )
 
     prompt = f"""
 당신은 노인과 자연스럽게 대화를 이어가는 한국어 AI 말동무입니다.
@@ -1633,9 +1853,13 @@ def generate_recall_question_from_conversation(
 11. answerKeyword는 memoryPoint와 원래 대화에 실제로 포함된 내용이어야 합니다.
 12. answerKeyword는 질문 문장에 직접 넣지 않습니다.
 13. memoryPoint는 사용자가 말한 문장을 가능한 한 그대로 사용하고, 원문에 없는 표현으로 바꾸지 않습니다.
+{structured_candidate_instructions}
 
 최근 자유 대화 내용:
 {conversation_text}
+
+memoryPoint 엔진이 확정한 구조화 후보:
+{structured_candidates_text}
 
 이미 물어본 회상 질문:
 {previous_questions_text}
@@ -1749,6 +1973,24 @@ question: 자연스러운 회상 질문
         key=lambda candidate: memory_point_match_score(memory_point, candidate),
     )
 
+    structured_candidate = next(
+        (
+            candidate
+            for candidate in structured_candidates
+            if clean_text(candidate["sourceText"]) == clean_text(source_text)
+        ),
+        None,
+    )
+
+    if structured_candidates and structured_candidate is None:
+        return {
+            "status": "SKIPPED",
+            "reason": "memoryPoint 엔진이 확정하지 않은 원문이 선택되었습니다.",
+            "memoryPoint": memory_point,
+            "answerKeyword": answer_keyword,
+            "question": question,
+        }
+
     if not is_valid_answer_keyword_format(answer_keyword):
         return {
             "status": "SKIPPED",
@@ -1770,6 +2012,58 @@ question: 자연스러운 회상 질문
             "answerKeyword": answer_keyword,
             "question": question,
         }
+
+    if structured_candidate:
+        expected_answer = structured_candidate["answerValue"]
+        expected_type = MemoryAnswerType(structured_candidate["answerType"])
+        generated_type = infer_answer_type(question)
+
+        if _normalize_keyword_word(answer_keyword) != _normalize_keyword_word(
+            expected_answer
+        ):
+            return {
+                "status": "SKIPPED",
+                "reason": "answerKeyword가 memoryPoint 엔진이 확정한 단서와 다릅니다.",
+                "memoryPoint": memory_point,
+                "answerKeyword": answer_keyword,
+                "question": question,
+            }
+
+        if generated_type not in {
+            MemoryAnswerType.UNKNOWN,
+            expected_type,
+        }:
+            return {
+                "status": "SKIPPED",
+                "reason": "회상 질문 유형이 memoryPoint 엔진의 단서 유형과 다릅니다.",
+                "memoryPoint": memory_point,
+                "answerKeyword": answer_keyword,
+                "question": question,
+            }
+
+        evidence = structured_candidate.get("evidence")
+        if isinstance(evidence, list):
+            event_actions = set().union(
+                *(
+                    extract_memory_action_concepts(item.get("sourceText") or "")
+                    for item in evidence
+                )
+            )
+            question_actions = extract_memory_action_concepts(question)
+
+            if question_actions and not question_actions <= event_actions:
+                return {
+                    "status": "SKIPPED",
+                    "reason": (
+                        "회상 질문에 memoryPoint 사건에 없는 행동이 포함되었습니다."
+                    ),
+                    "memoryPoint": memory_point,
+                    "answerKeyword": answer_keyword,
+                    "question": question,
+                }
+
+        memory_point = structured_candidate["sourceText"]
+        answer_keyword = expected_answer
 
     if not is_answer_keyword_compatible_with_question(
         answer_keyword,
@@ -1821,6 +2115,16 @@ question: 자연스러운 회상 질문
         answer_keyword=answer_keyword,
         question=question,
         action=",".join(sorted(action_concepts)),
+        source_record_id=(
+            structured_candidate["sourceRecordId"]
+            if structured_candidate
+            else None
+        ),
+        answer_type=(
+            structured_candidate["answerType"]
+            if structured_candidate
+            else None
+        ),
         quality_score=memory_evaluation["recallScore"],
     )
 
@@ -1834,6 +2138,11 @@ question: 자연스러운 회상 질문
         "memoryQualityScore": memory_evaluation["recallScore"],
         "memoryQualityReasons": memory_evaluation["reasons"],
         "memoryEvent": memory_event.to_dict(),
+        **(
+            {"memoryCandidate": structured_candidate}
+            if structured_candidate
+            else {}
+        ),
     }
 
 
@@ -1844,12 +2153,20 @@ def save_recall_question_to_spring(
     answer_keywords: Optional[List[str]] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
+    expected_answer = next(
+        (
+            str(keyword).strip()
+            for keyword in answer_keywords or []
+            if str(keyword).strip()
+        ),
+        memory_point,
+    )
     body = {
         "userId": user_id,
         "questionText": question_text,
         "questionType": "RECALL",
         "category": "CONVERSATION",
-        "expectedAnswer": memory_point,
+        "expectedAnswer": expected_answer,
     }
 
     response = requests.post(
@@ -1896,6 +2213,7 @@ def generate_and_save_recall_question(
     conversation_history: List[str],
     previous_questions: Optional[List[str]] = None,
     used_memory_points: Optional[List[str]] = None,
+    memory_candidates: Optional[List[Dict]] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
     if previous_questions is None or used_memory_points is None:
@@ -1914,6 +2232,7 @@ def generate_and_save_recall_question(
         conversation_history=conversation_history,
         previous_questions=previous_questions,
         used_memory_points=used_memory_points,
+        memory_candidates=memory_candidates,
     )
 
     if result.get("status") != "CREATED":

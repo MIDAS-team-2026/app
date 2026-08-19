@@ -37,6 +37,7 @@ from recall import conversation_recall_generator as recall_generator
 from recall import free_talk_question_generator as free_talk_generator
 from recall import memory_event
 from recall import recall_score_calculator
+from recall.memory_candidate_service import build_memory_candidate_selection
 
 
 recall_api_spec = importlib.util.spec_from_file_location(
@@ -48,6 +49,23 @@ recall_api_spec.loader.exec_module(recall_api_client)
 
 
 class ConversationFlowSimulationTest(unittest.TestCase):
+    def setUp(self):
+        # 개별 테스트가 generate_safe_followup_question을 직접 patch하지 않아도
+        # 실제 LLM API를 절대 호출하지 않도록 기본 안전망을 건다.
+        # 테스트 안에서 with patch.object(handler, "generate_safe_followup_question", ...)를
+        # 쓰면 그 블록 동안에는 그 mock이 우선 적용된다.
+        default_followup_patcher = patch.object(
+            handler,
+            "generate_safe_followup_question",
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "default_test_stub",
+            },
+        )
+        default_followup_patcher.start()
+        self.addCleanup(default_followup_patcher.stop)
+
     @staticmethod
     def _recall_client(memory_point, question, answer_keyword="김치볶음밥"):
         response = SimpleNamespace(
@@ -92,6 +110,14 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                     expected,
                     memory_event.infer_answer_type(question),
                 )
+
+    def test_honorific_meal_question_keeps_the_eat_action(self):
+        self.assertEqual(
+            {"EAT"},
+            recall_generator.extract_memory_action_concepts(
+                "그때 누구와 같이 드셨어요?"
+            ),
+        )
 
     def test_memory_event_keeps_grounded_source_and_typed_answer(self):
         event = memory_event.MemoryEvent.from_generation(
@@ -195,6 +221,317 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual("DEEPEN", detailed.stage)
         self.assertEqual("ANCHOR", incomplete.stage)
 
+    def test_conversation_policy_changes_topic_after_enough_same_topic_turns(self):
+        continue_topic = conversation_policy.decide_conversation_action(
+            candidate_count=1,
+            after_recall_answer=False,
+            should_change_topic=False,
+            has_followup_context=True,
+            consecutive_topic_turns=2,
+        )
+        change_topic = conversation_policy.decide_conversation_action(
+            candidate_count=1,
+            after_recall_answer=False,
+            should_change_topic=False,
+            has_followup_context=True,
+            consecutive_topic_turns=3,
+        )
+
+        self.assertEqual(
+            conversation_policy.ConversationAction.FOLLOW_UP,
+            continue_topic.action,
+        )
+        self.assertEqual(
+            conversation_policy.ConversationAction.CHANGE_TOPIC,
+            change_topic.action,
+        )
+        self.assertEqual(
+            "current_topic_has_enough_detail",
+            change_topic.reason,
+        )
+
+    def test_conversation_turn_state_keeps_analysis_separate_from_action(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "오후에 통화했어",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        state = handler._analyze_conversation_turn(
+            records,
+            "오후에 통화했어",
+        )
+        decision = handler._decide_next_conversation_action(
+            state,
+            candidate_count=1,
+        )
+
+        self.assertEqual("PERSON", state.topic)
+        self.assertEqual(2, state.consecutive_topic_turns)
+        self.assertTrue(state.is_memory_candidate)
+        self.assertEqual(
+            conversation_policy.ConversationAction.FOLLOW_UP,
+            decision.action,
+        )
+
+    def test_topic_openers_prioritize_topics_not_used_recently(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "김치찌개를 먹었어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            },
+            {
+                "recordId": 3,
+                "turnOrder": 3,
+                "transcriptText": "뉴스를 봤어",
+                "aiReplyText": "그 방송에서 기억나는 내용이 있으세요?",
+            },
+        ]
+
+        questions = handler._get_contextual_topic_openers(
+            "MEDIA",
+            records,
+            "뉴스가 재미있었어",
+        )
+        first_topic = handler._detect_topic_from_question(questions[0])
+
+        self.assertNotIn(first_topic, {"PERSON", "FOOD", "MEDIA"})
+
+    def test_topic_opener_order_depends_on_session_context(self):
+        person_history = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "통화는 언제쯤 하셨어요?",
+            }
+        ]
+        food_history = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "김치찌개를 먹었어",
+                "aiReplyText": "그 음식은 어디에서 드셨어요?",
+            }
+        ]
+
+        person_questions = handler._get_contextual_topic_openers(
+            "PERSON",
+            person_history,
+            "통화가 즐거웠어",
+        )
+        food_questions = handler._get_contextual_topic_openers(
+            "FOOD",
+            food_history,
+            "찌개가 맛있었어",
+        )
+
+        self.assertNotEqual(person_questions, food_questions)
+        self.assertNotEqual(
+            "PERSON",
+            handler._detect_topic_from_question(person_questions[0]),
+        )
+        self.assertNotEqual(
+            "FOOD",
+            handler._detect_topic_from_question(food_questions[0]),
+        )
+
+    def test_consecutive_topic_turns_reset_when_user_changes_topic(self):
+        self.assertEqual(
+            3,
+            handler._count_consecutive_topic_turns(
+                [
+                    "아들과 통화했어",
+                    "손주 학교 이야기를 들었어",
+                    "좋았지",
+                ],
+                "PERSON",
+                "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
+            ),
+        )
+        self.assertEqual(
+            1,
+            handler._count_consecutive_topic_turns(
+                [
+                    "아들과 통화했어",
+                    "손주 학교 이야기를 들었어",
+                    "저녁에는 뉴스를 봤어",
+                ],
+                "MEDIA",
+                "오늘 재미있게 보신 방송이 있으세요?",
+            ),
+        )
+
+    def test_third_same_topic_answer_moves_to_a_different_topic(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "아들과 통화했어",
+                "aiReplyText": "아드님과 어떤 이야기를 나누셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "손주 학교 이야기를 들었어",
+                "aiReplyText": "그 이야기를 들으셨을 때 기분이 어떠셨어요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 3,
+                "turnOrder": 3,
+                "transcriptText": "좋았지",
+                "aiReplyText": "",
+                "answerRole": None,
+            },
+        ]
+
+        question = handler._get_next_normal_question(
+            candidate_count=2,
+            session_records=records,
+            latest_text="좋았지",
+        )
+
+        self.assertTrue(question.startswith("좋으셨겠어요."))
+        self.assertNotIn("사람", question)
+        self.assertNotIn("그분", question)
+        self.assertNotIn("누구", question)
+
+    def test_person_story_detail_is_not_requested_twice(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "손주 학교 이야기를 들었어",
+            [
+                "아들과 통화했어",
+                "손주 학교 이야기를 들었어",
+            ],
+            "아드님과 무슨 이야기를 나누셨어요?",
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(
+            all("어떤 이야기를" not in question for question in questions)
+        )
+
+    def test_future_wish_does_not_receive_past_positive_acknowledgement(self):
+        answer = "아들이 왔으면 좋겠어"
+
+        self.assertFalse(handler._is_positive_response(answer))
+        reply = free_talk_generator.build_fallback_with_empathy(
+            "그분은 언제쯤 만나실 예정이세요?",
+            [answer],
+        )
+        self.assertFalse(reply.startswith("좋으셨겠어요."))
+
+    def test_unspecified_food_wish_asks_which_food_first(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "같이 밥 먹고 싶어",
+            ["아들이 다음 주에 온대", "같이 밥 먹고 싶어"],
+            "그분은 언제쯤 만나실 예정이세요?",
+        )
+
+        self.assertEqual(
+            ["어떤 음식이 가장 먼저 떠오르세요?"],
+            questions,
+        )
+
+    def test_unlisted_specific_food_wish_does_not_reask_which_food(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "갈비를 먹고 싶어",
+            ["같이 밥 먹고 싶어", "갈비를 먹고 싶어"],
+            "어떤 음식이 가장 먼저 떠오르세요?",
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(
+            all("어떤 음식" not in question for question in questions)
+        )
+
+    def test_pain_answer_checks_current_condition_before_memory_detail(self):
+        questions = handler._get_topic_aware_fallback_candidates(
+            "DEEPEN",
+            "무릎이 아팠어",
+            ["무릎이 아팠어"],
+        )
+
+        self.assertTrue(questions)
+        self.assertTrue(all("지금" in question for question in questions))
+
+    def test_negative_answer_receives_empathy_before_topic_change(self):
+        records = [
+            {
+                "recordId": 1,
+                "turnOrder": 1,
+                "transcriptText": "무릎이 아팠어",
+                "aiReplyText": "그러셨군요. 지금은 조금 괜찮으세요?",
+                "answerRole": None,
+            },
+            {
+                "recordId": 2,
+                "turnOrder": 2,
+                "transcriptText": "걷기가 힘들었어",
+                "aiReplyText": "",
+                "answerRole": None,
+            }
+        ]
+
+        with patch.object(
+            handler,
+            "generate_safe_followup_question",
+            free_talk_generator.generate_safe_followup_question,
+        ), patch.object(
+            free_talk_generator,
+            "_get_client",
+            side_effect=RuntimeError("offline simulation"),
+        ):
+            question = handler._get_next_normal_question(
+                candidate_count=0,
+                session_records=records,
+                latest_text="걷기가 힘들었어",
+            )
+
+        self.assertTrue(question.startswith("그러셨군요."))
+        self.assertIn("움직이실 때", question)
+        self.assertNotIn("보고 싶은 사람", question)
+
+    def test_refreshed_answer_receives_positive_acknowledgement(self):
+        answer = "낮잠 자고 나니 개운했어"
+
+        self.assertTrue(handler._is_positive_response(answer))
+        reply = free_talk_generator.build_fallback_with_empathy(
+            "오늘 집 밖에 다녀오신 곳이 있으세요?",
+            [answer],
+        )
+        self.assertTrue(reply.startswith("좋으셨겠어요."))
+
+        improved_reply = free_talk_generator.build_fallback_with_empathy(
+            "오늘 집 밖에 다녀오신 곳이 있으세요?",
+            ["지금은 괜찮아"],
+        )
+        self.assertTrue(improved_reply.startswith("다행이네요."))
+
     def test_recall_timing_uses_memory_count_and_latest_conversation_state(self):
         cases = (
             (
@@ -216,6 +553,16 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                     "latest_is_negative": False,
                 },
                 conversation_policy.RecallTimingAction.WAIT,
+            ),
+            (
+                {
+                    "matured_candidate_count": 2,
+                    "latest_is_memory_candidate": True,
+                    "latest_has_followup_context": True,
+                    "latest_is_low_info": False,
+                    "latest_is_negative": False,
+                },
+                conversation_policy.RecallTimingAction.ASK_RECALL,
             ),
             (
                 {
@@ -1029,6 +1376,263 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         self.assertEqual(history[0], correct_result["sourceText"])
         self.assertEqual(["라면"], correct_result["answerKeywords"])
 
+    def test_structured_memory_candidate_controls_keyword_and_question_type(self):
+        history = [
+            "아들과 시장에 갔어",
+            "점심에 김치찌개를 먹었어",
+        ]
+        candidates = [
+            {
+                "eventId": "PLACE:10",
+                "sourceRecordId": 10,
+                "sourceText": history[0],
+                "answerType": "PLACE",
+                "answerValue": "시장",
+            },
+            {
+                "eventId": "MEAL:11",
+                "sourceRecordId": 11,
+                "sourceText": history[1],
+                "answerType": "FOOD",
+                "answerValue": "김치찌개",
+            },
+        ]
+        wrong_client = self._recall_client(
+            history[0],
+            "아까 누구와 함께 다녀오셨는지 기억나세요?",
+            answer_keyword="아들",
+        )
+
+        with patch.object(recall_generator, "_get_client", return_value=wrong_client):
+            wrong_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=candidates,
+            )
+
+        self.assertEqual("SKIPPED", wrong_result["status"])
+        self.assertIn("엔진이 확정한 단서", wrong_result["reason"])
+
+        wrong_type_client = self._recall_client(
+            history[0],
+            "아까 누구와 함께 다녀오셨는지 기억나세요?",
+            answer_keyword="시장",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=wrong_type_client,
+        ):
+            wrong_type_result = (
+                recall_generator.generate_recall_question_from_conversation(
+                    history,
+                    memory_candidates=candidates,
+                )
+            )
+
+        self.assertEqual("SKIPPED", wrong_type_result["status"])
+        self.assertIn("단서 유형", wrong_type_result["reason"])
+
+        correct_client = self._recall_client(
+            history[0],
+            "아까 어디에 다녀오셨는지 기억나세요?",
+            answer_keyword="시장",
+        )
+
+        with patch.object(recall_generator, "_get_client", return_value=correct_client):
+            correct_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=candidates,
+            )
+
+        self.assertEqual("CREATED", correct_result["status"])
+        self.assertEqual(candidates[0], correct_result["memoryCandidate"])
+        self.assertEqual(10, correct_result["memoryEvent"]["sourceRecordId"])
+        self.assertEqual(["시장"], correct_result["answerKeywords"])
+
+        natural_question = "아까 말씀하신 곳을 다시 한번 떠올려 보실까요?"
+        self.assertEqual(
+            memory_event.MemoryAnswerType.UNKNOWN,
+            memory_event.infer_answer_type(natural_question),
+        )
+        natural_client = self._recall_client(
+            f"{history[0]}.",
+            natural_question,
+            answer_keyword="시장",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=natural_client,
+        ):
+            natural_result = (
+                recall_generator.generate_recall_question_from_conversation(
+                    history,
+                    memory_candidates=candidates,
+                )
+            )
+
+        self.assertEqual("CREATED", natural_result["status"])
+        self.assertEqual(history[0], natural_result["memoryPoint"])
+        self.assertEqual("PLACE", natural_result["memoryEvent"]["answerType"])
+        self.assertEqual("PLACE", natural_result["memoryEvent"]["topic"])
+
+    def test_structured_candidate_normalization_preserves_valid_event_context(self):
+        history = ["딸과 공원에서 산책했어"]
+        candidate = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 10,
+                    "sourceText": history[0],
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "산책",
+                    "clues": [
+                        {"answerType": "PERSON", "answerValue": "딸"},
+                        {"answerType": "PLACE", "answerValue": "공원"},
+                        {"answerType": "ACTIVITY", "answerValue": "산책"},
+                    ],
+                    "qualityScore": 90,
+                }
+            ]
+        ).to_dict()["candidates"][0]
+        selected = candidate["recallClue"]
+        full_contract = {
+            **candidate,
+            "sourceRecordId": selected["sourceRecordId"],
+            "sourceText": selected["sourceText"],
+            "answerType": selected["answerType"],
+            "answerValue": selected["answerValue"],
+        }
+
+        normalized = recall_generator.normalize_structured_memory_candidates(
+            [full_contract],
+            history,
+        )
+
+        self.assertEqual(1, len(normalized))
+        self.assertEqual("ACTIVITY", normalized[0]["topic"])
+        self.assertEqual([10], normalized[0]["sourceRecordIds"])
+        self.assertEqual(candidate["evidence"], normalized[0]["evidence"])
+        self.assertEqual(candidate["recallClue"], normalized[0]["recallClue"])
+
+        invalid_contract = {
+            **full_contract,
+            "answerValues": {"PLACE": ["시장"]},
+        }
+        self.assertEqual(
+            [],
+            recall_generator.normalize_structured_memory_candidates(
+                [invalid_contract],
+                history,
+            ),
+        )
+
+    def test_structured_candidate_prompt_keeps_event_evidence_together(self):
+        candidate = {
+            "eventId": "ACTIVITY:153",
+            "sourceRecordId": 156,
+            "sourceText": "한 시쯤 했어",
+            "answerType": "TIME",
+            "answerValue": "한 시쯤",
+            "topic": "ACTIVITY",
+            "evidence": [
+                {"sourceRecordId": 153, "sourceText": "오늘 청소했어"},
+                {"sourceRecordId": 156, "sourceText": "한 시쯤 했어"},
+            ],
+        }
+
+        text = recall_generator.build_structured_memory_candidates_text(
+            [candidate]
+        )
+
+        self.assertIn("eventTopic: ACTIVITY", text)
+        self.assertIn("[153] 오늘 청소했어", text)
+        self.assertIn("[156] 한 시쯤 했어", text)
+
+    def test_structured_candidate_rejects_action_from_another_event(self):
+        history = ["한 시쯤 했어", "저녁에 뉴스를 봤어"]
+        candidate = build_memory_candidate_selection(
+            [
+                {
+                    "sourceRecordId": 153,
+                    "turnOrder": 1,
+                    "sourceText": "오늘 청소했어",
+                    "topic": "ACTIVITY",
+                    "answerType": "ACTIVITY",
+                    "answerValue": "청소",
+                    "qualityScore": 80,
+                },
+                {
+                    "sourceRecordId": 156,
+                    "turnOrder": 2,
+                    "sourceText": history[0],
+                    "topic": "ACTIVITY",
+                    "answerType": "TIME",
+                    "answerValue": "한 시쯤",
+                    "qualityScore": 90,
+                    "continuesPreviousEvent": True,
+                },
+            ]
+        ).to_dict()["candidates"][0]
+        selected = next(
+            clue
+            for clue in candidate["recallClues"]
+            if clue["answerType"] == "TIME"
+        )
+        full_contract = {
+            **candidate,
+            "sourceRecordId": selected["sourceRecordId"],
+            "sourceText": selected["sourceText"],
+            "answerType": selected["answerType"],
+            "answerValue": selected["answerValue"],
+            "recallClue": selected,
+        }
+        second_candidate = {
+            "eventId": "MEDIA:160",
+            "sourceRecordId": 160,
+            "sourceText": history[1],
+            "answerType": "MEDIA",
+            "answerValue": "뉴스",
+        }
+        wrong_client = self._recall_client(
+            history[0],
+            "아까 점심은 몇 시쯤 드셨어요?",
+            answer_keyword="한 시쯤",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=wrong_client,
+        ):
+            wrong_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=[full_contract, second_candidate],
+            )
+
+        self.assertEqual("SKIPPED", wrong_result["status"])
+        self.assertIn("사건에 없는 행동", wrong_result["reason"])
+
+        correct_client = self._recall_client(
+            history[0],
+            "아까 청소는 몇 시쯤 하셨어요?",
+            answer_keyword="한 시쯤",
+        )
+
+        with patch.object(
+            recall_generator,
+            "_get_client",
+            return_value=correct_client,
+        ):
+            correct_result = recall_generator.generate_recall_question_from_conversation(
+                history,
+                memory_candidates=[full_contract, second_candidate],
+            )
+
+        self.assertEqual("CREATED", correct_result["status"])
+
     def test_last_correction_controls_topic_and_empathy(self):
         corrected_to_person = "피자를 먹었어. 아니, 동생과 통화했어"
         corrected_to_food = "동생과 통화했어. 아니, 피자를 먹었어"
@@ -1150,7 +1754,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             with self.subTest(answer=answer), patch.object(
                 handler,
                 "generate_safe_followup_question",
-                side_effect=AssertionError("negated event must change topic before LLM"),
+                side_effect=lambda **kwargs: {
+                    "nextQuestion": kwargs["fallback_question"],
+                    "shouldChangeTopic": False,
+                    "reason": "simulation",
+                },
             ):
                 question = handler._get_next_normal_question(
                     candidate_count=1,
@@ -1268,7 +1876,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         with patch.object(
             handler,
             "generate_safe_followup_question",
-            side_effect=AssertionError("a completed topic should open a new subject"),
+            side_effect=lambda **kwargs: {
+                "nextQuestion": kwargs["fallback_question"],
+                "shouldChangeTopic": False,
+                "reason": "simulation",
+            },
         ):
             question = handler._get_next_normal_question(
                 candidate_count=1,
@@ -2561,7 +3173,12 @@ class ConversationFlowSimulationTest(unittest.TestCase):
         put_response = SimpleNamespace(raise_for_status=lambda: None)
 
         with (
-            patch.object(recall_generator.requests, "post", return_value=post_response, create=True),
+            patch.object(
+                recall_generator.requests,
+                "post",
+                return_value=post_response,
+                create=True,
+            ) as post_mock,
             patch.object(recall_generator.requests, "put", return_value=put_response, create=True) as put_mock,
         ):
             saved = recall_generator.save_recall_question_to_spring(
@@ -2572,6 +3189,10 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
 
         self.assertEqual(["김치볶음밥"], saved["keywords"])
+        self.assertEqual(
+            "김치볶음밥",
+            post_mock.call_args.kwargs["json"]["expectedAnswer"],
+        )
         self.assertEqual({"keywords": ["김치볶음밥"]}, put_mock.call_args.kwargs["json"])
 
     def test_keyword_update_failure_keeps_saved_question_usable(self):
@@ -3174,6 +3795,15 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                     transcript_text=f"음식{cycle}",
                 )
 
+                self.assertEqual(
+                    cycle,
+                    len(recall_calls),
+                    msg=(
+                        f"cycle={cycle}, roles="
+                        f"{[record['answerRole'] for record in records]}"
+                    ),
+                )
+
         self.assertEqual(24, len(records))
         self.assertEqual(6, len(recall_calls))
         self.assertEqual(6, handler._count_completed_recall_answers(records))
@@ -3270,6 +3900,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             patch.object(handler, "_fetch_session_records", return_value=records),
             patch.object(
                 handler,
+                "_get_fixed_question_status",
+                return_value={"onboardingDone": True, "doneToday": True},
+            ),
+            patch.object(
+                handler,
                 "generate_and_save_recall_question",
                 return_value={
                     "status": "CREATED",
@@ -3298,6 +3933,195 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             )
         )
 
+    def test_structured_source_record_id_wins_when_source_text_repeats(self):
+        records = [
+            {
+                "recordId": index,
+                "turnOrder": index,
+                "transcriptText": f"고정 답변 {index}",
+                "aiReplyText": f"고정 질문 {index + 1}",
+                "answerRole": "FIXED",
+                "recallQuestionId": index,
+            }
+            for index in range(1, 6)
+        ]
+        records.extend(
+            [
+                {
+                    "recordId": 6,
+                    "turnOrder": 6,
+                    "transcriptText": "시장에 다녀왔어",
+                    "aiReplyText": "시장에서 무엇을 하셨어요?",
+                    "answerRole": None,
+                    "recallQuestionId": None,
+                },
+                {
+                    "recordId": 7,
+                    "turnOrder": 7,
+                    "transcriptText": "시장에 다녀왔어",
+                    "aiReplyText": "오늘 드신 음식이 있으세요?",
+                    "answerRole": None,
+                    "recallQuestionId": None,
+                },
+                {
+                    "recordId": 8,
+                    "turnOrder": 8,
+                    "transcriptText": "점심에 김치찌개를 먹었어",
+                    "aiReplyText": "누구와 함께 드셨어요?",
+                    "answerRole": None,
+                    "recallQuestionId": None,
+                },
+                {
+                    "recordId": 9,
+                    "turnOrder": 9,
+                    "transcriptText": "잘 모르겠어",
+                    "aiReplyText": "",
+                    "answerRole": None,
+                    "recallQuestionId": None,
+                },
+            ]
+        )
+        linked = []
+        candidate = {
+            "eventId": "PLACE:6",
+            "sourceRecordId": 6,
+            "sourceText": "시장에 다녀왔어",
+            "answerType": "PLACE",
+            "answerValue": "시장",
+        }
+        recall_context = handler.RecallCandidateContext(
+            conversation_history=(
+                "시장에 다녀왔어",
+                "점심에 김치찌개를 먹었어",
+            ),
+            source_record_ids=(
+                ("시장에 다녀왔어", 6),
+                ("점심에 김치찌개를 먹었어", 8),
+            ),
+            memory_candidates=(
+                candidate,
+                {
+                    "eventId": "MEAL:8",
+                    "sourceRecordId": 8,
+                    "sourceText": "점심에 김치찌개를 먹었어",
+                    "answerType": "FOOD",
+                    "answerValue": "김치찌개",
+                },
+            ),
+        )
+
+        with (
+            patch.object(handler, "_fetch_session_records", return_value=records),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"doneToday": True, "onboardingDone": True},
+            ),
+            patch.object(
+                handler,
+                "_get_structured_recall_ready_context",
+                return_value=recall_context,
+            ),
+            patch.object(
+                handler,
+                "generate_and_save_recall_question",
+                return_value={
+                    "status": "CREATED",
+                    "question": "아까 어디에 다녀오셨나요?",
+                    "memoryPoint": "시장에 다녀왔어",
+                    "sourceText": "시장에 다녀왔어",
+                    "memoryCandidate": candidate,
+                    "savedQuestion": {"questionId": 100},
+                },
+            ),
+            patch.object(
+                handler,
+                "_link_recall_question",
+                side_effect=lambda **kwargs: linked.append(kwargs) or True,
+            ),
+            patch.object(handler, "_save_ai_reply"),
+        ):
+            handler.process_voice_reply(
+                record_id=9,
+                session_id=31,
+                user_id=2,
+                transcript_text="잘 모르겠어",
+            )
+
+        self.assertEqual(6, linked[-1]["record_id"])
+        self.assertEqual("INITIAL", linked[-1]["answer_role"])
+
+    def test_mismatched_structured_candidate_is_not_linked(self):
+        candidate = {
+            "eventId": "PLACE:6",
+            "sourceRecordId": 6,
+            "sourceText": "시장에 다녀왔어",
+            "answerType": "PLACE",
+            "answerValue": "시장",
+        }
+        context = handler.RecallCandidateContext(
+            conversation_history=("시장에 다녀왔어", "김치찌개를 먹었어"),
+            source_record_ids=(("시장에 다녀왔어", 6),),
+            memory_candidates=(candidate,),
+        )
+        records = [
+            {
+                "recordId": 9,
+                "turnOrder": 9,
+                "transcriptText": "잘 모르겠어",
+                "aiReplyText": "",
+                "answerRole": None,
+                "recallQuestionId": None,
+            }
+        ]
+        linked = []
+        saved = []
+
+        with (
+            patch.object(handler, "_fetch_session_records", return_value=records),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"onboardingDone": True, "doneToday": True},
+            ),
+            patch.object(
+                handler,
+                "_get_structured_recall_ready_context",
+                return_value=context,
+            ),
+            patch.object(
+                handler,
+                "generate_and_save_recall_question",
+                return_value={
+                    "status": "CREATED",
+                    "question": "아까 어디에 다녀오셨나요?",
+                    "sourceText": "시장에 다녀왔어",
+                    "memoryCandidate": {**candidate, "sourceRecordId": 999},
+                    "savedQuestion": {"questionId": 101},
+                },
+            ),
+            patch.object(
+                handler,
+                "_link_recall_question",
+                side_effect=lambda **kwargs: linked.append(kwargs) or True,
+            ),
+            patch.object(
+                handler,
+                "_save_ai_reply",
+                side_effect=lambda **kwargs: saved.append(kwargs),
+            ),
+        ):
+            handler.process_voice_reply(
+                record_id=9,
+                session_id=32,
+                user_id=2,
+                transcript_text="잘 모르겠어",
+            )
+
+        self.assertEqual([], linked)
+        self.assertEqual(1, len(saved))
+        self.assertNotIn("아까 어디에 다녀오셨나요?", saved[0]["reply_text"])
+
     def test_recall_api_failure_falls_back_to_free_talk(self):
         records = [
             {
@@ -3321,6 +4145,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         with (
             patch.object(handler, "_fetch_session_records", return_value=records),
+            patch.object(
+                handler,
+                "_get_fixed_question_status",
+                return_value={"onboardingDone": True, "doneToday": True},
+            ),
             patch.object(
                 handler,
                 "generate_and_save_recall_question",
@@ -3675,6 +4504,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             patch.object(handler, "_fetch_session_records", return_value=records),
             patch.object(
                 handler,
+                "_get_fixed_question_status",
+                return_value={"onboardingDone": True, "doneToday": True},
+            ),
+            patch.object(
+                handler,
                 "generate_and_save_recall_question",
                 return_value={
                     "status": "CREATED",
@@ -3859,6 +4693,11 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             patch.object(handler, "_fetch_session_records", return_value=records),
             patch.object(
                 handler,
+                "_get_fixed_question_status",
+                return_value={"onboardingDone": False, "doneToday": False},
+            ),
+            patch.object(
+                handler,
                 "_link_recall_question",
                 side_effect=AssertionError("linked fixed answer must not be relinked"),
             ),
@@ -3915,6 +4754,15 @@ class ConversationFlowSimulationTest(unittest.TestCase):
                 "_save_ai_reply",
                 side_effect=lambda **kwargs: saved.append(kwargs),
             ),
+            patch.object(
+                handler,
+                "generate_safe_followup_question",
+                side_effect=lambda **kwargs: {
+                    "nextQuestion": kwargs["fallback_question"],
+                    "shouldChangeTopic": False,
+                    "reason": "simulation",
+                },
+            ),
         ):
             handler.process_voice_reply(
                 record_id=5,
@@ -3925,7 +4773,7 @@ class ConversationFlowSimulationTest(unittest.TestCase):
 
         mark_mock.assert_called_once_with(2, onboarding=True)
         self.assertEqual(1, len(saved))
-        self.assertIn(saved[0]["reply_text"], handler.SAFE_OPENING_QUESTIONS)
+        self.assertIn(saved[0]["reply_text"], handler.FIXED_TO_FREE_TALK_OPENERS)
 
     def test_linked_recall_answer_resumes_transition_without_relinking(self):
         records = [
@@ -4091,25 +4939,19 @@ class ConversationFlowSimulationTest(unittest.TestCase):
             {
                 "recordId": 1,
                 "turnOrder": 1,
-                "transcriptText": "동생을 만났어",
-                "aiReplyText": "그분이 생각날 때 가장 먼저 떠오르는 모습이 있으세요?",
-            },
-            {
-                "recordId": 2,
-                "turnOrder": 2,
                 "transcriptText": "친구를 만났어",
                 "aiReplyText": "그분과 함께했던 일 중에 기억나는 장면이 있으세요?",
             },
             {
-                "recordId": 3,
-                "turnOrder": 3,
+                "recordId": 2,
+                "turnOrder": 2,
                 "transcriptText": "공원에서 만났어",
                 "aiReplyText": "",
             },
         ]
 
         question = handler._get_next_normal_question(
-            3,
+            2,
             records,
             latest_text="공원에서 만났어",
         )
