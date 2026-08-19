@@ -14,6 +14,70 @@ from recall.memory_candidate_service import (  # noqa: E402
 
 
 class MemoryCandidateIntegrationTest(unittest.TestCase):
+    def test_nearby_rephrasing_of_one_clue_is_one_candidate(self):
+        payloads = [
+            {
+                "sourceRecordId": 1,
+                "turnOrder": 1,
+                "sourceText": "오늘 데자뷰 노래를 들었어.",
+                "topic": "MEDIA",
+                "answerType": "MEDIA",
+                "answerValue": "데자뷰",
+                "clues": [
+                    {"answerType": "MEDIA", "answerValue": "데자뷰"}
+                ],
+                "qualityScore": 90,
+                "continuesPreviousEvent": False,
+            },
+            {
+                "sourceRecordId": 4,
+                "turnOrder": 4,
+                "sourceText": "데자뷰 노래가 기억나.",
+                "topic": "MEDIA",
+                "answerType": "MEDIA",
+                "answerValue": "데자뷰",
+                "clues": [
+                    {"answerType": "MEDIA", "answerValue": "데자뷰"}
+                ],
+                "qualityScore": 80,
+                "continuesPreviousEvent": False,
+            },
+        ]
+
+        selection = build_memory_candidate_selection(payloads)
+
+        self.assertEqual(1, len(selection.candidates))
+
+    def test_same_clue_in_distant_events_remains_separate(self):
+        payloads = [
+            {
+                "sourceRecordId": 1,
+                "turnOrder": 1,
+                "sourceText": "아침에 뉴스를 봤어.",
+                "topic": "MEDIA",
+                "answerType": "MEDIA",
+                "answerValue": "뉴스",
+                "clues": [{"answerType": "MEDIA", "answerValue": "뉴스"}],
+                "qualityScore": 80,
+                "continuesPreviousEvent": False,
+            },
+            {
+                "sourceRecordId": 20,
+                "turnOrder": 20,
+                "sourceText": "저녁에도 뉴스를 봤어.",
+                "topic": "MEDIA",
+                "answerType": "MEDIA",
+                "answerValue": "뉴스",
+                "clues": [{"answerType": "MEDIA", "answerValue": "뉴스"}],
+                "qualityScore": 80,
+                "continuesPreviousEvent": False,
+            },
+        ]
+
+        selection = build_memory_candidate_selection(payloads)
+
+        self.assertEqual(2, len(selection.candidates))
+
     def test_followup_details_share_event_but_keep_one_recall_target(self):
         records = [
             {

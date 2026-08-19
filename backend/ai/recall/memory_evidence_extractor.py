@@ -101,6 +101,7 @@ _GENERIC_NOUNS = {
     "음식",
     "물건",
     "방송",
+    "적",
 }
 
 
@@ -257,6 +258,36 @@ def _nominal_action_candidate(text: str) -> str:
     return ""
 
 
+def _noun_phrase_before_predicate(text: str, predicates: set[str]) -> str:
+    tokens = _tokens(text)
+
+    for index in range(len(tokens) - 1, 0, -1):
+        token = tokens[index]
+
+        if not token.tag.startswith("VV") or token.form not in predicates:
+            continue
+
+        end_index = index - 1
+        if not tokens[end_index].tag.startswith(_NOUN_TAG_PREFIXES):
+            continue
+
+        start_index = end_index
+        while (
+            start_index > 0
+            and tokens[start_index - 1].tag.startswith(_NOUN_TAG_PREFIXES)
+        ):
+            start_index -= 1
+
+        if not _has_specific_tokens(tokens[start_index:index]):
+            continue
+
+        start = tokens[start_index].start
+        end_token = tokens[end_index]
+        return text[start : end_token.start + end_token.len].strip()
+
+    return ""
+
+
 def _standalone_noun_phrase(text: str, *, max_nouns: int | None = None) -> str:
     tokens = _tokens(text)
     noun_tokens = [token for token in tokens if _is_value_token(token)]
@@ -317,6 +348,11 @@ def extract_answer_value(
     if answer_type == MemoryAnswerType.ACTIVITY:
         action = _nominal_action_candidate(text)
         return action
+
+    if answer_type == MemoryAnswerType.FOOD:
+        food = _noun_phrase_before_predicate(text, {"먹", "드시"})
+        if food:
+            return food
 
     if answer_type == MemoryAnswerType.PERSON:
         return _standalone_noun_phrase(text, max_nouns=1)

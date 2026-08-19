@@ -98,6 +98,7 @@ def decide_recall_timing(
     latest_has_followup_context: bool,
     latest_is_low_info: bool,
     latest_is_negative: bool,
+    latest_continues_event: bool = False,
 ) -> RecallTimingDecision:
     if matured_candidate_count < MIN_MATURED_RECALL_CANDIDATES:
         return RecallTimingDecision(
@@ -116,6 +117,7 @@ def decide_recall_timing(
         and latest_has_followup_context
         and not latest_is_memory_candidate
         and not latest_is_low_info
+        and not latest_continues_event
     ):
         return RecallTimingDecision(
             action=RecallTimingAction.WAIT,

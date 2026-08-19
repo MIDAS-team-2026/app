@@ -653,6 +653,13 @@ def _is_duplicate_candidate(
 
     shared_clues = current_clues & selected_clues
     smaller_clue_count = min(len(current_clues), len(selected_clues))
+
+    if (
+        current_clues == selected_clues
+        and abs(current.first_position - selected.first_position) <= 4
+    ):
+        return True
+
     return (
         len(shared_clues) >= 2
         and len(shared_clues) == smaller_clue_count
