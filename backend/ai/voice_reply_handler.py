@@ -32,9 +32,20 @@ from recall.conversation_policy import (
     decide_recall_timing,
 )
 from recall.conversation_recall_generator import (
+    extract_memory_action_concepts,
     generate_and_save_recall_question,
     score_recall_memory_candidate,
     select_recall_memory_candidates,
+)
+from recall.memory_candidate_service import build_memory_candidate_selection
+from recall.memory_event import (
+    MemoryAnswerType,
+    infer_answer_type,
+    should_continue_memory_event,
+)
+from recall.memory_evidence_extractor import (
+    extract_memory_clues,
+    is_correction_utterance,
 )
 from recall.recall_api_client import analyze_session_recall
 
@@ -53,6 +64,51 @@ class ConversationTurnState:
     should_change_topic: bool
     is_memory_candidate: bool
     needs_memory_detail: bool
+
+
+@dataclass(frozen=True)
+class RecallCandidateContext:
+    conversation_history: tuple[str, ...] = ()
+    source_record_ids: tuple[tuple[str, int], ...] = ()
+    memory_candidates: tuple[dict, ...] = ()
+
+    def find_source_record_id(self, source_text: str) -> int | None:
+        normalized_source = _normalize_text(source_text)
+
+        for text, record_id in self.source_record_ids:
+            if _normalize_text(text) == normalized_source:
+                return record_id
+
+        return None
+
+    def find_memory_candidate(self, candidate: dict) -> dict | None:
+        if not isinstance(candidate, dict):
+            return None
+
+        try:
+            identity = (
+                str(candidate.get("eventId") or "").strip(),
+                int(candidate.get("sourceRecordId") or 0),
+                _normalize_text(candidate.get("sourceText") or ""),
+                str(candidate.get("answerType") or "").strip().upper(),
+                _normalize_text(candidate.get("answerValue") or ""),
+            )
+        except (TypeError, ValueError):
+            return None
+
+        for expected in self.memory_candidates:
+            expected_identity = (
+                str(expected.get("eventId") or "").strip(),
+                int(expected.get("sourceRecordId") or 0),
+                _normalize_text(expected.get("sourceText") or ""),
+                str(expected.get("answerType") or "").strip().upper(),
+                _normalize_text(expected.get("answerValue") or ""),
+            )
+
+            if identity == expected_identity:
+                return expected
+
+        return None
 
 
 FIXED_QUESTIONS = [
@@ -725,7 +781,7 @@ def _count_fixed_answers(session_records: list[dict]) -> int:
     )
 
 
-def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[str]:
+def _extract_recall_candidate_records(session_records: list[dict]) -> list[dict]:
     """
     가장 최근 회상 사이클 이후의 자유대화 답변만 회상 질문 후보로 사용한다.
 
@@ -739,7 +795,7 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
     회상 질문 → 회상 답변 → 다시 회상 질문 후보
     형태의 순환 구조가 생길 수 있다.
     """
-    transcripts = []
+    candidates = []
     sorted_records = sorted(
         session_records,
         key=lambda record: int(record.get("recordId") or 0),
@@ -781,9 +837,339 @@ def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[s
         if role in {"FIXED", "INITIAL", "RECALL"}:
             continue
 
-        transcripts.append(text)
+        candidates.append(record)
 
-    return transcripts
+    return candidates
+
+
+def _extract_recall_candidate_transcripts(session_records: list[dict]) -> list[str]:
+    return [
+        str(record.get("transcriptText") or "").strip()
+        for record in _extract_recall_candidate_records(session_records)
+    ]
+
+
+def _normalize_memory_event_topic(topic: str | None) -> str:
+    normalized = str(topic or "").strip().upper()
+    aliases = {
+        "FOOD": "MEAL",
+        "HOME": "PLACE",
+        "SCENERY": "PLACE",
+        "REST": "ACTIVITY",
+        "ROUTINE": "ACTIVITY",
+        "SHOPPING": "OBJECT",
+    }
+
+    if normalized in {"", "LOW_INFO", "NEGATIVE"}:
+        return "UNGROUPED"
+
+    return aliases.get(normalized, normalized)
+
+
+def _fallback_answer_type_for_topic(topic: str) -> MemoryAnswerType:
+    topic_map = {
+        "MEAL": MemoryAnswerType.FOOD,
+        "PERSON": MemoryAnswerType.PERSON,
+        "PLACE": MemoryAnswerType.PLACE,
+        "MEDIA": MemoryAnswerType.MEDIA,
+        "ACTIVITY": MemoryAnswerType.ACTIVITY,
+        "OBJECT": MemoryAnswerType.OBJECT,
+    }
+    return topic_map.get(topic, MemoryAnswerType.UNKNOWN)
+
+
+_MEMORY_FOLLOWUP_REFERENCE_CUES = (
+    "그때",
+    "그곳",
+    "같이",
+    "함께",
+    "다녀오",
+    "그 음식",
+    "그 방송",
+    "그 물건",
+    "그 선물",
+    "무슨 선물",
+    "어떤 선물",
+)
+_MEMORY_TOPIC_TRANSITION_CUES = (
+    "그 뒤",
+    "그 다음",
+    "다른 이야기",
+    "이번에는",
+    "이어서",
+    "요즘",
+    "평소",
+    "최근에는",
+)
+
+_MEMORY_EVENT_REFERENCE_TOPICS = (
+    ("그 음식", "MEAL"),
+    ("그 방송", "MEDIA"),
+    ("그 물건", "OBJECT"),
+    ("그 선물", "OBJECT"),
+)
+
+
+def _detect_memory_event_reference_topic(question: str) -> str | None:
+    normalized = " ".join(str(question or "").split())
+
+    for cue, topic in _MEMORY_EVENT_REFERENCE_TOPICS:
+        if cue in normalized:
+            return topic
+
+    return None
+
+
+def _is_referential_memory_followup(question: str) -> bool:
+    normalized = " ".join(str(question or "").split())
+
+    if any(cue in normalized for cue in _MEMORY_TOPIC_TRANSITION_CUES):
+        return False
+
+    if any(cue in normalized for cue in _MEMORY_FOLLOWUP_REFERENCE_CUES):
+        return True
+
+    tokens = _tokenize_cached(normalized)
+    return any(
+        token.form == "그"
+        and token.tag == "MM"
+        and index + 1 < len(tokens)
+        and tokens[index + 1].tag.startswith("NN")
+        for index, token in enumerate(tokens)
+    )
+
+
+def _is_memory_topic_transition(question: str) -> bool:
+    normalized = " ".join(str(question or "").split())
+    return any(cue in normalized for cue in _MEMORY_TOPIC_TRANSITION_CUES)
+
+
+def _build_memory_evidence_payloads(
+    session_records: list[dict],
+) -> list[dict]:
+    candidate_records = _extract_recall_candidate_records(session_records)
+    candidate_ids = {
+        int(record.get("recordId") or 0)
+        for record in candidate_records
+    }
+    sorted_records = sorted(
+        session_records,
+        key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
+    )
+    cycle_texts = []
+    payloads = []
+    last_event_topic = None
+    last_event_clue_values: set[str] = set()
+
+    for index, record in enumerate(sorted_records):
+        record_id = int(record.get("recordId") or 0)
+
+        if record_id not in candidate_ids:
+            continue
+
+        text = str(record.get("transcriptText") or "").strip()
+        previous_question = (
+            str(sorted_records[index - 1].get("aiReplyText") or "")
+            if index > 0
+            else ""
+        )
+        cycle_texts.append(text)
+        detected_topic = _normalize_memory_event_topic(
+            _detect_conversation_topic(
+                text,
+                cycle_texts,
+                previous_question,
+            )
+        )
+        question_topics = {
+            _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
+            _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
+        }
+        question_context_topic = _normalize_memory_event_topic(
+            _detect_topic_from_question(previous_question)
+        )
+        question_answer_type = infer_answer_type(previous_question)
+        question_clues = extract_memory_clues(text, question_answer_type)
+        has_question_answer = (
+            question_answer_type
+            not in {
+                MemoryAnswerType.UNKNOWN,
+                MemoryAnswerType.ACTIVITY,
+            }
+            and any(
+                clue["answerType"] == question_answer_type.value
+                for clue in question_clues
+            )
+        )
+        is_correction = is_correction_utterance(text)
+        referenced_event_topic = _detect_memory_event_reference_topic(
+            previous_question
+        )
+        references_previous_clue = any(
+            _keyword_occurs(value, previous_question)
+            for value in last_event_clue_values
+        )
+        question_actions = extract_memory_action_concepts(previous_question)
+        answer_actions = extract_memory_action_concepts(text)
+        continues_previous_event = should_continue_memory_event(
+            last_event_topic=last_event_topic,
+            detected_topic=detected_topic,
+            question_topics=question_topics,
+            answer_type=question_answer_type,
+            is_correction=is_correction,
+            is_referential_followup=(
+                (
+                    _is_referential_memory_followup(previous_question)
+                    or references_previous_clue
+                )
+                and referenced_event_topic in {None, last_event_topic}
+            ),
+            has_conflicting_action=bool(
+                question_actions
+                and answer_actions
+                and question_actions.isdisjoint(answer_actions)
+            ),
+            has_confirmed_clue=bool(question_clues),
+            is_topic_transition=_is_memory_topic_transition(previous_question),
+        )
+        event_topic = (
+            last_event_topic
+            if continues_previous_event
+            else (
+                referenced_event_topic
+                or (
+                    question_context_topic
+                    if (
+                        has_question_answer
+                        and question_context_topic != "UNGROUPED"
+                    )
+                    else detected_topic
+                )
+            )
+        )
+
+        event_answer_type = _fallback_answer_type_for_topic(event_topic)
+        if (
+            question_answer_type != MemoryAnswerType.UNKNOWN
+            and (
+                continues_previous_event
+                or has_question_answer
+                or event_topic in question_topics
+            )
+        ):
+            answer_type = question_answer_type
+        elif (
+            not continues_previous_event
+            and event_answer_type != MemoryAnswerType.UNKNOWN
+        ):
+            answer_type = event_answer_type
+        else:
+            answer_type = event_answer_type
+
+        clues = extract_memory_clues(text, answer_type)
+        answer_value = next(
+            (
+                clue["answerValue"]
+                for clue in clues
+                if clue["answerType"] == answer_type.value
+            ),
+            "",
+        )
+
+        evaluation = score_recall_memory_candidate(text)
+        payloads.append(
+            {
+                "sourceRecordId": record_id,
+                "turnOrder": int(record.get("turnOrder") or 0) or None,
+                "sourceText": text,
+                "topic": event_topic,
+                "answerType": answer_type.value,
+                "answerValue": answer_value,
+                "clues": list(clues),
+                "qualityScore": evaluation["recallScore"],
+                "continuesPreviousEvent": continues_previous_event,
+                "isCorrection": is_correction,
+            }
+        )
+        current_clue_values = {
+            clue["answerValue"]
+            for clue in clues
+            if clue.get("answerValue")
+        }
+        if continues_previous_event:
+            last_event_clue_values.update(current_clue_values)
+        else:
+            last_event_clue_values = current_clue_values
+        last_event_topic = event_topic
+
+    return payloads
+
+
+def _get_structured_recall_ready_context(
+    session_records: list[dict],
+    previous_question: str = "",
+) -> RecallCandidateContext:
+    payloads = _build_memory_evidence_payloads(session_records)
+
+    if len(payloads) < 2:
+        return RecallCandidateContext()
+
+    matured_payloads = payloads[:-1]
+    selection = build_memory_candidate_selection(
+        matured_payloads,
+        max_candidates=3,
+    )
+    latest_text = payloads[-1]["sourceText"]
+    latest_evaluation = score_recall_memory_candidate(latest_text)
+    transcripts = [payload["sourceText"] for payload in payloads]
+    latest_topic = _detect_conversation_topic(
+        latest_text,
+        transcripts,
+        previous_question,
+    )
+    timing = decide_recall_timing(
+        matured_candidate_count=len(selection.candidates),
+        latest_is_memory_candidate=bool(latest_evaluation["isValid"]),
+        latest_has_followup_context=(
+            latest_topic is not None
+            and latest_topic not in {"LOW_INFO", "NEGATIVE"}
+        ),
+        latest_is_low_info=_is_low_info_response(latest_text),
+        latest_is_negative=_is_negative_response(latest_text),
+    )
+
+    if timing.action != RecallTimingAction.ASK_RECALL:
+        return RecallCandidateContext()
+
+    selected_clues = tuple(
+        (candidate, candidate.select_recall_clue())
+        for candidate in selection.candidates
+    )
+    serialized_by_event_id = {
+        candidate["eventId"]: candidate
+        for candidate in selection.to_dict()["candidates"]
+    }
+    return RecallCandidateContext(
+        conversation_history=tuple(
+            selected_clue.source_text
+            for _candidate, selected_clue in selected_clues
+        ),
+        source_record_ids=tuple(
+            (selected_clue.source_text, selected_clue.source_record_id)
+            for _candidate, selected_clue in selected_clues
+        ),
+        memory_candidates=tuple(
+            {
+                **serialized_by_event_id[candidate.event_id],
+                "eventId": candidate.event_id,
+                "sourceRecordId": selected_clue.source_record_id,
+                "sourceText": selected_clue.source_text,
+                "answerType": selected_clue.clue.answer_type.value,
+                "answerValue": selected_clue.clue.answer_value,
+            }
+            for candidate, selected_clue in selected_clues
+        ),
+    )
 
 
 def _get_recall_ready_history(
@@ -1718,6 +2104,10 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
+            "유튜브",
+            "넷플릭스",
+            "영상",
+            "라디오",
         ),
     )
     has_media_consumption = (
@@ -1986,6 +2376,10 @@ def _detect_topic_in_text(text: str) -> str | None:
             "미스터트롯",
             "드라마",
             "뉴스",
+            "유튜브",
+            "넷플릭스",
+            "영상",
+            "라디오",
         ),
     ):
         return "MEDIA"
@@ -2009,7 +2403,22 @@ def _detect_topic_from_question(question: str) -> str | None:
     topic_cues = (
         ("HEALTH", ("병원", "약", "몸", "아프", "불편", "괜찮")),
         ("FOOD", ("음식", "드셨어", "먹었", "마셨어", "식사", "맛")),
-        ("MEDIA", ("방송", "프로그램", "노래", "가수", "드라마", "뉴스", "티비")),
+        (
+            "MEDIA",
+            (
+                "방송",
+                "프로그램",
+                "노래",
+                "가수",
+                "드라마",
+                "뉴스",
+                "티비",
+                "유튜브",
+                "넷플릭스",
+                "영상",
+                "라디오",
+            ),
+        ),
         ("SHOPPING", ("사신", "샀", "고르셨어", "장 보", "마트", "시장")),
         ("OBJECT", ("물건", "손에 자주", "자주 잡", "어디에 두")),
         ("HOME", ("집에서", "집 안", "집에 계실", "어느 방", "머문 자리")),
@@ -3457,11 +3866,14 @@ def process_voice_reply(
             updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
-        recall_ready_history = _get_recall_ready_history(
-            transcripts,
+        recall_candidate_context = _get_structured_recall_ready_context(
+            updated_records,
             previous_question=_get_question_answered_by_latest_record(
                 updated_records
             ),
+        )
+        recall_ready_history = list(
+            recall_candidate_context.conversation_history
         )
 
         if not recall_ready_history:
@@ -3488,6 +3900,9 @@ def process_voice_reply(
             result = generate_and_save_recall_question(
                 user_id=user_id,
                 conversation_history=recall_ready_history,
+                memory_candidates=list(
+                    recall_candidate_context.memory_candidates
+                ),
                 base_url=SPRING_BASE_URL,
             )
         except Exception as e:
@@ -3518,10 +3933,50 @@ def process_voice_reply(
             return
 
         recall_question_id = (saved_question or {}).get("questionId")
-        source_record_id = _find_memory_source_record_id(
-            updated_records,
-            source_text,
-        )
+        result_candidate = result.get("memoryCandidate")
+        source_record_id = None
+
+        if result_candidate is not None:
+            matched_candidate = recall_candidate_context.find_memory_candidate(
+                result_candidate
+            )
+
+            if (
+                matched_candidate is None
+                or _normalize_text(source_text)
+                != _normalize_text(matched_candidate["sourceText"])
+            ):
+                logger.error(
+                    "회상 질문의 구조화 memoryPoint 후보가 전달 후보와 달라 "
+                    "일반 질문으로 복귀: candidate=%s",
+                    result_candidate,
+                )
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text=_get_next_normal_question(
+                        len(transcripts),
+                        updated_records,
+                        latest_text=_get_current_transcript(
+                            updated_records,
+                            record_id,
+                            transcript_text,
+                        ),
+                    ),
+                )
+                return
+
+            source_record_id = matched_candidate["sourceRecordId"]
+
+        if source_record_id is None:
+            source_record_id = recall_candidate_context.find_source_record_id(
+                source_text
+            )
+
+        if source_record_id is None:
+            source_record_id = _find_memory_source_record_id(
+                updated_records,
+                source_text,
+            )
 
         if not recall_question_id or source_record_id is None:
             logger.error(
