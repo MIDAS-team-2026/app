@@ -277,9 +277,9 @@ def transcribe(request: SttRequest):
         정제된 문장:
         """.strip()
 
-        # llama-3.3-70b-versatile 또는 llama3-8b-8192 모델 사용
+        # llama-3.3-70b-versatile은 2026-08-16 Groq에서 폐기되어 openai/gpt-oss-120b로 교체
         llm_response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": refine_prompt}],
             temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
         )
@@ -290,7 +290,7 @@ def transcribe(request: SttRequest):
         return SttResponse(
             transcriptText=clean_text,
             confidence=None,
-            modelName="groq-whisper-large-v3 + llama3"
+            modelName="groq-whisper-large-v3 + gpt-oss-120b"
         )
 
     except requests.RequestException as exc:
