@@ -16,6 +16,9 @@ class RecallTimingAction(str, Enum):
     ASK_RECALL = "ASK_RECALL"
 
 
+MIN_MATURED_RECALL_CANDIDATES = 2
+
+
 @dataclass(frozen=True)
 class ConversationDecision:
     action: ConversationAction
