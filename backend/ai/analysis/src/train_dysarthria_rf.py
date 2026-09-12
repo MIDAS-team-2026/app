@@ -40,8 +40,6 @@ from sklearn.calibration import CalibratedClassifierCV
 sys.path.append(str(Path(__file__).resolve().parent))
 from feature_preprocessor import FeaturePreprocessor, predict_from_feature_dict  # noqa: E402
 
-from speech_feature_preprocessing import preprocess_abnormal_segment_features
-
 # ============================================================================
 # 0. 설정값 (CONFIG)
 # ============================================================================
@@ -55,7 +53,7 @@ NORMAL_CSV = Path(
 )
 
 ABNORMAL_CSV = Path(
-    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.partial.csv")
+    os.getenv("MIDAS_ABNORMAL_CSV", DATA_DIR / "dysarthria_neuro_25_segment_features_egemaps.csv")
 )
 
 RANDOM_STATE = 42
@@ -152,7 +150,7 @@ MFCC_HIGH_ORDER_EXCLUDE = {
     "mfcc_13_mean", "mfcc_13_std",
 }
 
-def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str, dict]:
+def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFrame, List[str], str]:
     df_normal = pd.read_csv(normal_csv)
     df_abnormal = pd.read_csv(abnormal_csv)
 
@@ -168,11 +166,6 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
         and c not in DURATION_CONFOUNDED
         and c not in MIC_ENVIRONMENT_CONFOUNDED
         and c not in MFCC_HIGH_ORDER_EXCLUDE
-    )
-
-    df_abnormal, preprocessing_report = preprocess_abnormal_segment_features(
-        df_abnormal,
-        feature_cols,
     )
 
     # 정상군 화자 그룹화
@@ -204,7 +197,7 @@ def load_labeled_dataset(normal_csv: str, abnormal_csv: str) -> Tuple[pd.DataFra
     print(f"[load] 공통 피처 {len(feature_cols)}개 선정 완료")
     print(f"[load] 화자 그룹 분할 기준: '{group_col}' (정상군 화자: {df_normal['speaker_group'].nunique()}명, 비정상군 화자: {df_abnormal['speaker_group'].nunique()}명)")
 
-    return combined, feature_cols, group_col, preprocessing_report
+    return combined, feature_cols, group_col
 
 
 # ============================================================================
@@ -350,7 +343,7 @@ def evaluate_model(model, X_test, y_test, feature_names, output_dir: Path):
 # predict_from_feature_dict()도 feature_preprocessor.py(공용 모듈)에서 import해서 사용한다.
 
 def main():
-    combined, candidate_features, group_col, preprocessing_report = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
+    combined, candidate_features, group_col = load_labeled_dataset(NORMAL_CSV, ABNORMAL_CSV)
 
     X = combined[candidate_features]
     y = combined["label"]
@@ -397,11 +390,10 @@ def main():
     training_report = {
         "normal_csv": str(NORMAL_CSV),
         "abnormal_csv": str(ABNORMAL_CSV),
-        "preprocessing": preprocessing_report,
         "selected_features": top_features,
         "metrics": metrics,
     }
-    
+
     with open(ARTIFACT_DIR / "random_forest_training_report.json", "w", encoding="utf-8") as f:
         json.dump(training_report, f, ensure_ascii=False, indent=2)
 
@@ -418,13 +410,14 @@ def main():
     # health_score = (1.0 - prob_abnormal) * 100.0
 
     # 여기서부터 ----------------------------------
-    X_val_final = preprocessor_probe.transform(X_val_raw)[top_features]
+    X_val_final = preprocessor_final.transform(X_val_raw[top_features])
 
     calibrated_model = CalibratedClassifierCV(estimator=model, method='isotonic')
     calibrated_model.fit(X_val_final, y_val)
 
     # 보정된 확률 추출 후 점수 환산
-    prob_calibrated = calibrated_model.predict_proba(example_df)[0, 1]
+    X_example_final = preprocessor_final.transform(example_df[top_features])
+    prob_calibrated = calibrated_model.predict_proba(X_example_final)[0, 1]
     health_score = (1.0 - prob_calibrated) * 100.0
     print(f"[example inference] 건강 점수 (100점 만점): {health_score:.2f}점 / 100점")
     # 여기까지 ----------------------------------
