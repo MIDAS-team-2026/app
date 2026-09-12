@@ -22,10 +22,13 @@ sys.path.append(str(RECALL_ROOT))
 from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
 
-from recall_score_calculator import (
-    calculate_final_recall_score,
-    calculate_final_risk_score,
-)
+def calculate_final_recall_score(*args, **kwargs):
+    from recall_score_calculator import calculate_final_recall_score as calculate
+    return calculate(*args, **kwargs)
+
+def calculate_final_risk_score(*args, **kwargs):
+    from recall_score_calculator import calculate_final_risk_score as calculate
+    return calculate(*args, **kwargs)
 
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
 
@@ -130,6 +133,12 @@ def compact_speech_result(result):
     flat["baselineSpeechScore"] = result.get("baseline_speech_score")
     flat["baselineSpeechLevel"] = result.get("baseline_speech_level")
     flat["baselineReasons"] = result.get("baseline_reasons")
+    flat["speechReferenceScore"] = result.get("reference_score")
+    flat["speechReferenceBand"] = result.get("reference_band")
+    flat["speechModel"] = result.get("analysis_model")
+    flat["speechModelScores"] = result.get("model_scores")
+    flat["speechModelWeights"] = result.get("model_weights")
+    flat["speechReferenceInterpretation"] = result.get("score_interpretation")
     flat["audioAnalysisAvailable"] = result.get("audio_analysis_available")
     flat["audioAnalysisError"] = result.get("audio_analysis_error")
     flat["rawSpeechScore"] = result.get("raw_speech_score")
@@ -172,10 +181,20 @@ def run_record_mode(args):
     record_analysis_dto = map_to_record_analysis_dto(result)
 
     response = {
-        "success": True,
+        "success": bool(result.get("audio_analysis_available")),
         "recordId": args.record_id,
         "sessionId": args.session_id,
         "recordAnalysis": record_analysis_dto,
+        "referenceAnalysis": {
+            "available": result.get("audio_analysis_available", False),
+            "error": result.get("audio_analysis_error"),
+            "score": result.get("reference_score"),
+            "band": result.get("reference_band"),
+            "model": result.get("analysis_model"),
+            "modelScores": result.get("model_scores"),
+            "weights": result.get("model_weights"),
+            "interpretation": "dataset_reference_not_clinical_severity",
+        },
         # "finalRiskResult": { ... } <-- 이 부분을 제거하여 단일 턴 분석 시 0점인 채로 Spring에 덮어쓰지 않도록 합니다.
     }
 
