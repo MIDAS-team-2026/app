@@ -185,7 +185,7 @@ public class AiAnalysisService {
 
         riskAnalysisRepository.save(result);
 
-        if (dto.getFinalRiskScore() >= 70.0) {
+        if (dto.getFinalRiskScore() >= 60.0) {
             User patient = session.getUser();
             String title = "인지 건강 위험 알림";
             String content = String.format("[%s] 님의 오늘 분석 점수가 %.1f점으로 '위험' 단계입니다. 상세 리포트를 확인해주세요.",
