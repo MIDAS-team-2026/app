@@ -386,8 +386,8 @@ def calculate_final_risk_from_text_score(
     text_risk_score = clamp_score(100.0 - text_score)
 
     final_risk_score = (
-        speech_risk_score * 0.3
-        + text_risk_score * 0.7
+        speech_risk_score * 0.33
+        + text_risk_score * 0.67
     )
 
     final_risk_score = clamp_score(final_risk_score)

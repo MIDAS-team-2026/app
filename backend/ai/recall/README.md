@@ -30,11 +30,19 @@ backend/ai/
 
 ### 2.2 종합 위험도 계산
 
-- `speech_score`
-- `text_score`
-- `recall_score`
+- `speech_risk_score`: 높을수록 음성 기반 위험이 큼
+- `recall_score`: 높을수록 회상 상태가 양호함
 
-위 세 점수를 종합하여 `final_risk_score`와 `risk_level`을 계산한다.
+회상 점수는 `recall_risk_score = 100 - recall_score`로 위험도 방향을
+맞춘 뒤 다음 비율로 `final_risk_score`를 계산한다.
+
+```text
+final_risk_score =
+(0.33 × speech_risk_score) +
+(0.67 × recall_risk_score)
+```
+
+회상 위험도 67%, 음성 위험도 33%를 반영한다.
 
 서비스 운영용 위험 구간은 다음과 같다.
 

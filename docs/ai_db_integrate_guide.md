@@ -52,7 +52,7 @@ sequenceDiagram
     end
 
     PY->>SB: POST /api/ai/analysis/risk
-    Note over SB: finalRiskScore >= 70 → 보호자 알림
+    Note over SB: finalRiskScore >= 60 → 보호자 알림
 ```
 
 ---
@@ -274,21 +274,22 @@ POST /api/ai/analysis/risk
   "speechScore": 70.0,
   "textScore": 75.0,
   "recallScore": 80.0,
-  "finalRiskScore": 25.5,
+  "finalRiskScore": 39.85,
   "riskLevel": "low"
 }
 ```
 
-**공식 (`recall_score_prototype.py`와 동일):**
+**현재 운영 공식:**
 
 ```
-건강점수 = speechScore×0.3 + textScore×0.2 + recallScore×0.5
-finalRiskScore = 100 - 건강점수
+textRiskScore = 100 - textScore
+finalRiskScore = speechScore×0.33 + textRiskScore×0.67
 ```
 
-- `speechScore`, `textScore`, `recallScore`: **높을수록 건강**
+- `speechScore`: **높을수록 위험**
+- `textScore`, `recallScore`: **높을수록 양호**
 - `finalRiskScore`: **높을수록 위험**
-- **`finalRiskScore >= 70`** → `NotificationService`로 보호자 알림
+- **`finalRiskScore >= 60`** → `NotificationService`로 보호자 알림
 
 ---
 

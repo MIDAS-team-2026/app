@@ -597,8 +597,8 @@ def calculate_final_risk_score(
     recall_risk_score = convert_recall_score_to_risk_score(recall_score)
 
     final_risk_score = (
-        speech_risk_score * 0.3
-        + recall_risk_score * 0.7
+        speech_risk_score * 0.33
+        + recall_risk_score * 0.67
     )
 
     final_risk_score = clamp_score(final_risk_score)
