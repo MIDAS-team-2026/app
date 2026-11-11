@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 public class STTService {
 
     private final AudioRecordRepository audioRecordRepository;
+    private final S3Service s3Service;
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Value("${ai.python.url:http://localhost:8000}")
@@ -28,7 +29,8 @@ public class STTService {
         AudioRecord record = audioRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("AudioRecord not found. recordId=" + recordId));
 
-        SttResult result = transcribe(record.getAudioFilePath());
+        // DB에는 S3 object key가 저장되므로 Python 서버가 내려받을 수 있게 사전 서명 URL로 변환한다.
+        SttResult result = transcribe(s3Service.generatePresignedGetUrl(record.getAudioFilePath()));
         record.setTranscriptText(result.getTranscriptText());
         record.setSttConfidence(result.getConfidence());
         audioRecordRepository.save(record);
