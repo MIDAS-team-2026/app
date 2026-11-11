@@ -1,0 +1,332 @@
+import sys
+import unittest
+from pathlib import Path
+
+
+AI_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AI_ROOT))
+
+
+from recall.memory_evidence_extractor import (  # noqa: E402
+    extract_answer_value,
+    extract_memory_clues,
+)
+from recall.memory_event import MemoryAnswerType  # noqa: E402
+
+
+class MemoryEvidenceExtractorTest(unittest.TestCase):
+    def test_extracts_typed_values_from_korean_particles(self):
+        cases = (
+            ("경산 반석 풋살장에서 했어", MemoryAnswerType.PLACE, "경산 반석 풋살장"),
+            ("라면과 계란밥을 먹었어", MemoryAnswerType.FOOD, "라면과 계란밥"),
+            ("딸이랑 같이 먹었어", MemoryAnswerType.PERSON, "딸"),
+            ("오후 세 시에 병원에 갔어", MemoryAnswerType.TIME, "오후 세 시"),
+            ("미스터트롯을 봤어", MemoryAnswerType.MEDIA, "미스터트롯"),
+            ("리모컨을 소파에 뒀어", MemoryAnswerType.OBJECT, "리모컨"),
+            ("공원에서 산책했어", MemoryAnswerType.ACTIVITY, "산책"),
+        )
+
+        for text, answer_type, expected in cases:
+            with self.subTest(text=text, answer_type=answer_type):
+                self.assertEqual(expected, extract_answer_value(text, answer_type))
+
+    def test_returns_empty_value_when_type_is_unknown(self):
+        self.assertEqual(
+            "",
+            extract_answer_value("그냥 그랬어", MemoryAnswerType.UNKNOWN),
+        )
+
+    def test_does_not_promote_vague_or_negative_answers(self):
+        cases = (
+            ("아직은 없어", MemoryAnswerType.FOOD),
+            ("뭘 먹었는지 모르겠어", MemoryAnswerType.FOOD),
+            ("거기 갔어", MemoryAnswerType.PLACE),
+            ("언제인지 모르겠어", MemoryAnswerType.TIME),
+            ("아직 안 봤어", MemoryAnswerType.MEDIA),
+            ("아무것도 안 했어", MemoryAnswerType.ACTIVITY),
+            ("그건 없어", MemoryAnswerType.OBJECT),
+        )
+
+        for text, answer_type in cases:
+            with self.subTest(text=text, answer_type=answer_type):
+                self.assertEqual("", extract_answer_value(text, answer_type))
+
+    def test_does_not_promote_generic_place_words(self):
+        cases = (
+            "주변에 친구가 있다고 했어요.",
+            "자주 가는 곳이야",
+            "처음엔 귀찮았는데 하고 나니까 뿌듯했어.",
+        )
+
+        for text in cases:
+            with self.subTest(text=text):
+                self.assertEqual(
+                    "",
+                    extract_answer_value(text, MemoryAnswerType.PLACE),
+                )
+                self.assertNotIn(
+                    "PLACE",
+                    {
+                        clue["answerType"]
+                        for clue in extract_memory_clues(
+                            text,
+                            MemoryAnswerType.PLACE,
+                        )
+                    },
+                )
+
+    def test_does_not_promote_category_words_as_memory_clues(self):
+        cases = (
+            ("음식을 먹었어", MemoryAnswerType.FOOD),
+            ("물건을 샀어", MemoryAnswerType.OBJECT),
+            ("사람과 갔어", MemoryAnswerType.PERSON),
+            ("장소에서 먹었어", MemoryAnswerType.PLACE),
+            ("방송을 봤어", MemoryAnswerType.MEDIA),
+        )
+
+        for text, answer_type in cases:
+            with self.subTest(text=text, answer_type=answer_type):
+                self.assertEqual("", extract_answer_value(text, answer_type))
+                self.assertEqual((), extract_memory_clues(text, answer_type))
+
+    def test_keeps_specific_value_after_a_category_word(self):
+        cases = (
+            ("음식은 김치찌개야", MemoryAnswerType.FOOD, "김치찌개"),
+            ("물건은 지갑이야", MemoryAnswerType.OBJECT, "지갑"),
+            ("사람은 아들이야", MemoryAnswerType.PERSON, "아들"),
+            ("장소는 시장이야", MemoryAnswerType.PLACE, "시장"),
+            ("방송은 미스터트롯이야", MemoryAnswerType.MEDIA, "미스터트롯"),
+        )
+
+        for text, answer_type, expected in cases:
+            with self.subTest(text=text, answer_type=answer_type):
+                self.assertEqual(expected, extract_answer_value(text, answer_type))
+
+    def test_keeps_specific_place_with_surrounding_word(self):
+        self.assertEqual(
+            "집 주변",
+            extract_answer_value(
+                "집 주변에서 산책했어",
+                MemoryAnswerType.PLACE,
+            ),
+        )
+
+    def test_extracts_particle_omitted_spoken_food(self):
+        self.assertEqual(
+            "김치볶음밥",
+            extract_answer_value("김치볶음밥 먹었어", MemoryAnswerType.FOOD),
+        )
+
+    def test_preserves_solo_as_a_person_answer(self):
+        self.assertEqual(
+            "혼자",
+            extract_answer_value("혼자 먹었어", MemoryAnswerType.PERSON),
+        )
+
+    def test_activity_does_not_capture_a_time_phrase(self):
+        self.assertEqual(
+            "",
+            extract_answer_value("식사 후에는 잤어", MemoryAnswerType.ACTIVITY),
+        )
+
+    def test_extracts_multiple_clues_from_one_utterance(self):
+        self.assertEqual(
+            (
+                {"answerType": "PERSON", "answerValue": "딸"},
+                {"answerType": "PLACE", "answerValue": "공원"},
+                {"answerType": "ACTIVITY", "answerValue": "산책"},
+            ),
+            extract_memory_clues(
+                "딸과 공원에서 산책했어",
+                MemoryAnswerType.ACTIVITY,
+            ),
+        )
+
+    def test_food_conjunction_is_not_mistaken_for_person(self):
+        self.assertEqual(
+            (
+                {
+                    "answerType": "FOOD",
+                    "answerValue": "엽기 떡볶이와 치킨",
+                },
+            ),
+            extract_memory_clues(
+                "엽기 떡볶이와 치킨을 먹었어",
+                MemoryAnswerType.FOOD,
+            ),
+        )
+
+        self.assertNotIn(
+            "PERSON",
+            {
+                clue["answerType"]
+                for clue in extract_memory_clues(
+                    "떡볶이와 치킨을 먹었어",
+                    MemoryAnswerType.PERSON,
+                )
+            },
+        )
+
+    def test_time_and_place_are_kept_as_separate_clues(self):
+        self.assertEqual(
+            (
+                {"answerType": "TIME", "answerValue": "오후 세 시"},
+                {"answerType": "PLACE", "answerValue": "병원"},
+            ),
+            extract_memory_clues("오후 세 시에 병원에 갔어"),
+        )
+
+    def test_time_place_person_and_food_are_separated_in_one_utterance(self):
+        self.assertEqual(
+            (
+                {"answerType": "TIME", "answerValue": "오전"},
+                {"answerType": "PLACE", "answerValue": "카페"},
+                {"answerType": "PERSON", "answerValue": "친구"},
+                {"answerType": "FOOD", "answerValue": "커피"},
+            ),
+            extract_memory_clues(
+                "오전에 카페에서 친구와 커피를 마셨어",
+                MemoryAnswerType.FOOD,
+            ),
+        )
+
+        self.assertEqual(
+            (
+                {"answerType": "PLACE", "answerValue": "집"},
+                {"answerType": "PERSON", "answerValue": "아들"},
+                {"answerType": "FOOD", "answerValue": "김치찌개"},
+            ),
+            extract_memory_clues(
+                "집에서 아들과 김치찌개를 먹었어",
+                MemoryAnswerType.FOOD,
+            ),
+        )
+
+        self.assertEqual(
+            (
+                {"answerType": "PERSON", "answerValue": "딸"},
+                {"answerType": "FOOD", "answerValue": "라면"},
+            ),
+            extract_memory_clues(
+                "딸과 라면을 먹었어",
+                MemoryAnswerType.FOOD,
+            ),
+        )
+
+    def test_standalone_day_word_is_time_clue(self):
+        self.assertEqual(
+            (
+                {"answerType": "TIME", "answerValue": "어제"},
+                {"answerType": "PLACE", "answerValue": "시장"},
+                {"answerType": "OBJECT", "answerValue": "사과"},
+            ),
+            extract_memory_clues(
+                "어제 시장에서 사과를 샀어",
+                MemoryAnswerType.OBJECT,
+            ),
+        )
+
+        self.assertIn(
+            {"answerType": "TIME", "answerValue": "어제"},
+            extract_memory_clues(
+                "어제 손주에게 선물을 줬어",
+                MemoryAnswerType.PERSON,
+            ),
+        )
+
+    def test_media_source_is_not_mistaken_for_place(self):
+        self.assertEqual(
+            (
+                {"answerType": "MEDIA", "answerValue": "뉴스"},
+            ),
+            extract_memory_clues(
+                "텔레비전에서 뉴스를 봤어",
+                MemoryAnswerType.MEDIA,
+            ),
+        )
+
+    def test_recipient_and_given_object_are_kept_as_separate_clues(self):
+        cases = (
+            (
+                "손주에게 선물을 줬어",
+                "손주",
+                "선물",
+            ),
+            (
+                "딸한테 책을 받았어",
+                "딸",
+                "책",
+            ),
+        )
+
+        for text, person, object_value in cases:
+            with self.subTest(text=text):
+                self.assertEqual(
+                    (
+                        {"answerType": "PERSON", "answerValue": person},
+                        {"answerType": "OBJECT", "answerValue": object_value},
+                    ),
+                    extract_memory_clues(text, MemoryAnswerType.PERSON),
+                )
+
+    def test_negative_statement_does_not_create_clue(self):
+        self.assertEqual(
+            (),
+            extract_memory_clues(
+                "딸이랑 안 갔어",
+                MemoryAnswerType.PERSON,
+            ),
+        )
+
+    def test_keeps_confirmed_clause_after_negated_alternative(self):
+        cases = (
+            (
+                "공원에는 안 가고 시장에 갔어",
+                MemoryAnswerType.PLACE,
+                ({"answerType": "PLACE", "answerValue": "시장"},),
+            ),
+            (
+                "김치찌개는 안 먹고 비빔밥을 먹었어",
+                MemoryAnswerType.FOOD,
+                ({"answerType": "FOOD", "answerValue": "비빔밥"},),
+            ),
+            (
+                "친구가 아니라 동생과 갔어",
+                MemoryAnswerType.PERSON,
+                ({"answerType": "PERSON", "answerValue": "동생"},),
+            ),
+        )
+
+        for text, answer_type, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(
+                    expected,
+                    extract_memory_clues(text, answer_type),
+                )
+
+    def test_non_negating_idiom_keeps_concrete_clues(self):
+        self.assertEqual(
+            (
+                {"answerType": "PERSON", "answerValue": "아들"},
+                {"answerType": "PLACE", "answerValue": "시장"},
+            ),
+            extract_memory_clues(
+                "안 그래도 아들과 시장에 갔어",
+                MemoryAnswerType.PLACE,
+            ),
+        )
+
+    def test_correction_keeps_only_latest_statement(self):
+        self.assertEqual(
+            (
+                {"answerType": "PERSON", "answerValue": "아들"},
+            ),
+            extract_memory_clues(
+                "딸이랑 갔어, 아니 아들이랑 갔어",
+                MemoryAnswerType.PERSON,
+            ),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

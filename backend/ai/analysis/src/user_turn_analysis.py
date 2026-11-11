@@ -635,80 +635,33 @@ def analyze_user_turn_baseline(
 # 음향 이상 분석 (Probability Calibration 반영)
 # =========================
 
-def analyze_user_turn_audio(
-        audio_path: str,
-) -> Dict[str, Any]:
-    logger.info("analyze_user_turn_audio start audio_path=%s exists=%s",
-                audio_path, os.path.exists(audio_path) if audio_path else False)
-
-    if audio_path is None or str(audio_path).strip() == "":
-        return {
-            "audio_analysis_available": False,
-            "audio_analysis_error": "audio_path가 비어 있습니다.",
-            "abnormal_probability": None,
-            "speech_abnormality_level": "Unknown",
-            "audio_health_score": 0.0,
-        }
-
-    audio_path_obj = Path(audio_path)
-
-    if not audio_path_obj.exists():
-        return {
-            "audio_analysis_available": False,
-            "audio_analysis_error": f"음성 파일을 찾을 수 없습니다: {audio_path}",
-            "abnormal_probability": None,
-            "speech_abnormality_level": "Unknown",
-            "audio_health_score": 0.0,
-        }
-
-    # 1. eGeMAPS 피처 추출
-    audio_features = extract_audio_features(str(audio_path_obj))
-
-    if audio_features is None:
-        return {
-            "audio_analysis_available": False,
-            "audio_analysis_error": "음향 특징 추출에 실패했습니다.",
-            "abnormal_probability": None,
-            "speech_abnormality_level": "Unknown",
-            "audio_health_score": 0.0,
-        }
-
+def analyze_user_turn_audio(audio_path: str) -> Dict[str, Any]:
+    """Always output the 40-feature ensemble; expose reference score separately."""
+    ai_root = str(AI_ANALYSIS_ROOT.parent)
+    if ai_root not in sys.path:
+        sys.path.insert(0, ai_root)
+    from speech_ensemble.runtime import extract_input_features, predict_features, band_for_probability
+    backend = "ensemble40"
+    features = {}
     try:
-        # 2. 보정된 모델 및 전처리기 로드
-        model, preprocessor = load_speech_abnormality_reference()
-        rf_result = predict_from_feature_dict(audio_features, model, preprocessor)
-
-        # 확률 보정된 비정상 확률 (Calibrated Probability)
-        calibrated_prob = float(rf_result["abnormal_probability"])
-
-        # 3. Cut-off 기반 점수 및 등급 매핑
-        audio_health_score, speech_abnormality_level = map_calibrated_prob_to_health_score(calibrated_prob)
-
-        score_result = {
-            "abnormal_probability": round(calibrated_prob, 4),
-            "predicted_label": rf_result["predicted_label"],
-            "speech_abnormality_level": speech_abnormality_level,  # Low(정상), Medium(주의), High(비정상)
-            "audio_health_score": audio_health_score,              # 0~100점 만점 음향 건강 점수
-            "speech_abnormality_score": round((100.0 - audio_health_score) * 0.15, 2), # 기존 하위 호환용 필드
-        }
-
-        result = {
-            "audio_analysis_available": True,
-            **audio_features,
-            **score_result,
-        }
-        return result
-
-    except Exception as e:
-        logger.exception("analyze_user_turn_audio exception audio_path=%s", audio_path)
-        return {
-            "audio_analysis_available": False,
-            "audio_analysis_error": str(e),
-            **audio_features,
-            "abnormal_probability": None,
-            "speech_abnormality_level": "Unknown",
-            "audio_health_score": 0.0,
-        }
+        if not audio_path:
+            raise ValueError("Audio path is empty")
+        features = extract_input_features(audio_path)
+        prediction = predict_features(features)
+        p = float(prediction["abnormal_probability"])
+        # Preserve the existing combined health/risk score contract.
+        health, level = map_calibrated_prob_to_health_score(p)
+        return {"audio_analysis_available": True, "audio_analysis_error": None,
+                **features, **prediction, "speech_abnormality_level": level,
+                "audio_health_score": health,
+                "speech_abnormality_score": round((100-health)*.15, 2)}
+    except Exception as exc:
+        logger.exception("Audio inference failed: %s", backend)
+        return {**features, "audio_analysis_available": False,
+                "audio_analysis_error": str(exc), "analysis_model": backend,
+                "abnormal_probability": None, "reference_score": None,
+                "reference_band": None, "speech_abnormality_level": "Unknown",
+                "audio_health_score": None}
 
 
 # =========================
