@@ -39,14 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Gray400
-import com.midas26.mobileapp.ui.theme.Gray800
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green50
-import com.midas26.mobileapp.ui.theme.Green500
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
 
@@ -79,7 +72,6 @@ fun SignupRoleScreen(
         }
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 진행도 (1/2 단계: 좌측 채워짐) — 두께 4dp→6dp 로 확대
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -90,18 +82,25 @@ fun SignupRoleScreen(
                     .weight(1f)
                     .height(6.dp)
                     .padding(end = 6.dp)
-                    .background(Green400, RoundedCornerShape(3.dp))
+                    .background(AppColor.greenPrimary, RoundedCornerShape(3.dp))
             )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(6.dp)
-                    .background(Gray200, RoundedCornerShape(3.dp))
+                    .padding(end = 6.dp)
+                    .background(AppColor.divider, RoundedCornerShape(3.dp))
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .background(AppColor.divider, RoundedCornerShape(3.dp))
             )
         }
         Spacer(modifier = Modifier.height(12.dp))
         Text(
-            text = stringResource(R.string.signup_step_1_of_2),
+            text = stringResource(R.string.signup_step_1_of_3),
             style = MaterialTheme.typography.labelMedium,
             color = AppColor.textTertiary
         )
@@ -150,15 +149,15 @@ private fun RoleCard(
     onClick: () -> Unit
 ) {
     val border by animateColorAsState(
-        targetValue = if (selected) Green400 else Gray200,
+        targetValue = if (selected) AppColor.greenPrimary else AppColor.divider,
         label = "roleCardBorder"
     )
     val container by animateColorAsState(
-        targetValue = if (selected) Green50 else BrandWhite,
+        targetValue = if (selected) AppColor.greenSurface else BrandWhite,
         label = "roleCardContainer"
     )
-    val titleColor = if (selected) Green600 else Gray800
-    val descColor = if (selected) Green500 else Gray400
+    val titleColor = if (selected) AppColor.accentDark else AppColor.textPrimary
+    val descColor = if (selected) AppColor.greenSecondary else AppColor.textTertiary
 
     Card(
         modifier = Modifier

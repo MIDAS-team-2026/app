@@ -18,14 +18,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import android.content.Intent
+import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.R
+import com.midas26.mobileapp.location.LocationForegroundService
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 
@@ -38,18 +45,38 @@ private val DotColor  = Color(0xFF6BAB8F)
 fun SplashScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToLogin: () -> Unit,
-    onNavigateToOnboarding: () -> Unit
+    onNavigateToOnboarding: () -> Unit,
+    isDataReady: Boolean = true,
+    hasNetworkError: Boolean = false,
 ) {
     val context = LocalContext.current
+    val isDataReadyState = rememberUpdatedState(isDataReady)
+    val hasNetworkErrorState = rememberUpdatedState(hasNetworkError)
 
     LaunchedEffect(Unit) {
-        delay(1800)
         val prefs = PrefsManager.from(context)
-        when {
-            prefs.isLoggedIn()        -> onNavigateToHome()
-            prefs.hasSeenOnboarding() -> onNavigateToLogin()
-            else                      -> onNavigateToOnboarding()
+        if (!prefs.isLoggedIn()) {
+            delay(1800)
+            if (prefs.hasSeenOnboarding()) onNavigateToLogin() else onNavigateToOnboarding()
+            return@LaunchedEffect
         }
+
+        // 위치 공유 토글이 켜져 있으면 서비스 재시작
+        if (prefs.getLocationSharingEnabled()) {
+            val intent = Intent(context, LocationForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+        // 로그인 상태: 최소 1800ms + 데이터 로드 완료(또는 에러) 대기
+        delay(1800)
+        snapshotFlow { isDataReadyState.value || hasNetworkErrorState.value }
+            .filter { it }
+            .first()
+        if (hasNetworkErrorState.value) onNavigateToLogin() else onNavigateToHome()
     }
 
     // 점 3개 순차 페이드 애니메이션 (1.2s 루프)

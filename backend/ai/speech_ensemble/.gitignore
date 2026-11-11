@@ -1,0 +1,14 @@
+__pycache__/
+.venv/
+data/
+outputs/
+models/
+*.joblib
+*.pkl
+*.wav
+*.m4a
+*.mp3
+*.flac
+*.tar
+*.zip
+.env

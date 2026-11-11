@@ -52,21 +52,24 @@ sealed interface VoiceChatState {
  */
 class VoiceChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val prefs      = PrefsManager.from(application)
+    private val prefs       = PrefsManager.from(application)
     private val wavRecorder = WavRecorder(application)
-    private val api        = RetrofitClient.voiceChat
+    private val api         = RetrofitClient.voiceChat
 
-    private val userId: Int get() = prefs.getUserId()
-    private var sessionId: Long   = -1L
+    private val userId: Int  get() = prefs.getUserId()
+    private var sessionId: Long    = -1L
+    private var sessionEnded       = false
+    private var voiceUploaded      = false
+    private var pendingRecallQuestionId: Long? = null
+
+    fun hasUploadedVoice(): Boolean = voiceUploaded
 
     // ── 상태 ──────────────────────────────────────────────────────────────────
 
     private var _state by mutableStateOf<VoiceChatState>(VoiceChatState.Idle)
     val state: VoiceChatState get() = _state
 
-    private val _messages: SnapshotStateList<ChatMessage> = listOf(
-        ChatMessage(Sender.AI, "안녕하세요 😊\n오늘은 몇 월 며칠인가요?")
-    ).toMutableStateList()
+    private val _messages: SnapshotStateList<ChatMessage> = listOf<ChatMessage>().toMutableStateList()
     val messages: List<ChatMessage> get() = _messages
 
     private var _recordingSeconds by mutableStateOf(0)
@@ -105,7 +108,29 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             runCatching { api.startSession(userId) }
-                .onSuccess { resp -> sessionId = resp.body()?.data ?: -1L }
+                .onSuccess { resp ->
+                    val data = resp.body()?.data
+                    sessionId = data?.sessionId ?: -1L
+                    if (sessionId > 0) prefs.saveLastSessionId(sessionId)
+                    dispatchAiReply(greetingText(data?.fixedQuestionsDoneToday == true, data?.openingQuestionText))
+                }
+                .onFailure {
+                    dispatchAiReply(greetingText(fixedQuestionsDoneToday = false, openingQuestionText = null))
+                }
+        }
+    }
+
+    /**
+     * 세션 시작 직후 AI가 먼저 건네는 인사말.
+     * 오늘 고정질문을 이미 마쳤으면 바로 자유대화로 유도하고,
+     * 그렇지 않으면 서버가 내려준 첫 고정질문(FIXED_QUESTIONS[0], 단일 출처는 backend/ai)으로 이어간다.
+     */
+    private fun greetingText(fixedQuestionsDoneToday: Boolean, openingQuestionText: String?): String {
+        val greeting = "안녕하세요! 오늘도 반갑습니다."
+        return when {
+            fixedQuestionsDoneToday -> "$greeting 편하게 말씀해주세요."
+            !openingQuestionText.isNullOrBlank() -> "$greeting $openingQuestionText"
+            else -> "$greeting 편하게 말씀해주세요."
         }
     }
 
@@ -133,25 +158,86 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         _state = VoiceChatState.Processing
 
         viewModelScope.launch {
-            // 세션·파일이 있으면 업로드 시도 (실패해도 계속 진행)
+            var recordId = -1L
+
+            // 업로드 — 성공하면 recordId 확보
             if (file != null && sessionId > 0) {
                 runCatching {
                     val body = file.asRequestBody("audio/wav".toMediaType())
                     val part = MultipartBody.Part.createFormData("file", file.name, body)
-                    api.uploadVoice(userId, sessionId, part)
+                    val recallQuestionId = pendingRecallQuestionId
+                    val answerRole = if (recallQuestionId != null) "RECALL" else "INITIAL"
+
+                    api.uploadVoice(
+                        userId = userId,
+                        sessionId = sessionId,
+                        file = part,
+                        recallQuestionId = recallQuestionId,
+                        answerRole = answerRole
+                    )
+                }.onSuccess { resp ->
+                    resp.body()?.data?.audioRecordId?.let {
+                        recordId = it
+                        voiceUploaded = true
+                    }
                 }
             }
-            delay(2000L) // TODO: AI 응답 구현 후 제거
-            dispatchAiReply("AI답변 구현 예정입니다. 조금만기다려주세요!")
+
+            if (recordId > 0) {
+                pollForReply(recordId)
+            } else {
+                dispatchAiReply("음성 전송에 실패했어요. 다시 시도해주세요.")
+            }
         }
     }
 
-    // ── AI 응답 수신 (서버 미구현 — 나중에 연결) ──────────────────────────────
+    /** 업로드 완료 후 AI 답변이 올 때까지 2초 간격으로 폴링. 30초 타임아웃. */
+    private suspend fun pollForReply(recordId: Long) {
+        val timeoutMs  = 30_000L
+        val intervalMs =  2_000L
+        val startTime  = System.currentTimeMillis()
 
-    /**
-     * 서버에서 AI 응답 텍스트가 오면 이 함수를 호출한다.
-     * 현재는 미사용 — 백엔드 응답 엔드포인트 구현 후 연결할 것.
-     */
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            delay(intervalMs)
+            val replyText = runCatching { api.pollReply(recordId) }
+                .getOrNull()?.body()?.data?.replyText
+
+            if (!replyText.isNullOrBlank()) {
+                refreshPendingRecallQuestion(recordId)
+                dispatchAiReply(replyText)
+                return
+            }
+        }
+        dispatchAiReply("답변을 받아오지 못했어요. 잠시 후 다시 시도해주세요.")
+    }
+
+    private suspend fun refreshPendingRecallQuestion(recordId: Long) {
+        repeat(6) { attempt ->
+            val records = runCatching { api.getSessionRecords(sessionId) }
+                .getOrNull()
+                ?.body()
+                .orEmpty()
+
+            val current = records.firstOrNull { it.recordId == recordId }
+            val role = current?.answerRole?.uppercase()
+            val questionId = current?.recallQuestionId
+
+            if (role == "INITIAL" && questionId != null) {
+                pendingRecallQuestionId = questionId
+                return
+            }
+
+            if (role == "RECALL") {
+                pendingRecallQuestionId = null
+                return
+            }
+
+            if (attempt < 5) delay(500)
+        }
+    }
+
+    // ── AI 응답 수신 ──────────────────────────────────────────────────────────
+
     fun dispatchAiReply(text: String) {
         // 문장 분리 후 첫 문장부터 시작
         currentSentences = splitSentences(text).ifEmpty { listOf(text) }
@@ -208,6 +294,20 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         if (idx >= 0) _messages[idx] = lastAi.copy(isSpeaking = true)
         _state = VoiceChatState.Playing
         _speakTrigger++
+    }
+
+    // ── 세션 종료 ─────────────────────────────────────────────────────────────
+
+    /**
+     * 화면 이탈 시 호출 — 세션 종료 및 AI 분석 트리거.
+     * 중복 호출되더라도 최초 1회만 실행된다.
+     */
+    fun endSession() {
+        if (sessionId <= 0 || sessionEnded) return
+        sessionEnded = true
+        viewModelScope.launch {
+            runCatching { api.completeSession(sessionId) }
+        }
     }
 
     fun speakMessage(index: Int) {

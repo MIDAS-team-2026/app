@@ -5,10 +5,13 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionRepository;
 import com.example.backend.Model.Repository.UserRepository;
 import com.example.backend.Util.DefaultRecallQuestions;
+import com.example.backend.Util.JwtTokenProvider;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +24,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final RecallQuestionRepository recallQuestionRepository;
     private final BCryptPasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
     // 회원가입
     @Transactional
@@ -36,22 +40,26 @@ public class UserService {
         user.setName(dto.getName());
         user.setRole(dto.getRole());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        user.setAgeGroup(dto.getAgeGroup());
+        user.setGender(dto.getGender());
 
-        if ("PATIENT".equals(dto.getRole())) {
+        if ("PATIENT".equalsIgnoreCase(dto.getRole())) {
             // 환자 -> 보호자가 앱에서 환자와 연동할 수 있도록 고유한 8자리 초대 코드를 발급
             String randomCode;
             do {
                 randomCode = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
             } while (userRepository.existsByPatientCode(randomCode));
+
             user.setPatientCode(randomCode);
         } else {
             // 보호자 -> 코드가 필요 없으므로 null로 처리
             user.setPatientCode(null);
         }
+
         User savedUser = userRepository.save(user);
 
-        // 연관 데이터(질문 리스트) 생성
-        if ("PATIENT".equals(savedUser.getRole())) {
+        // 환자 회원가입 시 기본 회상 질문 생성
+        if ("PATIENT".equalsIgnoreCase(savedUser.getRole())) {
             setupDefaultRecallQuestions(savedUser);
         }
 
@@ -71,26 +79,49 @@ public class UserService {
                 })
                 .collect(Collectors.toList());
 
-        // 3. DB에 일괄 저장 (saveAll을 사용해 성능 최적화)
+        // DB에 일괄 저장
         recallQuestionRepository.saveAll(initialQuestions);
     }
-    // 보호자-환자 연동
-    @Transactional
-    public void linkProtector(Integer protectorId, String patientCode) {
-        // 입력된 코드로 환자 찾기
-        User patient = userRepository.findByPatientCode(patientCode)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
 
-        // 연동을 시도하는 보호자 정보 가져오기
+    // 보호자-환자 연동 해제
+    @Transactional
+    public void unlinkPatient(Integer protectorId, Integer patientId) {
         User protector = userRepository.findById(protectorId)
                 .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
 
-        // 역할 검증
-        if (!"PROTECTOR".equals(protector.getRole())) {
+        boolean removed = protector.getPatients().removeIf(p -> p.getId().equals(patientId));
+        if (!removed) {
+            throw new IllegalArgumentException("연동된 환자가 아닙니다.");
+        }
+    }
+
+    // 보호자-환자 연동
+    @Transactional
+    public void linkProtector(Integer protectorId, String patientCode) {
+        User patient = userRepository.findByPatientCode(patientCode)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
+
+        User protector = userRepository.findById(protectorId)
+                .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
+
+        if (!"PROTECTOR".equalsIgnoreCase(protector.getRole())) {
             throw new IllegalStateException("보호자 계정만 환자를 등록할 수 있습니다.");
         }
 
-        protector.setTargetPatient(patient);
+        // 이미 연동된 경우 중복 추가 방지
+        boolean alreadyLinked = protector.getPatients().stream()
+                .anyMatch(p -> p.getId().equals(patient.getId()));
+        if (alreadyLinked) {
+            throw new IllegalStateException("이미 연동된 환자입니다.");
+        }
+
+        protector.getPatients().add(patient);
+    }
+
+    // 환자 코드로 환자 조회
+    public User findByPatientCode(String patientCode) {
+        return userRepository.findByPatientCode(patientCode)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 환자 코드입니다."));
     }
 
     public boolean existsByPhone(String phone) {
@@ -101,6 +132,7 @@ public class UserService {
     public void resetPassword(String phone, String newPassword) {
         User user = userRepository.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
         user.setPassword(passwordEncoder.encode(newPassword));
     }
 
@@ -109,6 +141,7 @@ public class UserService {
     public void deleteUser(String phone) {
         User user = userRepository.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
+
         userRepository.delete(user);
     }
 
@@ -117,5 +150,79 @@ public class UserService {
         return userRepository.findByPhone(phone)
                 .filter(u -> passwordEncoder.matches(password, u.getPassword()))
                 .orElse(null);
+    }
+
+    // 환자에 연결된 보호자 목록
+    public List<User> getGuardiansByPatient(Integer patientId) {
+        return userRepository.findByPatients_Id(patientId);
+    }
+
+    // 보호자가 연결한 환자 목록
+    public List<User> getPatientsByProtector(Integer protectorId) {
+        User protector = userRepository.findById(protectorId)
+                .orElseThrow(() -> new IllegalArgumentException("보호자 정보를 찾을 수 없습니다."));
+
+        if (!"PROTECTOR".equalsIgnoreCase(protector.getRole())) {
+            throw new IllegalStateException("보호자 계정만 연결된 환자 목록을 조회할 수 있습니다.");
+        }
+
+        return protector.getPatients();
+    }
+
+    // 민감정보 접근 권한 검사
+    // 허용 조건:
+    // 1. 요청자가 targetUserId 본인인 경우
+    // 2. 요청자가 보호자이고, targetUserId 환자와 연결되어 있는 경우
+    @Transactional
+    public User validatePatientAccess(String authorizationHeader, Integer targetUserId) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "로그인이 필요합니다."
+            );
+        }
+
+        String token = authorizationHeader.substring(7);
+
+        if (!jwtTokenProvider.validateToken(token)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "유효하지 않은 토큰입니다."
+            );
+        }
+
+        String requesterPhone = jwtTokenProvider.getPhoneFromToken(token);
+
+        User requester = userRepository.findByPhone(requesterPhone)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "토큰 사용자 정보를 찾을 수 없습니다."
+                ));
+
+        User targetUser = userRepository.findById(targetUserId)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "대상 사용자를 찾을 수 없습니다."
+                ));
+
+        // 본인 정보 접근 허용
+        if (requester.getId().equals(targetUser.getId())) {
+            return requester;
+        }
+
+        // 연결된 보호자 접근 허용
+        if ("PROTECTOR".equalsIgnoreCase(requester.getRole())) {
+            boolean linkedPatient = requester.getPatients().stream()
+                    .anyMatch(patient -> patient.getId().equals(targetUserId));
+
+            if (linkedPatient) {
+                return requester;
+            }
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.FORBIDDEN,
+                "해당 사용자 정보에 접근할 권한이 없습니다."
+        );
     }
 }

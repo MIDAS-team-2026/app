@@ -1,0 +1,12 @@
+{
+  "profile_name": "elderly_chatbot_baseline_default",
+  "description": "Default fallback thresholds for elderly chatbot baseline speech scoring.",
+  "thresholds": {
+    "short_answer_word_count": 5,
+    "slow_speech_rate_word": 1.117,
+    "slow_speech_rate_char": 3.103,
+    "long_record_time": 6.4,
+    "low_content_word_count": 6
+  },
+  "source": "repo_default"
+}

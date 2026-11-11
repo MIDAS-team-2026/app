@@ -19,9 +19,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green600
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 
 /**
@@ -50,9 +49,9 @@ fun AppPrimaryButton(
             .height(64.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Green400,
+            containerColor = AppColor.greenPrimary,
             contentColor = BrandWhite,
-            disabledContainerColor = Green400.copy(alpha = 0.4f),
+            disabledContainerColor = AppColor.greenPrimary.copy(alpha = 0.4f),
             disabledContentColor = BrandWhite.copy(alpha = 0.7f)
         )
     ) {
@@ -91,7 +90,7 @@ fun AppOutlineButton(
             .height(64.dp),
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = Green600
+            contentColor = AppColor.accentDark
         )
     ) {
         Text(text = text, style = MaterialTheme.typography.labelLarge)

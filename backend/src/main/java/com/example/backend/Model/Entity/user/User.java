@@ -8,6 +8,7 @@ import lombok.Setter;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,17 +39,18 @@ public class User {
     @Column(name = "patient_code", length = 20)
     private String patientCode;
 
-    @Column(name = "connected_user_id")
-    private Integer connectedUserId;
+    // 보호자 -> 연결된 환자 목록 (N:M)
+    @ManyToMany
+    @JoinTable(
+        name = "guardian_patient",
+        joinColumns = @JoinColumn(name = "guardian_id"),
+        inverseJoinColumns = @JoinColumn(name = "patient_id")
+    )
+    private List<User> patients = new ArrayList<>();
 
-    // 보호자 -> 환자
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "target_patient_id")
-    private User targetPatient;
-
-    // 환자 -> 보호자
-    @OneToMany(mappedBy = "targetPatient", cascade = CascadeType.ALL)
-    private List<User> protectors = new ArrayList<>();
+    // 환자 -> 연결된 보호자 목록 (N:M 역방향)
+    @ManyToMany(mappedBy = "patients")
+    private List<User> guardians = new ArrayList<>();
 
     @Column(name = "age_group")
     private Integer ageGroup;
@@ -59,6 +61,15 @@ public class User {
     @CreatedDate // 자동으로 생성 시간 주입
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    // 고정질문(초기 5문항)을 마지막으로 완료한 날짜 — 하루 1회 노출 제한에 사용
+    @Column(name = "last_fixed_question_date")
+    private LocalDate lastFixedQuestionDate;
+
+    // 고정질문 5개(온보딩)를 최초로 다 마쳤는지 여부.
+    // true가 되면 이후로는 매일 5개 중 1개만 무작위로 노출한다.
+    @Column(name = "fixed_onboarding_done", nullable = false)
+    private boolean fixedOnboardingDone = false;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
     private List<ChatSession> chatSessions = new ArrayList<>();

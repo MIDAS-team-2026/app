@@ -6,6 +6,7 @@ import com.google.gson.Gson
 import com.midas26.mobileapp.network.ApiResponse
 import com.midas26.mobileapp.network.LoginRequest
 import com.midas26.mobileapp.network.RetrofitClient
+import com.midas26.mobileapp.network.SendCodeRequest
 import com.midas26.mobileapp.network.SignupRequest
 import com.midas26.mobileapp.network.UserResponse
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import kotlinx.coroutines.launch
 sealed class AuthState {
     object Idle : AuthState()
     object Loading : AuthState()
+    object PhoneChecked : AuthState()   // 전화번호 중복 없음 + 인증코드 발송 완료
     data class Success(val user: UserResponse) : AuthState()
     data class Error(val message: String) : AuthState()
 }
@@ -29,16 +31,46 @@ class AuthViewModel : ViewModel() {
     var pendingPassword: String = ""; private set
     var pendingName: String = ""; private set
     var pendingRole: String = ""; private set
+    var pendingBirth: String = ""; private set
+    var pendingCodeSent: Boolean = false; private set
+    var pendingCodeSentPhone: String = ""; private set
 
-    fun savePendingSignupData(phone: String, password: String, name: String, role: String) {
+    fun markCodeSent(phone: String) { pendingCodeSent = true; pendingCodeSentPhone = phone }
+    fun clearCodeSent() { pendingCodeSent = false; pendingCodeSentPhone = "" }
+
+    fun savePendingSignupData(phone: String, password: String, name: String, role: String, birth: String = "") {
         pendingPhone = phone
         pendingPassword = password
         pendingName = name
         pendingRole = role
+        pendingBirth = birth
     }
 
     fun signupFromPending() {
         signup(pendingPhone, pendingPassword, pendingName, pendingRole)
+    }
+
+    /** 회원가입 전 전화번호 중복 체크 + 인증코드 발송. 성공하면 PhoneChecked 상태. */
+    fun checkPhoneAndSendCode(phone: String) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            try {
+                val response = RetrofitClient.instance.sendCode(SendCodeRequest(phone, "SIGNUP"))
+                if (response.isSuccessful) {
+                    _authState.value = AuthState.PhoneChecked
+                } else {
+                    val message = try {
+                        val json = response.errorBody()?.string()
+                        if (!json.isNullOrEmpty())
+                            Gson().fromJson(json, ApiResponse::class.java).message ?: "전화번호 확인에 실패했습니다."
+                        else "전화번호 확인에 실패했습니다."
+                    } catch (e: Exception) { "전화번호 확인에 실패했습니다." }
+                    _authState.value = AuthState.Error(message)
+                }
+            } catch (e: Exception) {
+                _authState.value = AuthState.Error("서버에 연결할 수 없습니다.")
+            }
+        }
     }
 
     fun login(phone: String, password: String) {

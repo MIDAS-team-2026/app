@@ -44,7 +44,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
-import com.midas26.mobileapp.ui.theme.Green400
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
@@ -88,11 +87,12 @@ fun SignupCompleteScreen(
     }
 
     val isLoading = authState is AuthState.Loading
+    val isGuardian = viewModel.pendingRole == PrefsManager.ROLE_GUARDIAN
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Green400)
+            .background(AppColor.greenPrimary)
     ) {
         // 흰 원 장식
         Box(
@@ -149,8 +149,8 @@ fun SignupCompleteScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 코드 박스
-            Surface(
+            // 코드 박스 — 사용자 전용
+            if (!isGuardian) Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 color = BrandWhite.copy(alpha = 0.16f)
@@ -256,8 +256,8 @@ fun SignupCompleteScreen(
             }
         }
 
-        // 하단 "홈으로 시작하기" 버튼 — 코드가 발급된 후에만 활성화
-        val homeButtonEnabled = userCode.isNotEmpty()
+        // 하단 "홈으로 시작하기" 버튼 — 보호자는 바로 활성화, 사용자는 코드 발급 후 활성화
+        val homeButtonEnabled = isGuardian || userCode.isNotEmpty()
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)

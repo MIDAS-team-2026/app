@@ -106,3 +106,75 @@ model/midas_recall_model/
 ```
 
 학습된 모델 파일은 용량이 커질 수 있으므로 필요 시 별도 클라우드 저장소에 보관하고 README에 경로만 작성한다.
+
+## 6. GPT 기반 대화형 회상 질문 생성
+
+`conversation_recall_generator.py`는 사용자의 자유 대화 내용을 기반으로 기억 포인트를 추출하고, 이후 다시 물어볼 자연스러운 회상 질문을 생성한다.
+
+### 6.1 기능
+
+- 자유 대화 transcript 기반 기억 포인트 추출
+- 정답을 직접 포함하지 않는 자연스러운 회상 질문 생성
+- YNU API Gateway 기반 GPT 호출
+- 생성된 질문은 이후 사용자의 답변과 비교하여 회상 일치도 계산에 활용 가능
+
+### 6.2 실행 전 환경변수 설정
+
+```powershell
+$env:YNU_API_KEY="발급받은키"
+```
+
+### 6.3 실행 방법
+
+```powershell
+python conversation_recall_generator.py
+```
+
+### 6.4 처리 흐름
+
+```text
+자유 대화 transcript
+→ GPT 기억 포인트 추출
+→ 자연스러운 회상 질문 생성
+→ 이후 사용자 답변 수집
+→ 기존 대화 내용과 답변 비교
+→ 회상 일치도 계산
+```
+
+### 6.5 주의사항
+
+- YNU API 키는 GitHub에 업로드하지 않는다.
+- 앱에는 API 키를 포함하지 않는다.
+- GPT Gateway 호출은 서버 또는 Python 모듈에서만 수행한다.
+
+## 7. memoryPoint 후보 엔진 계약
+
+`memory_candidate_service.py`는 LLM 호출 전에 대화 원문을 사건과 기억
+단서로 구조화한다. 원문을 합치거나 새 사실을 만들지 않는다.
+
+- `eventId`: 같은 사건을 구분하는 안정적인 ID
+- `sourceRecordIds`: 사건에 포함된 원본 레코드 ID
+- `evidence`: 원문, 턴 순서, 단서와 정정 여부
+- `answerValues`: 사건에서 확인된 유형별 단서 전체
+- `recallClue`: 이번 회상 질문에 사용할 단서 하나와 원문 출처
+
+```json
+{
+  "eventId": "ACTIVITY:80",
+  "sourceRecordIds": [80, 81],
+  "answerValues": {
+    "PERSON": ["딸"],
+    "PLACE": ["공원"],
+    "ACTIVITY": ["산책"]
+  },
+  "recallClue": {
+    "sourceRecordId": 80,
+    "sourceText": "딸과 공원에서 산책했어",
+    "answerType": "ACTIVITY",
+    "answerValue": "산책"
+  }
+}
+```
+
+회상 후보는 독립 사건 2개부터 사용할 수 있다. 대화가 자연스럽게
+이어지는 동안에는 3개까지 축적하고, 주제 전환 지점에서 하나를 선택한다.

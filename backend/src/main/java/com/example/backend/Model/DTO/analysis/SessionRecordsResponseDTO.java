@@ -15,4 +15,6 @@ public class SessionRecordsResponseDTO {
     private String audioFilePath;
     private String answerRole; // INITIAL, RECALL
     private Long recallQuestionId;
+    private Long parentRecordId;
+    private String aiReplyText;
 }

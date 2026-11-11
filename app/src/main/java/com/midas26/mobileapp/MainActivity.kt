@@ -2,6 +2,7 @@ package com.midas26.mobileapp
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.platform.LocalContext
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
@@ -13,9 +14,14 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -24,6 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.rememberNavController
+import androidx.activity.viewModels
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.midas26.mobileapp.ui.analysis.AnalysisViewModel
 import com.midas26.mobileapp.ui.navigation.AppNavHost
 import com.midas26.mobileapp.ui.navigation.Routes
 import com.midas26.mobileapp.ui.onboarding.SplashScreen
@@ -32,7 +41,9 @@ import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.theme.LocalHighContrast
+import com.midas26.mobileapp.ui.theme.LocalTapToReplay
 import com.midas26.mobileapp.ui.theme.LocalTtsManager
+import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.util.TtsManager
 
@@ -43,6 +54,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val prefs = PrefsManager.from(this)
+        RetrofitClient.init(tokenProvider = { prefs.getToken() })
         ttsManager = TtsManager(this).apply { setSpeed(prefs.getTtsSpeed()) }
         enableEdgeToEdge()
         setContent {
@@ -60,15 +72,41 @@ class MainActivity : ComponentActivity() {
 fun AppRoot(ttsManager: TtsManager? = null) {
     val context = LocalContext.current
     val prefs = PrefsManager.from(context)
+    val analysisViewModel: AnalysisViewModel = viewModel(context as ComponentActivity)
     var fontSizeLevel by remember {
         mutableStateOf(FontSizeLevel.fromIndex(prefs.getAccessibilityFontSize()))
     }
     var highContrast by remember { mutableStateOf(prefs.getHighContrast()) }
     var hapticEnabled by remember { mutableStateOf(prefs.getHapticFeedback()) }
+    var tapToReplay by remember { mutableStateOf(prefs.getTapToReplay()) }
     var voiceChatEnabled by remember { mutableStateOf(prefs.getVoiceChatEnabled()) }
 
     val navController = rememberNavController()
     var splashVisible by remember { mutableStateOf(true) }
+    var forceLogout by remember { mutableStateOf(false) }
+
+    // onUnauthorized는 OkHttp 스레드에서 호출되므로 main thread로 전환
+    DisposableEffect(Unit) {
+        RetrofitClient.init(
+            tokenProvider = { prefs.getToken() },
+            onUnauthorized = {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    prefs.clearToken()
+                    forceLogout = true
+                }
+            }
+        )
+        onDispose { }
+    }
+
+    LaunchedEffect(forceLogout) {
+        if (forceLogout) {
+            navController.navigate(Routes.Login) {
+                popUpTo(0) { inclusive = true }
+            }
+            forceLogout = false
+        }
+    }
 
     // 앱 시작 시 한 번만 계산 — NavHost가 처음부터 올바른 화면에서 시작
     val startDestination = remember {
@@ -84,6 +122,7 @@ fun AppRoot(ttsManager: TtsManager? = null) {
         LocalFontSizeScale provides fontSizeLevel,
         LocalHighContrast provides highContrast,
         LocalHapticEnabled provides hapticEnabled,
+        LocalTapToReplay provides tapToReplay,
         LocalTtsManager provides if (voiceChatEnabled) ttsManager else null
     ) {
         AppTheme {
@@ -98,8 +137,9 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             .padding(innerPadding)
                     ) {
                         AppNavHost(
-                            navController = navController,
-                            startDestination = startDestination,
+                            navController     = navController,
+                            startDestination  = startDestination,
+                            analysisViewModel = analysisViewModel,
                             onFontSizeChange = { level ->
                                 fontSizeLevel = level
                                 prefs.setAccessibilityFontSize(level.ordinal)
@@ -112,6 +152,9 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                                 hapticEnabled = enabled
                                 prefs.setHapticFeedback(enabled)
                             },
+                            onTapToReplayChange = { enabled ->
+                                tapToReplay = enabled
+                            },
                             onSpeedChange = { speed ->
                                 ttsManager?.setSpeed(speed)
                             },
@@ -123,6 +166,27 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             }
                         )
                     }
+                }
+
+                // ── 서버 연결 실패 다이얼로그 ─────────────────────────────────────
+                val networkError = analysisViewModel.networkError
+                if (networkError != null) {
+                    AlertDialog(
+                        onDismissRequest = { },
+                        title = { Text("서버 연결 실패") },
+                        text  = { Text("서버 연결에 실패했습니다.\n오류코드: $networkError") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                analysisViewModel.clearNetworkError()
+                                splashVisible = false
+                                navController.navigate(Routes.Login) {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            }) {
+                                Text("확인")
+                            }
+                        }
+                    )
                 }
 
                 // ── Splash 오버레이 — Scaffold/BottomBar 포함 전체 화면을 덮음 ──
@@ -144,9 +208,11 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             }
                     ) {
                         SplashScreen(
-                            onNavigateToHome        = { splashVisible = false },
-                            onNavigateToLogin       = { splashVisible = false },
-                            onNavigateToOnboarding  = { splashVisible = false }
+                            onNavigateToHome       = { splashVisible = false },
+                            onNavigateToLogin      = { splashVisible = false },
+                            onNavigateToOnboarding = { splashVisible = false },
+                            isDataReady            = analysisViewModel.isInitialLoadDone,
+                            hasNetworkError        = analysisViewModel.networkError != null,
                         )
                     }
                 }

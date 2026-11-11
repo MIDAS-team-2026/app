@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Phone
@@ -36,7 +37,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.Green500
 
 @Composable
 fun ForgotPasswordScreen(
@@ -73,11 +73,13 @@ fun ForgotPasswordScreen(
         return phoneError == null
     }
 
+    val scrollState = rememberScrollState()
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp)
     ) {
         Spacer(modifier = Modifier.height(24.dp))
@@ -134,7 +136,7 @@ fun ForgotPasswordScreen(
 
         if (isLoading) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Green500)
+                CircularProgressIndicator(color = AppColor.greenSecondary)
             }
         } else {
             AppPrimaryButton(
@@ -142,5 +144,7 @@ fun ForgotPasswordScreen(
                 onClick = { if (validate()) viewModel.checkPhone(phone.trim()) }
             )
         }
+    }
+    VerticalScrollbar(state = scrollState, modifier = Modifier.align(Alignment.TopEnd))
     }
 }

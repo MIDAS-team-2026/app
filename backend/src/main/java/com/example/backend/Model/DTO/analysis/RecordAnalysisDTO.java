@@ -22,6 +22,13 @@ public class RecordAnalysisDTO {
         private Float mfcc1Std, mfcc2Std, mfcc3Std, mfcc4Std, mfcc5Std, mfcc6Std, mfcc7Std, mfcc8Std, mfcc9Std, mfcc10Std, mfcc11Std, mfcc12Std, mfcc13Std;
         private Float speechRate, articulationScore, pronunciationStability, responseLatency;
         private Integer repetitionCount, fillerCount;
+        private Boolean egemapsAvailable;
+        private String egemapsError;
+        private Float f0SemitoneMean, f0SemitoneStddevNorm;
+        private Float jitterLocal, shimmerLocalDb, hnrDb;
+        private Float voicedSegmentsPerSec, meanVoicedSegmentLength, meanUnvoicedSegmentLength;
+        private Integer voiceBreakCount;
+        private Float voiceBreakRatio;
 
         @JsonAlias("dysarthria_similarity_score")
         private Float dysarthriaSimilarityScore;

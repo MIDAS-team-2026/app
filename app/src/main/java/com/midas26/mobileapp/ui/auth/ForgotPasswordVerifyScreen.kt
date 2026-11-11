@@ -18,12 +18,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,20 +38,40 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.ui.theme.Gray200
-import com.midas26.mobileapp.ui.theme.Green400
-import com.midas26.mobileapp.ui.theme.Green50
 
 @Composable
 fun ForgotPasswordVerifyScreen(
     phone: String,
     onBack: () -> Unit,
-    onVerified: (phone: String) -> Unit
+    onVerified: (phone: String) -> Unit,
+    viewModel: PhoneVerificationViewModel = viewModel()
 ) {
     var code by remember { mutableStateOf("") }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
+    val state by viewModel.state.collectAsState()
+    val isLoading = state is VerificationState.Sending || state is VerificationState.Verifying
+
+    // 화면 진입 시 인증번호 발송 (비밀번호 찾기용 — 미가입 번호 차단)
+    LaunchedEffect(Unit) {
+        viewModel.sendCode(phone, "FORGOT_PASSWORD")
+    }
+
+    LaunchedEffect(state) {
+        when (state) {
+            is VerificationState.Verified -> {
+                viewModel.resetState()
+                onVerified(phone)
+            }
+            is VerificationState.Error -> {
+                errorMsg = (state as VerificationState.Error).message
+            }
+            else -> {}
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -83,15 +105,29 @@ fun ForgotPasswordVerifyScreen(
         )
         Spacer(modifier = Modifier.height(48.dp))
 
-        OtpRow(code = code, onCodeChange = { code = it })
+        OtpRow(code = code, onCodeChange = { code = it; errorMsg = null })
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Spacer(modifier = Modifier.height(32.dp))
+        if (errorMsg != null) {
+            Text(
+                text = errorMsg!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = AppColor.errorPrimary,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        Spacer(modifier = Modifier.height(24.dp))
 
         AppPrimaryButton(
-            text = "확인",
-            onClick = { if (code.length == 6) onVerified(phone) },
-            enabled = code.length == 6
+            text = if (isLoading) "" else "확인",
+            onClick = { if (code.length == 6) viewModel.verifyCode(phone, code) },
+            enabled = code.length == 6 && !isLoading
         )
+        if (isLoading) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            }
+        }
     }
 }
 
@@ -117,15 +153,15 @@ private fun OtpRow(code: String, onCodeChange: (String) -> Unit) {
                     modifier = Modifier
                         .size(52.dp)
                         .background(
-                            color = if (char != null) Green50 else BrandWhite,
+                            color = if (char != null) AppColor.greenSurface else BrandWhite,
                             shape = RoundedCornerShape(14.dp)
                         )
                         .border(
                             width = if (isFocused) 2.dp else 1.5.dp,
                             color = when {
-                                isFocused -> Green400
-                                char != null -> Green400.copy(alpha = 0.5f)
-                                else -> Gray200
+                                isFocused -> AppColor.greenPrimary
+                                char != null -> AppColor.greenPrimary.copy(alpha = 0.5f)
+                                else -> AppColor.divider
                             },
                             shape = RoundedCornerShape(14.dp)
                         )
