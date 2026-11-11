@@ -69,7 +69,7 @@ import androidx.compose.foundation.layout.offset
 fun ProfileEditScreen(
     initialName: String = "",
     initialPhone: String = "",
-    /** 보호자일 때 연결된 환자 목록, 환자일 때 null */
+    // 보호자일 때 연결된 환자 목록, 환자일 때 null
     linkedPatients: List<com.midas26.mobileapp.network.LinkedUserInfo>? = null,
     onBack: () -> Unit = {},
     viewModel: ProfileEditViewModel = viewModel()
@@ -142,7 +142,7 @@ fun ProfileEditScreen(
             .fillMaxSize()
             .background(BrandWhite)
     ) {
-        // ── 스크롤 콘텐츠 ────────────────────────────────────────────
+        // 스크롤 콘텐츠
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -170,7 +170,7 @@ fun ProfileEditScreen(
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = if (hasCode) AppColor.textPrimary
-                                        else AppColor.textTertiary,
+                                else AppColor.textTertiary,
                                 letterSpacing = 3.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -267,7 +267,7 @@ fun ProfileEditScreen(
                                                 color = AppColor.textPrimary
                                             )
                                             Text(
-                                                text = protector.phone ?: "",
+                                                text = formatPhoneNumber(protector.phone),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = AppColor.textTertiary
                                             )
@@ -363,7 +363,7 @@ fun ProfileEditScreen(
                                                 color = AppColor.textPrimary
                                             )
                                             Text(
-                                                text = patient.phone ?: "",
+                                                text = formatPhoneNumber(patient.phone),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = AppColor.textTertiary
                                             )
@@ -401,7 +401,7 @@ fun ProfileEditScreen(
                         imeAction = ImeAction.None
                     )
                     AppOutlinedTextField(
-                        value = initialPhone,
+                        value = formatPhoneNumber(initialPhone),
                         onValueChange = {},
                         label = "전화번호",
                         leadingIcon = Icons.Filled.Phone,
@@ -476,8 +476,8 @@ fun ProfileEditScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             val hasChanges = currentPassword.isNotEmpty() ||
-                             newPassword.isNotEmpty() ||
-                             confirmPassword.isNotEmpty()
+                    newPassword.isNotEmpty() ||
+                    confirmPassword.isNotEmpty()
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -515,7 +515,7 @@ fun ProfileEditScreen(
             Spacer(modifier = Modifier.height(32.dp))
         }
 
-        // ── 스크롤바 오버레이 (헤더 접힘 모션과 동기화) ─────────────
+        // 스크롤바 오버레이 (헤더 접힘 모션과 동기화)
         val profileHeaderHeight = (200.dp - 128.dp * p).coerceAtLeast(72.dp)
         VerticalScrollbar(
             state = scrollState,
@@ -524,7 +524,7 @@ fun ProfileEditScreen(
                 .padding(top = profileHeaderHeight)
         )
 
-        // ── 접히는 헤더 (스크롤 위에 오버레이) ──────────────────────
+        // 접히는 헤더 (스크롤 위에 오버레이)
         CollapsingProfileHeader(p = p, userName = initialName, isGuardian = !isPatient, onBack = onBack)
     }
 }
@@ -552,10 +552,10 @@ private fun CollapsingProfileHeader(
             .height(headerHeight)
             .background(brush = Brush.verticalGradient(
                 colors = if (isGuardian) listOf(AppColor.guardianDark, AppColor.guardianPrimary)
-                         else listOf(AppColor.accentDark, AppColor.greenPrimary)
+                else listOf(AppColor.accentDark, AppColor.greenPrimary)
             ))
     ) {
-        // ── 확장 아바타 (헤더 하단 중앙에 반 걸침, 접힐수록 사라짐) ──
+        // 확장 아바타(헤더 하단 중앙에 반 걸침, 접힐수록 사라짐)
         Surface(
             shape = CircleShape,
             color = BrandWhite,
@@ -574,7 +574,7 @@ private fun CollapsingProfileHeader(
             )
         }
 
-        // ── 확장 상태 라벨 (이미지 위, 접힐수록 사라짐) ──────────
+        // 확장 상태 라벨
         Text(
             text = "${userName} 님의 프로필",
             style = MaterialTheme.typography.headlineLarge,
@@ -586,7 +586,7 @@ private fun CollapsingProfileHeader(
                 .alpha((1f - pe).coerceAtLeast(0f))
         )
 
-        // ── 네비 행 (항상 상단 고정) ──────────────────────────────
+        // 네비 행(항상 상단 고정)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -603,7 +603,7 @@ private fun CollapsingProfileHeader(
                     modifier = Modifier.size(28.dp)
                 )
             }
-            // 앱바 타이틀 — 접힐수록 나타남
+            // 앱바 타이틀(접힐수록 나타남)
             Text(
                 text = "프로필",
                 style = MaterialTheme.typography.titleLarge,
@@ -614,7 +614,7 @@ private fun CollapsingProfileHeader(
                     .padding(start = 4.dp)
                     .alpha(pe)
             )
-            // 미니 아바타 (접힘 상태에서만 등장)
+            // 미니 아바타(접힘 상태에서만 등장)
             Surface(
                 shape = CircleShape,
                 color = BrandWhite,
@@ -657,5 +657,15 @@ private fun ProfileSection(
         ) {
             content()
         }
+    }
+}
+
+private fun formatPhoneNumber(phone: String?): String {
+    if (phone.isNullOrBlank()) return ""
+    val digits = phone.filter { it.isDigit() }
+    return when (digits.length) {
+        11 -> "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+        10 -> "${digits.substring(0, 3)}-${digits.substring(3, 6)}-${digits.substring(6)}"
+        else -> phone
     }
 }
