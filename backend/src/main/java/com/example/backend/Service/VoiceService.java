@@ -84,7 +84,7 @@ public class VoiceService {
 
         return VoiceResponseDTO.builder()
                 .audioRecordId(savedRecord.getId())
-                .audioFilePath(savedRecord.getAudioFilePath())
+                .audioFilePath(s3Service.generatePresignedGetUrl(savedRecord.getAudioFilePath()))
                 .transcriptText(sttResult.getTranscriptText())
                 .turnOrder(savedRecord.getTurnOrder())
                 .recordedAt(savedRecord.getRecordedAt())
@@ -171,7 +171,7 @@ public class VoiceService {
                 .map(record -> new SessionRecordsResponseDTO(
                         record.getId(),
                         record.getTranscriptText(),
-                        record.getAudioFilePath(),
+                        s3Service.generatePresignedGetUrl(record.getAudioFilePath()),
                         record.getAnswerRole() != null ? record.getAnswerRole().toString() : null,
                         record.getRecallQuestionId(),
                         record.getParentRecord() != null ? record.getParentRecord().getId() : null,
