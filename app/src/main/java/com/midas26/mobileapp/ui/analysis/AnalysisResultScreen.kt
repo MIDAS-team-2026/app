@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -1024,8 +1025,7 @@ private fun WeeklyLineChart(
                 lineTo(xs.first(), ys.first())
 
                 for (i in 1 until xs.size) {
-                    val cx = (xs[i - 1] + xs[i]) / 2f
-                    cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
+                    lineTo(xs[i], ys[i])
                 }
 
                 lineTo(xs.last(), h - pad)
@@ -1046,8 +1046,7 @@ private fun WeeklyLineChart(
                 moveTo(xs.first(), ys.first())
 
                 for (i in 1 until xs.size) {
-                    val cx = (xs[i - 1] + xs[i]) / 2f
-                    cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
+                    lineTo(xs[i], ys[i])
                 }
             }
 
@@ -1058,7 +1057,7 @@ private fun WeeklyLineChart(
                     startX = 0f,
                     endX = w
                 ),
-                style = Stroke(width = 8f)
+                style = Stroke(width = 8f, join = StrokeJoin.Miter)
             )
 
             for (i in points.indices) {
