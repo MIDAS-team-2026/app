@@ -308,7 +308,9 @@ public class AiAnalysisService {
     }
 
     private String resolveRiskLevel(float score) {
-        if (score < 30f) return "LOW";
+        // 서비스 운영 기준: LOW < 40, MEDIUM < 60, HIGH >= 60.
+        // HIGH 경계는 보호자 알림 기준(60점)과 동일하게 유지한다.
+        if (score < 40f) return "LOW";
         if (score < 60f) return "MEDIUM";
         return "HIGH";
     }

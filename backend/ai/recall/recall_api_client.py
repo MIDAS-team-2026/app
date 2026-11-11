@@ -392,7 +392,9 @@ def calculate_final_risk_from_text_score(
 
     final_risk_score = clamp_score(final_risk_score)
 
-    if final_risk_score < 30:
+    # 서비스 운영 기준: LOW < 40, MEDIUM < 60, HIGH >= 60.
+    # HIGH 경계 60은 보호자 알림 기준과 동일하게 유지한다.
+    if final_risk_score < 40:
         risk_level = "LOW"
     elif final_risk_score < 60:
         risk_level = "MEDIUM"
