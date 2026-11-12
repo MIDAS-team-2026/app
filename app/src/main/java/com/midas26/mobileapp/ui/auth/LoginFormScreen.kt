@@ -49,8 +49,21 @@ import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.util.PrefsManager
+
+private fun formatPhoneNumber(input: String): String {
+    val digits = input.filter { it.isDigit() }.take(11)
+
+    return when {
+        digits.length <= 3 -> digits
+
+        digits.length <= 7 ->
+            "${digits.substring(0, 3)}-${digits.substring(3)}"
+
+        else ->
+            "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,18 +88,22 @@ fun LoginFormScreen(
             is AuthState.Success -> {
                 val user = (authState as AuthState.Success).user
                 val prefs = PrefsManager.from(context)
+
                 prefs.saveToken(user.token.orEmpty())
                 prefs.saveUserId(user.userId ?: -1)
                 prefs.saveUserName(user.name.orEmpty())
                 prefs.saveUserPhone(user.phone.orEmpty())
                 prefs.saveUserRole(user.role.orEmpty())
                 prefs.saveUserCode(user.patientCode.orEmpty())
+
                 viewModel.resetState()
                 onNavigateToHome()
             }
+
             is AuthState.Error -> {
                 serverError = (authState as AuthState.Error).message
             }
+
             else -> {}
         }
     }
@@ -97,16 +114,37 @@ fun LoginFormScreen(
 
     fun validate(): Boolean {
         var ok = true
+
+        val rawPhone = phone.filter { it.isDigit() }
+
         phoneError = when {
-            phone.trim().isEmpty() -> { ok = false; errorRequired }
-            !phone.trim().matches(Regex("^01[0-9]{8,9}$")) -> { ok = false; errorPhoneInvalid }
+            rawPhone.isEmpty() -> {
+                ok = false
+                errorRequired
+            }
+
+            !rawPhone.matches(Regex("^01[0-9]{8,9}$")) -> {
+                ok = false
+                errorPhoneInvalid
+            }
+
             else -> null
         }
+
         passwordError = when {
-            password.isEmpty() -> { ok = false; errorRequired }
-            password.length < 8 -> { ok = false; errorPasswordShort }
+            password.isEmpty() -> {
+                ok = false
+                errorRequired
+            }
+
+            password.length < 8 -> {
+                ok = false
+                errorPasswordShort
+            }
+
             else -> null
         }
+
         return ok
     }
 
@@ -167,10 +205,11 @@ fun LoginFormScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
+                // [수정] 전화번호 자동 하이픈 적용
                 AppOutlinedTextField(
                     value = phone,
                     onValueChange = {
-                        phone = it.filter { c -> c.isDigit() }
+                        phone = formatPhoneNumber(it)
                         phoneError = null
                         serverError = null
                     },
@@ -178,7 +217,7 @@ fun LoginFormScreen(
                     leadingIcon = Icons.Filled.Phone,
                     keyboardType = KeyboardType.Phone,
                     imeAction = ImeAction.Next,
-                    maxLength = 11,
+                    maxLength = 13,
                     errorText = phoneError
                 )
 
@@ -198,6 +237,7 @@ fun LoginFormScreen(
 
                 if (serverError != null) {
                     Spacer(modifier = Modifier.height(8.dp))
+
                     Text(
                         text = serverError!!,
                         style = MaterialTheme.typography.bodySmall,
@@ -222,13 +262,18 @@ fun LoginFormScreen(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = AppColor.greenSecondary)
+                        CircularProgressIndicator(
+                            color = AppColor.greenSecondary
+                        )
                     }
                 } else {
                     AppPrimaryButton(
                         text = stringResource(R.string.btn_login),
                         onClick = {
-                            if (validate()) viewModel.login(phone.trim(), password)
+                            if (validate()) {
+                                val rawPhone = phone.filter { it.isDigit() }
+                                viewModel.login(rawPhone, password)
+                            }
                         }
                     )
                 }
