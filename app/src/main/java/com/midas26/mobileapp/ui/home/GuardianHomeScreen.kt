@@ -1,7 +1,5 @@
 package com.midas26.mobileapp.ui.home
 
-import com.midas26.mobileapp.ui.theme.AppColor
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -28,6 +26,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
@@ -57,9 +56,25 @@ fun GuardianHomeScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
-    var selectedPatient by remember(patients) {
-        mutableStateOf(patients.firstOrNull())
+    // 튜토리얼 중에는 실제 연결 사용자 정보를 노출하지 않는다.
+    val showDemoPatient = tutorialState.isRunning &&
+            tutorialState.currentScreen == GuardianTutorialScreen.HOME
+    val demoPatient = remember {
+        LinkedUserInfo(
+            userId = null,
+            phone = null,
+            name = "예시 사용자",
+            role = "USER",
+            patientCode = null
+        )
     }
+    val displayedPatients = if (showDemoPatient) listOf(demoPatient) else patients
+
+    // 사용자 목록이 갱신되면 가능한 경우 기존 선택을 유지한다.
+    var selectedPatientId by remember { mutableStateOf<Int?>(null) }
+    val selectedPatient = displayedPatients.firstOrNull {
+        it.userId != null && it.userId == selectedPatientId
+    } ?: displayedPatients.firstOrNull()
 
     var linkedUserBounds by remember {
         mutableStateOf<Rect?>(null)
@@ -81,6 +96,7 @@ fun GuardianHomeScreen(
         mutableStateOf<Rect?>(null)
     }
 
+    // 실제 UI의 루트 좌표를 튜토리얼 강조 영역에 전달한다.
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -91,14 +107,15 @@ fun GuardianHomeScreen(
         ) {
             GuardianHomeHeader(
                 guardianName = guardianName,
-                patients = patients,
+                patients = displayedPatients,
                 selectedPatient = selectedPatient,
-                isLoading = isLoading,
-                todayScore = selectedPatient?.userId?.let {
+                isLoading = isLoading && !showDemoPatient,
+                todayScore = if (showDemoPatient) 85 else selectedPatient?.userId?.let {
                     patientScores[it]
                 },
+                isTutorialExample = showDemoPatient,
                 onPatientSelected = {
-                    selectedPatient = it
+                    selectedPatientId = it.userId
                 },
                 onLinkedUserBoundsChanged = {
                     linkedUserBounds = it
@@ -161,6 +178,60 @@ fun GuardianHomeScreen(
             }
 
             if (targetBounds != null) {
+                val advanceHomeTutorial = {
+                    when (tutorialState.homeStep) {
+                        GuardianHomeTutorialStep.LINKED_USER -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.TODAY_SCORE,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.TODAY_SCORE -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.ANALYSIS_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.ANALYSIS_MENU -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.LOCATION_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.LOCATION_MENU -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.SETTINGS_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.SETTINGS_MENU -> {
+                            if (guardianTutorialViewModel.isFullTutorial()) {
+                                guardianTutorialViewModel.showAnalysisTabGuide(
+                                    number = tutorialState.currentNumber + 1
+                                )
+                            } else {
+                                guardianTutorialViewModel.completeTutorial()
+                            }
+                        }
+
+                        GuardianHomeTutorialStep.MOVE_TO_HOME_TAB,
+                        GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB,
+                        GuardianHomeTutorialStep.COMPLETED -> Unit
+                    }
+                }
+
                 TutorialOverlay(
                     targetBounds = targetBounds,
                     title = guardianHomeTutorialTitle(
@@ -173,108 +244,8 @@ fun GuardianHomeScreen(
                         tutorialState.currentNumber,
                     totalSteps =
                         tutorialState.totalNumber,
-                    onNext = {
-                        when (tutorialState.homeStep) {
-                            GuardianHomeTutorialStep.LINKED_USER -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.TODAY_SCORE,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.TODAY_SCORE -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.ANALYSIS_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.ANALYSIS_MENU -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.LOCATION_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.LOCATION_MENU -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.SETTINGS_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.SETTINGS_MENU -> {
-                                guardianTutorialViewModel
-                                    .showAnalysisTabGuide(
-                                        number =
-                                            tutorialState.currentNumber + 1
-                                    )
-                            }
-
-                            GuardianHomeTutorialStep.MOVE_TO_HOME_TAB,
-                            GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB,
-                            GuardianHomeTutorialStep.COMPLETED -> Unit
-                        }
-                    },
-                    onTargetClick = {
-                        when (tutorialState.homeStep) {
-                            GuardianHomeTutorialStep.LINKED_USER -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.TODAY_SCORE,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.TODAY_SCORE -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.ANALYSIS_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.ANALYSIS_MENU -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.LOCATION_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.LOCATION_MENU -> {
-                                guardianTutorialViewModel.moveToHome(
-                                    step =
-                                        GuardianHomeTutorialStep.SETTINGS_MENU,
-                                    number =
-                                        tutorialState.currentNumber + 1
-                                )
-                            }
-
-                            GuardianHomeTutorialStep.SETTINGS_MENU -> {
-                                guardianTutorialViewModel
-                                    .showAnalysisTabGuide(
-                                        number =
-                                            tutorialState.currentNumber + 1
-                                    )
-                            }
-
-                            GuardianHomeTutorialStep.MOVE_TO_HOME_TAB,
-                            GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB,
-                            GuardianHomeTutorialStep.COMPLETED -> Unit
-                        }
-                    },
+                    onNext = advanceHomeTutorial,
+                    onTargetClick = advanceHomeTutorial,
                     onSkip = {
                         guardianTutorialViewModel.stopTutorial()
                     },
@@ -293,10 +264,14 @@ private fun GuardianHomeHeader(
     selectedPatient: LinkedUserInfo?,
     isLoading: Boolean,
     todayScore: Int?,
+    isTutorialExample: Boolean,
     onPatientSelected: (LinkedUserInfo) -> Unit,
     onLinkedUserBoundsChanged: (Rect) -> Unit,
     onTodayScoreBoundsChanged: (Rect) -> Unit
 ) {
+    // onGloballyPositioned 콜백에서 dp를 px로 변환하기 위한 밀도.
+    val density = LocalDensity.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -310,7 +285,6 @@ private fun GuardianHomeHeader(
                 )
             )
     ) {
-        // 배경 원 장식
         Box(
             modifier = Modifier
                 .size(190.dp)
@@ -318,8 +292,16 @@ private fun GuardianHomeHeader(
                 .clip(CircleShape)
                 .background(BrandWhite.copy(alpha = 0.16f))
                 .onGloballyPositioned { coordinates ->
+                    // 원형 점수 카드의 가장자리 여백을 제외하고 강조한다.
+                    val bounds = coordinates.boundsInRoot()
+                    val inset = with(density) { 8.dp.toPx() }
                     onTodayScoreBoundsChanged(
-                        coordinates.boundsInRoot()
+                        Rect(
+                            bounds.left + inset,
+                            bounds.top + inset,
+                            bounds.right - inset,
+                            bounds.bottom - inset
+                        )
                     )
                 },
             contentAlignment = Alignment.Center
@@ -391,12 +373,22 @@ private fun GuardianHomeHeader(
                     )
                 }
                 else -> {
-                    LinkedPatientDropdown(
-                        patients = patients,
-                        selectedPatient = selectedPatient,
-                        onPatientSelected = onPatientSelected,
-                        onBoundsChanged = onLinkedUserBoundsChanged
-                    )
+                    Column {
+                        LinkedPatientDropdown(
+                            patients = patients,
+                            selectedPatient = selectedPatient,
+                            onPatientSelected = onPatientSelected,
+                            onBoundsChanged = onLinkedUserBoundsChanged
+                        )
+                        if (isTutorialExample) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "튜토리얼 예시 데이터 · 실제 분석 결과가 아닙니다",
+                                fontSize = 12.sp,
+                                color = BrandWhite.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -446,7 +438,8 @@ private fun LinkedPatientDropdown(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Text(
-                    text = " 님 연결됨",
+                    text = if (selectedPatient?.userId == null &&
+                        selectedPatient?.name == "예시 사용자") " 연결됨" else " 님 연결됨",
                     fontSize = 18.sp,
                     color = BrandWhite,
                     fontWeight = FontWeight.SemiBold
@@ -470,7 +463,8 @@ private fun LinkedPatientDropdown(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = "${patient.name ?: "이름 없음"} 님",
+                            text = if (patient.userId == null && patient.name == "예시 사용자")
+                                "예시 사용자" else "${patient.name ?: "이름 없음"} 님",
                             fontWeight = if (patient.userId == selectedPatient?.userId)
                                 FontWeight.Bold else FontWeight.Normal
                         )
@@ -581,8 +575,8 @@ private fun GuardianMenuCard(
     accent: Color = Color.Unspecified,
     iconTint: Color = Color.Unspecified
 ) {
-    val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
-    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
+    val resolvedAccent = if (accent == Color.Unspecified) AppColor.guardianSurface else accent
+    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark else iconTint
 
     Surface(
         modifier = modifier

@@ -8,15 +8,10 @@ import kotlinx.coroutines.flow.update
 
 class GuardianTutorialViewModel : ViewModel() {
 
-    private val _state =
-        MutableStateFlow(GuardianTutorialState())
+    private val _state = MutableStateFlow(GuardianTutorialState())
+    val state: StateFlow<GuardianTutorialState> = _state.asStateFlow()
 
-    val state: StateFlow<GuardianTutorialState> =
-        _state.asStateFlow()
-
-    /**
-     * 최초 실행 또는 전체 사용법 다시 보기에서 호출합니다.
-     */
+    /** 최초 실행 시 전체 보호자 튜토리얼을 1단계부터 시작한다. */
     fun startFullTutorial() {
         _state.value = GuardianTutorialState(
             isRunning = true,
@@ -30,9 +25,7 @@ class GuardianTutorialViewModel : ViewModel() {
         )
     }
 
-    /**
-     * 설정 화면에서 선택한 파트만 다시 시작합니다.
-     */
+    /** 선택한 다시 보기 범위에 맞춰 시작 화면과 단계 수를 설정한다. */
     fun startReplayTutorial(
         target: GuardianTutorialReplayTarget
     ) {
@@ -166,10 +159,7 @@ class GuardianTutorialViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 분석할 사용자를 선택한 뒤 호출합니다.
-     * 분석 결과의 첫 단계인 오늘의 인지 점수부터 시작합니다.
-     */
+    /** 사용자 선택 후 분석 결과의 첫 안내 단계로 이동한다. */
     fun moveToAnalysisResult(number: Int) {
         _state.update {
             it.copy(
@@ -200,6 +190,7 @@ class GuardianTutorialViewModel : ViewModel() {
         }
     }
 
+    /** 분석 결과 안내를 마치고 하단 위치 탭을 강조한다. */
     fun showLocationTabGuide(number: Int) {
         _state.update {
             it.copy(
@@ -207,8 +198,7 @@ class GuardianTutorialViewModel : ViewModel() {
                 currentScreen =
                     GuardianTutorialScreen.ANALYSIS_RESULT,
                 analysisStep =
-                    GuardianAnalysisTutorialStep
-                        .MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
                 highlightedBottomTab =
                     GuardianBottomTab.LOCATION,
                 currentNumber = number
@@ -264,6 +254,7 @@ class GuardianTutorialViewModel : ViewModel() {
         }
     }
 
+    /** 위치 경로 결과 화면의 안내를 시작한다. */
     fun moveToLocationRoute(number: Int) {
         _state.update {
             it.copy(
@@ -278,6 +269,7 @@ class GuardianTutorialViewModel : ViewModel() {
         }
     }
 
+    /** 위치 안내를 마치고 하단 설정 탭을 강조한다. */
     fun showSettingsTabGuide(number: Int) {
         _state.update {
             it.copy(
@@ -285,8 +277,7 @@ class GuardianTutorialViewModel : ViewModel() {
                 currentScreen =
                     GuardianTutorialScreen.LOCATION_DETAIL,
                 locationStep =
-                    GuardianLocationTutorialStep
-                        .MOVE_TO_SETTINGS_TAB,
+                    GuardianLocationTutorialStep.MOVE_TO_SETTINGS_TAB,
                 highlightedBottomTab =
                     GuardianBottomTab.SETTINGS,
                 currentNumber = number
@@ -324,25 +315,20 @@ class GuardianTutorialViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 현재 실행이 전체 튜토리얼인지 확인합니다.
-     */
+    /** 전체 튜토리얼 진행 여부를 반환한다. */
     fun isFullTutorial(): Boolean =
         _state.value.isFullTutorial
 
-    fun currentReplayTarget():
-            GuardianTutorialReplayTarget? =
+    /** 현재 다시 보기 대상(최초 실행 시 null)을 반환한다. */
+    fun currentReplayTarget(): GuardianTutorialReplayTarget? =
         _state.value.replayTarget
 
+    /** 건너뛰기 또는 종료 시 진행 상태를 초기화한다. */
     fun stopTutorial() {
-        _state.update {
-            it.copy(
-                isRunning = false,
-                highlightedBottomTab = null
-            )
-        }
+        _state.value = GuardianTutorialState()
     }
 
+    /** 완료 상태를 기록하고 하단 탭 강조를 해제한다. */
     fun completeTutorial() {
         _state.update {
             it.copy(

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,21 +69,34 @@ fun TutorialOverlay(
         mutableFloatStateOf(0f)
     }
 
+    // 단계가 바뀌면 안내 카드 높이를 다시 측정한다.
+    LaunchedEffect(currentStep, title, message) {
+        measuredCardHeightPx = 0f
+    }
+
     val spotlightPaddingPx = with(density) {
-        if (isBottomTabGuide) 3.dp.toPx() else 8.dp.toPx()
+        when {
+            isBottomTabGuide -> 3.dp.toPx()
+            title == "전화 연결 화면" -> 0.dp.toPx()
+            else -> 8.dp.toPx()
+        }
     }
     val cornerRadiusPx = with(density) {
         if (isBottomTabGuide) 16.dp.toPx() else 22.dp.toPx()
     }
+    // 홈 튜토리얼의 위치 정보(5/23) 안내만 세로 여백을 줄인다.
+    val compactLocationGuide = currentStep == 5 && totalSteps == 23 &&
+            title == "위치 정보"
     val highlightBorderColor = tutorialColor
 
+    // 전달받은 루트 좌표를 오버레이의 로컬 좌표로 변환한다.
     val localTargetBounds = targetBounds?.let { bounds ->
         val overlayRoot = overlayBoundsInRoot
 
-        when {
-            isBottomTabGuide -> bounds
-            overlayRoot == null -> bounds
-            else -> Rect(
+        if (overlayRoot == null) {
+            null // 오버레이 위치가 확정되기 전에는 잘못된 강조 영역을 표시하지 않는다.
+        } else {
+            Rect(
                 left = bounds.left - overlayRoot.left,
                 top = bounds.top - overlayRoot.top,
                 right = bounds.right - overlayRoot.left,
@@ -108,7 +122,14 @@ fun TutorialOverlay(
             }
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        val cardMarginPx = with(density) { 14.dp.toPx() }
+        // 전체 안내 11단계는 점수 카드와 가깝게, 분석 다시 보기 2단계는
+        // 그래프 카드 아래에 작은 간격을 두고 안내 창을 배치한다.
+        val cardGapDp = when {
+            currentStep == 11 && totalSteps == 23 && title == "세부 분석 결과" -> 8.dp
+            currentStep == 2 && totalSteps == 3 && title == "이번 주 점수 추이" -> 12.dp
+            else -> 24.dp
+        }
+        val cardMarginPx = with(density) { cardGapDp.toPx() }
         val fallbackCardHeightPx = with(density) { 230.dp.toPx() }
 
         val cardHeightPx = if (measuredCardHeightPx > 0f) {
@@ -128,17 +149,24 @@ fun TutorialOverlay(
             expandedTarget.top - cardMarginPx - cardHeightPx >= 0f ->
                 expandedTarget.top - cardMarginPx - cardHeightPx
 
-            else ->
-                ((screenHeightPx - cardHeightPx) / 2f)
-                    .coerceAtLeast(cardMarginPx)
+            // 대상이 화면 대부분을 차지하면 여유 공간이 더 큰 쪽에 안내 카드를 둔다.
+            else -> {
+                val spaceAbove = expandedTarget.top
+                val spaceBelow = screenHeightPx - expandedTarget.bottom
+                if (spaceAbove >= spaceBelow) {
+                    cardMarginPx
+                } else {
+                    (screenHeightPx - cardHeightPx - cardMarginPx)
+                        .coerceAtLeast(cardMarginPx)
+                }
+            }
         }
 
-        val bottomGuidePadding = if (
-            isBottomTabGuide &&
-            expandedTarget != null
-        ) {
+        val bottomGuidePadding = if (isBottomTabGuide && expandedTarget != null) {
             with(density) {
-                (screenHeightPx - expandedTarget.top + cardMarginPx).toDp()
+                (screenHeightPx - expandedTarget.top + cardMarginPx)
+                    .coerceIn(0f, screenHeightPx)
+                    .toDp()
             }
         } else {
             0.dp
@@ -178,32 +206,37 @@ fun TutorialOverlay(
             )
 
             expandedTarget?.let { target ->
+                // 테두리 선의 절반이 화면 밖으로 잘리지 않도록 안쪽으로 제한한다.
+                val borderInset = with(density) { 3.dp.toPx() }
                 val safeTarget = Rect(
-                    left = target.left.coerceAtLeast(0f),
-                    top = target.top.coerceAtLeast(0f),
-                    right = target.right.coerceAtMost(size.width),
-                    bottom = target.bottom.coerceAtMost(size.height)
+                    left = target.left.coerceIn(borderInset, size.width - borderInset),
+                    top = target.top.coerceIn(borderInset, size.height - borderInset),
+                    right = target.right.coerceIn(borderInset, size.width - borderInset),
+                    bottom = target.bottom.coerceIn(borderInset, size.height - borderInset)
                 )
 
-                drawRoundRect(
-                    color = Color.Transparent,
-                    topLeft = Offset(safeTarget.left, safeTarget.top),
-                    size = safeTarget.size,
-                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                    blendMode = BlendMode.Clear
-                )
-
-                drawRoundRect(
-                    color = highlightBorderColor,
-                    topLeft = Offset(safeTarget.left, safeTarget.top),
-                    size = safeTarget.size,
-                    cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
-                    style = Stroke(
-                        width = with(density) {
-                            if (isBottomTabGuide) 4.dp.toPx() else 3.dp.toPx()
-                        }
+                // 화면 바깥의 영역은 캔버스 크기로 잘라낸다.
+                if (safeTarget.width > 0f && safeTarget.height > 0f) {
+                    drawRoundRect(
+                        color = Color.Transparent,
+                        topLeft = Offset(safeTarget.left, safeTarget.top),
+                        size = safeTarget.size,
+                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                        blendMode = BlendMode.Clear
                     )
-                )
+
+                    drawRoundRect(
+                        color = highlightBorderColor,
+                        topLeft = Offset(safeTarget.left, safeTarget.top),
+                        size = safeTarget.size,
+                        cornerRadius = CornerRadius(cornerRadiusPx, cornerRadiusPx),
+                        style = Stroke(
+                            width = with(density) {
+                                if (isBottomTabGuide) 4.dp.toPx() else 3.dp.toPx()
+                            }
+                        )
+                    )
+                }
             }
         }
 
@@ -240,6 +273,7 @@ fun TutorialOverlay(
             onNext = onNext,
             onSkip = onSkip,
             tutorialColor = tutorialColor,
+            compact = compactLocationGuide,
             onCardHeightChanged = { heightPx ->
                 if (heightPx > 0f && measuredCardHeightPx != heightPx) {
                     measuredCardHeightPx = heightPx
@@ -261,6 +295,7 @@ private fun TutorialMessageCard(
     onNext: (() -> Unit)?,
     onSkip: () -> Unit,
     tutorialColor: Color,
+    compact: Boolean,
     onCardHeightChanged: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -280,9 +315,9 @@ private fun TutorialMessageCard(
         Column(
             modifier = Modifier.padding(
                 horizontal = 22.dp,
-                vertical = 18.dp
+                vertical = if (compact) 12.dp else 18.dp
             ),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -311,8 +346,8 @@ private fun TutorialMessageCard(
                 Text(
                     text = title,
                     color = AppColor.textPrimary,
-                    fontSize = 22.sp,
-                    lineHeight = 30.sp,
+                    fontSize = if (compact) 21.sp else 22.sp,
+                    lineHeight = if (compact) 27.sp else 30.sp,
                     fontWeight = FontWeight.ExtraBold,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
@@ -323,7 +358,7 @@ private fun TutorialMessageCard(
                 text = message,
                 color = AppColor.textPrimary,
                 fontSize = if (title.isNullOrBlank()) 21.sp else 18.sp,
-                lineHeight = if (title.isNullOrBlank()) 30.sp else 27.sp,
+                lineHeight = if (compact) 25.sp else if (title.isNullOrBlank()) 30.sp else 27.sp,
                 fontWeight = if (title.isNullOrBlank()) {
                     FontWeight.Bold
                 } else {

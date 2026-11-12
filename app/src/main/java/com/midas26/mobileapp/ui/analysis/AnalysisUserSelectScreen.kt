@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,14 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.network.LinkedUserInfo
@@ -63,18 +61,25 @@ fun AnalysisUserSelectScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
-    /*
-     * 앱 설정의 글자 크기를 이 화면에도 반영합니다.
-     * 화면 폭이 좁을 때 레이아웃이 무너지지 않도록 최대 배율을 제한합니다.
-     */
+    // 분석 튜토리얼에서는 실제 연결 사용자 대신 예시 사용자만 표시한다.
+    val isAnalysisTutorial = tutorialState.isRunning &&
+            tutorialState.currentScreen == GuardianTutorialScreen.ANALYSIS_SELECT
+    val demoPatient = remember {
+        LinkedUserInfo(
+            userId = null,
+            phone = null,
+            name = "예시 사용자",
+            role = "USER",
+            patientCode = null
+        )
+    }
+    val visiblePatients = if (isAnalysisTutorial) listOf(demoPatient) else patients
+
+    // 접근성 글자 크기 확대 시 화면 넘침을 방지한다.
     val fontScale = LocalFontSizeScale.current.scale
     val screenFontScale = fontScale.coerceAtMost(1.35f)
 
-    var guideBounds by remember {
-        mutableStateOf<Rect?>(null)
-    }
-
-    var firstUserBounds by remember {
+    var firstUserBounds by remember(isAnalysisTutorial) {
         mutableStateOf<Rect?>(null)
     }
 
@@ -113,13 +118,13 @@ fun AnalysisUserSelectScreen(
                 .padding(innerPadding)
         ) {
             when {
-                isLoading -> {
+                isLoading && !isAnalysisTutorial -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
 
-                patients.isEmpty() -> {
+                visiblePatients.isEmpty() -> {
                     Text(
                         text = "연결된 사용자가 없습니다",
                         fontSize = (16 * screenFontScale).sp,
@@ -140,10 +145,7 @@ fun AnalysisUserSelectScreen(
                                 .padding(
                                     horizontal = 12.dp,
                                     vertical = 8.dp
-                                )
-                                .onGloballyPositioned { coordinates ->
-                                    guideBounds = coordinates.boundsInRoot()
-                                },
+                                ),
                             shape = RoundedCornerShape(14.dp),
                             color = Color(0xFFFFE5DF)
                         ) {
@@ -165,7 +167,16 @@ fun AnalysisUserSelectScreen(
                             }
                         }
 
-                        patients.forEachIndexed { index, patient ->
+                        if (isAnalysisTutorial) {
+                            Text(
+                                text = "튜토리얼 예시 사용자입니다. 실제 연결된 사용자가 아닙니다.",
+                                fontSize = (13 * screenFontScale).sp,
+                                color = AppColor.textSecondary,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        visiblePatients.forEachIndexed { index, patient ->
                             val status = patient.userId?.let {
                                 patientStatuses[it]
                             }
@@ -174,6 +185,7 @@ fun AnalysisUserSelectScreen(
                                 patient = patient,
                                 status = status,
                                 fontScale = fontScale,
+                                isTutorialExample = isAnalysisTutorial,
                                 onBoundsChanged = { bounds ->
                                     if (index == 0) {
                                         firstUserBounds = bounds
@@ -215,13 +227,11 @@ fun AnalysisUserSelectScreen(
                     else -> null
                 }
 
-                val firstPatient = patients.firstOrNull()
+                val firstPatient = visiblePatients.firstOrNull()
 
                 if (targetBounds != null && firstPatient != null) {
+                    // 튜토리얼 단계 전환과 화면 이동은 AppNavGraph에서 처리한다.
                     val openFirstUserResult = {
-                        guardianTutorialViewModel.moveToAnalysisResult(
-                            number = tutorialState.currentNumber + 1
-                        )
                         onUserClick(firstPatient)
                     }
 
@@ -229,7 +239,7 @@ fun AnalysisUserSelectScreen(
                         targetBounds = targetBounds,
                         title = "분석할 사용자 선택",
                         message =
-                            "연결된 사용자 중 분석 결과를 확인할 사용자를 선택할 수 있어요.",
+                            "예시 사용자를 선택해 분석 결과 화면을 살펴볼게요. 표시되는 점수는 실제 결과가 아닙니다.",
                         currentStep =
                             tutorialState.currentNumber,
                         totalSteps =
@@ -252,12 +262,13 @@ private fun AnalysisUserCard(
     patient: LinkedUserInfo,
     status: PatientAnalysisStatus?,
     fontScale: Float,
+    isTutorialExample: Boolean = false,
     onBoundsChanged: (Rect) -> Unit = {},
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
 
-    val relation = patient.userId
+    val relation = if (isTutorialExample) "예시" else patient.userId
         ?.let {
             PrefsManager.from(context).getPatientRelation(it)
         }
@@ -266,10 +277,7 @@ private fun AnalysisUserCard(
         }
         ?: "사용자"
 
-    /*
-     * 카드 내부는 최대 1.25배까지 확대해 이름과 상태 문구가
-     * 지나치게 커져 잘리는 현상을 방지합니다.
-     */
+    // 카드 내부 텍스트가 잘리지 않도록 확대 비율을 제한한다.
     val cardFontScale = fontScale.coerceAtMost(1.25f)
     val cardHeight = (100f + ((cardFontScale - 1f) * 56f)).dp
     val pillFontSize = (14 * cardFontScale).sp
@@ -307,7 +315,6 @@ private fun AnalysisUserCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                // 이름과 관계 표시
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -315,6 +322,8 @@ private fun AnalysisUserCard(
                         text = patient.name ?: "이름 없음",
                         fontSize = (25 * cardFontScale).sp,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
@@ -342,8 +351,14 @@ private fun AnalysisUserCard(
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // 분석 결과 상태 문구
-                when (status) {
+                // 예시 사용자에게는 실제 분석 상태를 표시하지 않는다.
+                if (isTutorialExample) {
+                    Text(
+                        text = "튜토리얼용 가상 분석 결과 보기",
+                        fontSize = (13 * cardFontScale).sp,
+                        color = AppColor.textSecondary
+                    )
+                } else when (status) {
                     PatientAnalysisStatus.LOADING -> {
                         StatusShimmer()
                     }
@@ -386,9 +401,7 @@ private fun AnalysisUserCard(
     }
 }
 
-/**
- * 상태 로딩 중 shimmer 효과
- */
+/** 분석 상태 조회 중 표시하는 로딩 효과. */
 @Composable
 private fun StatusShimmer() {
     val transition = rememberInfiniteTransition(

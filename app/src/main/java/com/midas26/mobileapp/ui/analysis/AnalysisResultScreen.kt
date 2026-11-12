@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -26,8 +27,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -42,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +62,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -69,9 +70,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlin.math.roundToInt
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
@@ -130,13 +133,10 @@ private fun UserAnalysisResultContent(
             null
         }
 
-    /*
-     * boundsInRoot()로 최상위 화면과 각 강조 대상의 위치를 측정한 뒤,
-     * 루트 위치를 빼서 오버레이 내부 좌표로 변환합니다.
-     */
+    // 튜토리얼 강조 영역을 화면 루트 기준의 상대 좌표로 관리한다.
     var tutorialRootBounds by remember { mutableStateOf<Rect?>(null) }
 
-    // TutorialOverlay에 전달할 실제 UI 위치입니다.
+    // 단계별 강조 대상 영역.
     var mainScoreBounds by remember { mutableStateOf<Rect?>(null) }
     var weeklyGraphBounds by remember { mutableStateOf<Rect?>(null) }
     var detailScoresBounds by remember { mutableStateOf<Rect?>(null) }
@@ -151,7 +151,8 @@ private fun UserAnalysisResultContent(
         }
     }
 
-    val showLoading = viewModel.showLoadingScreen && (viewModel.isLoading || !minTimeElapsed)
+    val showLoading = !viewModel.isTutorialDemo &&
+            viewModel.showLoadingScreen && (viewModel.isLoading || !minTimeElapsed)
 
     LaunchedEffect(showLoading) {
         if (!showLoading && viewModel.showLoadingScreen) {
@@ -279,7 +280,8 @@ private fun UserAnalysisResultContent(
                                 Text(
                                     text = if (
                                         viewModel.isViewingToday &&
-                                        !viewModel.hasTodayData
+                                        !viewModel.hasTodayData &&
+                                        !viewModel.isTutorialDemo
                                     ) {
                                         "0"
                                     } else {
@@ -310,7 +312,8 @@ private fun UserAnalysisResultContent(
                                     Text(
                                         text = if (
                                             viewModel.isViewingToday &&
-                                            !viewModel.hasTodayData
+                                            !viewModel.hasTodayData &&
+                                            !viewModel.isTutorialDemo
                                         ) {
                                             "-"
                                         } else {
@@ -351,7 +354,8 @@ private fun UserAnalysisResultContent(
                 Box(modifier = Modifier.fillMaxSize()) {
                     val items = if (
                         viewModel.isViewingToday &&
-                        !viewModel.hasTodayData
+                        !viewModel.hasTodayData &&
+                        !viewModel.isTutorialDemo
                     ) {
                         viewModel.todayItems.mapIndexed { index, item ->
                             when (index) {
@@ -369,19 +373,10 @@ private fun UserAnalysisResultContent(
                             .padding(top = 12.dp + graphCardHeightDp)
                             .padding(horizontal = 16.dp)
                     ) {
-                        /*
-                         * 그래프 카드, 점수 카드, 어휘 카드 사이의 세로 간격을
-                         * 모두 12.dp로 통일합니다.
-                         *
-                         * 가중치 Spacer를 사용하지 않아 글자 크기가 매우 큰 경우에도
-                         * 화면 높이에 따라 카드 간격이 달라지지 않습니다.
-                         */
+                        // 카드 간격을 고정해 화면 크기에 따른 변동을 방지한다.
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        /*
-                         * 세부 분석 카드 3개만 감싸는 영역에 좌표 측정을 적용합니다.
-                         * 종합 위험도는 상단 대표 점수와 중복되므로 하단 카드에서는 제외합니다.
-                         */
+                        // 세부 점수 카드 영역을 튜토리얼 강조 대상으로 사용한다.
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -391,22 +386,16 @@ private fun UserAnalysisResultContent(
                                         .relativeTo(tutorialRootBounds)
                                 }
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ItemCard(item = items[1], modifier = Modifier.weight(1f))
-                                ItemCard(item = items[2], modifier = Modifier.weight(1f))
+                            // 분석 항목이 아직 로딩되지 않았을 때 인덱스 오류를 방지한다.
+                            if (items.size >= 3) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ItemCard(item = items[1], modifier = Modifier.weight(1f))
+                                    ItemCard(item = items[2], modifier = Modifier.weight(1f))
+                                }
                             }
-
-                            // 어휘 점수 버튼은 일단 화면에서 숨김 (TextScoreCard, 상세 화면, 네비게이션 코드는 유지)
-                            // Spacer(modifier = Modifier.height(12.dp))
-                            //
-                            // TextScoreCard(
-                            //     item = items[3],
-                            //     onClick = onNavigateTextScoreDetail,
-                            //     modifier = Modifier.fillMaxWidth()
-                            // )
                         }
 
                         Spacer(modifier = Modifier.weight(1f))
@@ -436,6 +425,23 @@ private fun UserAnalysisResultContent(
                         Column(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
                         ) {
+                            if (viewModel.isTutorialDemo) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFFF1EC)
+                                ) {
+                                    Text(
+                                        text = "튜토리얼 예시 데이터입니다. 실제 분석 결과가 아닙니다.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AppColor.guardianDark,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+
                             Text(
                                 text = "이번 주 추이",
                                 style = MaterialTheme.typography.titleMedium,
@@ -464,7 +470,7 @@ private fun UserAnalysisResultContent(
                                 onDragCancel = { viewModel.onGraphDragCancel() },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(160.dp)
+                                    .height(if (viewModel.isTutorialDemo) 116.dp else 160.dp)
                             )
                         }
                     }
@@ -508,10 +514,7 @@ private fun UserAnalysisResultContent(
 
                             AnalysisTutorialStep.DETAIL_SCORES -> {
                                 if (tutorialViewModel.isFullTutorial()) {
-                                    /*
-                                     * 분석 결과 설명이 끝나면 AppNavGraph에서
-                                     * 하단 설정 탭을 안내합니다.
-                                     */
+                                    // 다음 탭 안내는 내비게이션에서 처리한다.
                                     tutorialViewModel.showSettingsTabGuide(
                                         number = tutorialState.currentNumber + 1
                                     )
@@ -521,9 +524,7 @@ private fun UserAnalysisResultContent(
                             }
 
                             AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> {
-                                /*
-                                 * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
-                                 */
+                                // 탭 이동은 내비게이션에서 처리한다.
                             }
 
                             AnalysisTutorialStep.COMPLETED -> {
@@ -661,16 +662,6 @@ private fun UserAnalysisResultContent(
 
         }
     }
-
-    /*
-     * UserAnalysisResultContent 종료
-     *
-     * 위의 세 중괄호는 각각:
-     * 1. 최상위 Box
-     * 2. Crossfade content lambda
-     * 3. UserAnalysisResultContent 함수
-     * 를 닫습니다.
-     */
 }
 
 private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
@@ -696,6 +687,15 @@ private fun AnalysisTutorialOverlay(
 ) {
     val density = LocalDensity.current
     val highlightColor = tutorialColor
+    var popupHeightPx by remember { mutableStateOf(0f) }
+    // 주간 그래프 안내 창은 아래로 내리고, 세부 점수 안내 창은 카드에 더 가깝게 배치한다.
+    val popupGapPx = with(density) {
+        when (step) {
+            AnalysisTutorialStep.WEEKLY_GRAPH -> 26.dp.toPx()
+            AnalysisTutorialStep.DETAIL_SCORES -> 22.dp.toPx()
+            else -> 12.dp.toPx()
+        }
+    }
 
     val title = when (step) {
         AnalysisTutorialStep.MAIN_SCORE -> "오늘의 인지 점수"
@@ -728,14 +728,38 @@ private fun AnalysisTutorialOverlay(
             .clickable(onClick = {})
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        val showPopupAtTop = targetBounds?.center?.y?.let {
-            it > screenHeightPx * 0.52f
-        } ?: false
+        // 주간 그래프는 하단 공간이 좁으므로 최소 화면 여백만 확보한다.
+        val edgeMarginPx = with(density) {
+            if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 4.dp.toPx()
+            else 16.dp.toPx()
+        }
+        val defaultPopupHeightPx = with(density) { 300.dp.toPx() }
+        val cardHeightPx = if (popupHeightPx > 0f) popupHeightPx else defaultPopupHeightPx
+        val target = targetBounds
 
-        val popupAlignment = if (showPopupAtTop) {
-            Alignment.TopCenter
+        // 강조 영역을 기준으로 안내 창을 배치한다.
+        // 화면 경계에 걸리는 경우 실제 측정된 카드 높이를 사용해 위치를 제한한다.
+        val popupTopPx = if (target == null) {
+            ((screenHeightPx - cardHeightPx) / 2f).coerceAtLeast(edgeMarginPx)
         } else {
-            Alignment.BottomCenter
+            val below = target.bottom + popupGapPx
+            val above = target.top - popupGapPx - cardHeightPx
+            val canFitBelow = below + cardHeightPx <= screenHeightPx - edgeMarginPx
+            val canFitAbove = above >= edgeMarginPx
+            val desiredTop = when {
+                // 세부 점수 단계는 항상 점수 카드 바로 위에 배치한다.
+                step == AnalysisTutorialStep.DETAIL_SCORES && canFitAbove -> above
+                step == AnalysisTutorialStep.WEEKLY_GRAPH && canFitBelow -> below
+                canFitBelow -> below
+                canFitAbove -> above
+                // 공간이 부족한 경우에는 가용 공간이 더 큰 쪽을 선택한다.
+                screenHeightPx - target.bottom >= target.top -> below
+                else -> above
+            }
+            desiredTop.coerceIn(
+                edgeMarginPx,
+                (screenHeightPx - cardHeightPx - edgeMarginPx).coerceAtLeast(edgeMarginPx)
+            )
         }
 
         Canvas(
@@ -749,10 +773,12 @@ private fun AnalysisTutorialOverlay(
 
             targetBounds?.let { bounds ->
                 val padding = 5.dp.toPx()
-                val left = (bounds.left - padding).coerceAtLeast(0f)
-                val top = (bounds.top - padding).coerceAtLeast(0f)
-                val right = (bounds.right + padding).coerceAtMost(size.width)
-                val bottom = (bounds.bottom + padding).coerceAtMost(size.height)
+                val strokeInset = 2.dp.toPx()
+                val left = (bounds.left - padding).coerceIn(strokeInset, size.width)
+                val top = (bounds.top - padding).coerceIn(strokeInset, size.height)
+                val right = (bounds.right + padding).coerceIn(0f, size.width - strokeInset)
+                val bottom = (bounds.bottom + padding).coerceIn(0f, size.height - strokeInset)
+                // 하이라이트 자체를 잘라내지 않고 안내 창의 위치만 조정한다.
 
                 val topLeft = Offset(left, top)
                 val highlightSize = Size(
@@ -761,39 +787,49 @@ private fun AnalysisTutorialOverlay(
                 )
                 val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
 
-                drawRoundRect(
-                    color = Color.Transparent,
-                    topLeft = topLeft,
-                    size = highlightSize,
-                    cornerRadius = cornerRadius,
-                    blendMode = BlendMode.Clear
-                )
+                if (highlightSize.width > 0f && highlightSize.height > 0f) {
+                    drawRoundRect(
+                        color = Color.Transparent,
+                        topLeft = topLeft,
+                        size = highlightSize,
+                        cornerRadius = cornerRadius,
+                        blendMode = BlendMode.Clear
+                    )
 
-                drawRoundRect(
-                    color = highlightColor,
-                    topLeft = topLeft,
-                    size = highlightSize,
-                    cornerRadius = cornerRadius,
-                    style = Stroke(width = 4.dp.toPx())
-                )
+                    drawRoundRect(
+                        color = highlightColor,
+                        topLeft = topLeft,
+                        size = highlightSize,
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 4.dp.toPx())
+                    )
+                }
             }
         }
 
         Surface(
             modifier = Modifier
-                .align(popupAlignment)
+                .align(Alignment.TopCenter)
+                .offset { IntOffset(0, popupTopPx.roundToInt()) }
                 .fillMaxWidth()
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = if (showPopupAtTop) 24.dp else 20.dp,
-                    bottom = if (showPopupAtTop) 20.dp else 28.dp
-                ),
+                .padding(horizontal = 20.dp)
+                .onGloballyPositioned { coordinates ->
+                    val newHeight = coordinates.size.height.toFloat()
+                    if (newHeight > 0f && popupHeightPx != newHeight) {
+                        popupHeightPx = newHeight
+                    }
+                },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite,
             shadowElevation = 12.dp
         ) {
-            Column(modifier = Modifier.padding(22.dp)) {
+            // 주간 그래프 단계에서만 세로 여백을 줄여 카드가 아래로 이동할 공간을 확보한다.
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 22.dp,
+                    vertical = if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 10.dp else 22.dp
+                )
+            ) {
                 Text(
                     text = "$currentNumber / $totalNumber",
                     style = MaterialTheme.typography.labelLarge,
@@ -818,7 +854,9 @@ private fun AnalysisTutorialOverlay(
                     color = AppColor.textSecondary
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(
+                    if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 8.dp else 20.dp
+                ))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -894,15 +932,14 @@ private fun WeeklyLineChart(
         label = "highlight"
     )
 
-    var computedXs = remember { listOf<Float>() }
-    var lastDragIdx = remember { -1 }
+    // 그래프에 표시된 점의 X좌표를 터치 판정에 재사용한다.
+    val computedXs = remember(points) { mutableStateListOf<Float>() }
 
-    // Canvas는 @Composable 컨텍스트가 아니므로 색상 미리 캡처
+    // 그래프 색상은 그리기 전에 결정한다.
     val colorPrimary       = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
     val colorDark          = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
     val colorSecondary     = if (isGuardian) AppColor.guardianPrimary else AppColor.greenSecondary
     val colorTextTertiary  = AppColor.textTertiary
-    // 기존 변수명 유지 (Canvas 블록에서 참조)
     val colorGreenPrimary   = colorPrimary
     val colorAccentDark     = colorDark
     val colorGreenSecondary = colorSecondary
@@ -910,15 +947,14 @@ private fun WeeklyLineChart(
     fun nearestIdx(offsetX: Float): Int {
         if (computedXs.isEmpty()) return -1
 
-        return computedXs.indices.minByOrNull {
-            abs(computedXs[it] - offsetX)
-        }?.takeIf {
-            hasData[it]
-        } ?: -1
+        // 데이터가 있는 날짜 중 가장 가까운 점을 선택한다.
+        return computedXs.indices
+            .filter { it < hasData.size && hasData[it] }
+            .minByOrNull { abs(computedXs[it] - offsetX) } ?: -1
     }
 
     val density = LocalDensity.current
-    // 포인트 X 계산에 쓰이는 좌우 여백 — Canvas 와 요일 Row 에서 동일하게 사용
+    // 그래프 점과 요일 레이블에 동일한 가로 여백을 적용한다.
     val hPadDp = 8.dp
     val hPadPx = with(density) { hPadDp.toPx() }
 
@@ -934,8 +970,7 @@ private fun WeeklyLineChart(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
 
-                        lastDragIdx = -1
-
+                        var lastDragIdx = -1
                         var isDragging = false
                         val downTime = System.currentTimeMillis()
                         var longPressTriggered = false
@@ -1011,10 +1046,13 @@ private fun WeeklyLineChart(
             val span = (maxScore - minScore).coerceAtLeast(1f)
 
             val xs = points.indices.map { i ->
-                pad + (w - 2 * pad) * i / (points.size - 1).coerceAtLeast(1)
+                if (points.size == 1) w / 2f else pad + (w - 2 * pad) * i / (points.size - 1)
             }
 
-            computedXs = xs
+            if (computedXs != xs) {
+                computedXs.clear()
+                computedXs.addAll(xs)
+            }
 
             val ys = filledScores.map { score ->
                 h - pad - (h - 2 * pad) * (score - minScore) / span
@@ -1086,8 +1124,7 @@ private fun WeeklyLineChart(
             }
         }
 
-        // Canvas 포인트 절대 X = 2*hPadPx + (fullWidth - 4*hPadPx) * i/(n-1)
-        // BoxWithConstraints 에 padding 없이 fullWidth 로 동일 공식 적용
+        // 각 날짜 레이블을 그래프 점의 가로 위치에 맞춘다.
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val fullW = with(density) { maxWidth.toPx() }
             val n = points.size
@@ -1115,17 +1152,11 @@ private fun ItemCard(
 ) {
     val fontScale = LocalFontSizeScale.current.scale
 
-    /*
-     * 점수 카드는 화면 폭의 절반만 사용하므로 접근성 글자 크기가
-     * 매우 큰 경우에도 제목과 점수가 줄바꿈되지 않도록 카드 내부 배율을 제한합니다.
-     */
+    // 접근성 글자 확대 시 카드 내부 배치를 보호한다.
     val cardFontScale = fontScale.coerceAtMost(1.15f)
     val scoreColor = AppColor.greenPrimary
 
-    /*
-     * "64점"처럼 숫자로 시작하는 값은 숫자만 초록색으로 강조합니다.
-     * "-", "측정 전"처럼 숫자가 아닌 값은 기존 텍스트 색상으로 표시합니다.
-     */
+    // 점수의 숫자와 단위를 분리해 표시한다.
     val displayValue = if (
         item.label == "음성 점수" && item.valueText == "-"
     ) {
@@ -1222,7 +1253,7 @@ private fun ItemCard(
 
 /**
  * 어휘 점수 카드는 점수 또는 측정 상태를 표시하지 않고,
- * 상세 화면으로 이동하는 메뉴 형태로만 표시합니다.
+ * 상세 화면으로 이동하는 메뉴 형태로 표시한다.
  */
 @Composable
 private fun TextScoreCard(

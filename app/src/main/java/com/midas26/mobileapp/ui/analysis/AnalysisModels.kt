@@ -17,6 +17,8 @@ import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
 import com.midas26.mobileapp.network.DailyScoreResponse
 import com.midas26.mobileapp.network.LinguisticMarkerResponse
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
@@ -26,7 +28,7 @@ import java.util.Calendar
 import java.util.Locale
 import kotlin.math.roundToInt
 
-/** 분석 항목 한 줄 (4개 카드 공용). */
+/** 분석 화면의 점수 카드에 표시할 데이터. */
 data class AnalysisItem(
     val icon: ImageVector,
     val label: String,
@@ -37,13 +39,10 @@ data class AnalysisItem(
     enum class Trend { Steady }
 }
 
-/** 한 일자의 인지 건강 점수. 앱 표시 점수는 높을수록 양호하다. */
+/** 날짜별 인지 건강 점수. 값이 높을수록 양호하다. */
 data class DailyScore(val dayLabel: String, val score: Int, val date: String? = null)
 
-/**
- * 언어 지표 하나의 상태. 전체 사용자 기준 "정상 범위"가 아니라 본인의 최근 세션
- * 평균 대비 오늘이 얼마나 벗어났는지(z-score)로 판정한다.
- */
+/** 개인의 과거 분석 기록 대비 변화량(z-score)에 따른 언어 지표 상태. */
 enum class MarkerStatus(val label: String) {
     GOOD("좋음"),
     WATCH("주의"),
@@ -51,10 +50,10 @@ enum class MarkerStatus(val label: String) {
     INSUFFICIENT_DATA("측정 중")
 }
 
-/** 언어 지표 상세 그래프의 점 하나(요일 라벨 + 값). */
+/** 언어 지표 그래프의 날짜별 측정값. */
 data class LinguisticMarkerPoint(val dayLabel: String, val value: Float?)
 
-/** 언어 지표 4개(대명사 비율/명사 비율/어휘 다양성/반복 표현) 중 하나의 UI 표시용 상태. */
+/** 언어 지표별 상태, 기준값 및 최근 측정 기록. */
 data class LinguisticMarkerUi(
     val key: String,
     val displayName: String,
@@ -66,46 +65,87 @@ data class LinguisticMarkerUi(
     val weeklyPoints: List<LinguisticMarkerPoint>
 )
 
-/** 그래프 탭. */
-
+/** 분석 결과와 주간 추이를 관리하는 ViewModel. */
 class AnalysisViewModel(application: Application) : AndroidViewModel(application) {
 
     private val prefs = PrefsManager.from(application)
     private val api   = RetrofitClient.analysis
 
-    /**
-     * 보호자가 특정 환자 데이터를 볼 때 설정. null이면 로그인한 본인 userId 사용.
-     * [loadForPatient]로 세팅, [resetToSelf]로 초기화.
-     */
+    // null이면 로그인한 사용자, 값이 있으면 보호자가 선택한 사용자를 조회한다.
     private var targetUserId: Int? = null
+
+    // 튜토리얼에서는 서버 데이터 대신 메모리의 예시 데이터를 표시한다.
+    var isTutorialDemo by mutableStateOf(false)
+        private set
+
+    private var demoSelectedIndex by mutableIntStateOf(6)
+    private var loadJob: Job? = null
+    private var dayLoadJob: Job? = null
+
+    private val demoScores = listOf(78, 80, 79, 83, 82, 84, 85)
+
+    private val demoGraphPoints: List<DailyScore>
+        get() {
+            val days = listOf("일", "월", "화", "수", "목", "금", "토")
+            return demoScores.mapIndexed { index, score ->
+                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, index - 6) }
+                val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+                DailyScore(days[cal.get(Calendar.DAY_OF_WEEK) - 1], score, date)
+            }
+        }
+
+    /** 진행 중인 조회를 중단하고 튜토리얼 예시 데이터로 전환한다. */
+    fun startTutorialDemo() {
+        loadJob?.cancel()
+        dayLoadJob?.cancel()
+        isTutorialDemo = true
+        demoSelectedIndex = 6
+        isLoading = false
+        isDayLoading = false
+        isInitialLoadDone = true
+        showLoadingScreen = false
+        onGraphDragCancel()
+    }
+
+    /** 튜토리얼 예시 표시를 종료하고 그래프 선택 상태를 초기화한다. */
+    fun stopTutorialDemo() {
+        if (!isTutorialDemo) return
+        isTutorialDemo = false
+        demoSelectedIndex = 6
+        selectedDayScore = null
+        onGraphDragCancel()
+
+    }
 
     private fun resolveUserId(): Int = targetUserId ?: prefs.getUserId()
 
-    /** 보호자 → 환자 분석 조회: userId 세팅 후 전체 리로드 */
+    /** 보호자가 선택한 사용자의 분석 결과를 다시 조회한다. */
     fun loadForPatient(patientId: Int) {
+        stopTutorialDemo()
+        dayLoadJob?.cancel()
+        selectedDayScore = null
         targetUserId = patientId
         refresh()
     }
 
-    /** 본인 데이터로 복귀 (보호자 화면 벗어날 때 호출) */
+    /** 조회 대상을 로그인한 사용자로 되돌린다. */
     fun resetToSelf() {
+        dayLoadJob?.cancel()
+        selectedDayScore = null
         targetUserId = null
     }
 
-    // ── 로딩 상태 ─────────────────────────────────────────────────────────────
+    // 데이터 조회 및 로딩 화면 상태
 
     var isLoading by mutableStateOf(false)
         private set
 
-    /** 초기 로드(summary + weekly + streak) 완료 여부 — 스플래시 대기용 */
+    // 초기 분석 데이터 조회 완료 여부
     var isInitialLoadDone by mutableStateOf(false)
         private set
 
-    /**
-     * 분석 화면 진입 시 로딩 화면을 보여줄지 여부.
-     * 앱 최초 진입(init) 또는 음성 대화 후 refresh() 시에만 true.
-     * 단순 화면 재진입 시에는 false 유지 → 로딩 화면 생략.
-     */
+
+    // 최초 진입과 새로고침 시 로딩 화면을 표시한다.
     var showLoadingScreen by mutableStateOf(true)
         private set
 
@@ -114,8 +154,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     fun clearNetworkError() { networkError = null }
 
-    // ── API 데이터 ─────────────────────────────────────────────────────────────
-
+    // 서버에서 수신한 분석 결과
     private var finalRiskScore by mutableStateOf<Float?>(null)
     private var riskLevel      by mutableStateOf<String?>(null)
     private var speechScore    by mutableStateOf<Float?>(null)
@@ -123,77 +162,119 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     private var recallScore    by mutableStateOf<Float?>(null)
     private var analyzedAt     by mutableStateOf<String?>(null)
 
-    /** 오늘 날짜 분석 데이터가 실제로 존재하는지 여부 */
+    // 오늘 날짜에 해당하는 분석 결과 존재 여부
     var hasTodayData by mutableStateOf(false)
         private set
 
     init {
-        viewModelScope.launch { doLoad() }
+        loadJob = viewModelScope.launch { doLoad() }
     }
 
     fun refresh() {
+        if (isTutorialDemo) return
+        loadJob?.cancel()
+        dayLoadJob?.cancel()
+        selectedDayScore = null
+        hasTodayData = false
         isInitialLoadDone = false
         showLoadingScreen = true
         networkError = null
-        viewModelScope.launch { doLoad() }
+        loadJob = viewModelScope.launch { doLoad() }
     }
 
     fun dismissLoadingScreen() { showLoadingScreen = false }
 
     private suspend fun doLoad() {
+        if (isTutorialDemo) return
         val userId = resolveUserId()
-        if (userId <= 0) { isInitialLoadDone = true; return }
-        isLoading = true
-        coroutineScope {
-            launch { doLoadSummary() }
-            launch { doLoadWeeklyScores() }
-            launch { doLoadStreak() }
-            launch { doLoadLinguisticMarkers() }
+        if (userId <= 0) {
+            isLoading = false
+            isInitialLoadDone = true
+            showLoadingScreen = false
+            return
         }
-        isLoading = false
-        isInitialLoadDone = true
+        isLoading = true
+        try {
+            coroutineScope {
+                launch { doLoadSummary() }
+                launch { doLoadWeeklyScores() }
+                launch { doLoadStreak() }
+                launch { doLoadLinguisticMarkers() }
+            }
+        } finally {
+            isLoading = false
+            if (!isTutorialDemo) isInitialLoadDone = true
+        }
     }
 
     private suspend fun doLoadSummary() {
         val userId = resolveUserId()
-        if (userId <= 0) return
+        if (userId <= 0 || isTutorialDemo) return
         var loaded = false
 
         runCatching { api.getTodaySummary(userId) }
             .onSuccess { resp ->
+                if (isTutorialDemo) return@onSuccess
                 resp.body()?.data?.let { body ->
                     applyBody(body)
                     hasTodayData = true
                     loaded = true
                 }
             }
-            .onFailure { e -> networkError = toErrorCode(e) }
+            .onFailure { e -> if (e is CancellationException) throw e
+                if (!isTutorialDemo) networkError = toErrorCode(e) }
 
         if (!loaded && networkError == null) {
             hasTodayData = false
             runCatching { api.getLatestSummary(userId) }
                 .onSuccess { resp ->
+                    if (isTutorialDemo) return@onSuccess
                     resp.body()?.data?.let { body -> applyBody(body) }
                 }
-                .onFailure { e -> networkError = toErrorCode(e) }
+                .onFailure { e -> if (e is CancellationException) throw e
+                    if (!isTutorialDemo) networkError = toErrorCode(e) }
         }
     }
 
     private suspend fun doLoadStreak() {
         val userId = resolveUserId()
-        if (userId <= 0) return
+        if (userId <= 0 || isTutorialDemo) return
         runCatching { api.getStreakDays(userId) }
-            .onSuccess { resp -> resp.body()?.data?.let { streakDays = it } }
-            .onFailure { e -> networkError = toErrorCode(e) }
+            .onSuccess { resp -> if (!isTutorialDemo) resp.body()?.data?.let { streakDays = it } }
+            .onFailure { e -> if (e is CancellationException) throw e
+                if (!isTutorialDemo) networkError = toErrorCode(e) }
     }
 
-    // ── 언어 지표(대명사 비율/명사 비율/어휘 다양성/반복 표현) ───────────────────
+    // 언어 지표: 대명사·명사 사용, 어휘 다양성, 반복 표현
 
-    var linguisticMarkers by mutableStateOf<List<LinguisticMarkerUi>>(emptyList())
-        private set
+    private var realLinguisticMarkers by mutableStateOf<List<LinguisticMarkerUi>>(emptyList())
 
-    /** 어휘 점수 카드에 표시할 종합 상태 — 4개 지표 중 가장 우려스러운 상태를 따른다. */
+    private val demoLinguisticMarkers: List<LinguisticMarkerUi>
+        get() = listOf(
+            Triple("pronounNounRatio", "대명사 사용 비율", 0.18f),
+            Triple("nounRatio", "명사 사용 비율", 0.42f),
+            Triple("lexicalDiversityMattr", "어휘 다양성", 0.71f),
+            Triple("repetitionScore", "반복 표현", 0.12f)
+        ).map { (key, name, value) ->
+            LinguisticMarkerUi(
+                key = key,
+                displayName = name,
+                status = MarkerStatus.GOOD,
+                todayValue = value,
+                baselineMean = value,
+                diffText = "+0.00",
+                diffDescription = "튜토리얼 예시 데이터입니다",
+                weeklyPoints = demoGraphPoints.map { LinguisticMarkerPoint(it.dayLabel, value) }
+            )
+        }
+
+    var linguisticMarkers: List<LinguisticMarkerUi>
+        get() = if (isTutorialDemo) demoLinguisticMarkers else realLinguisticMarkers
+        private set(value) { realLinguisticMarkers = value }
+
+    // 언어 지표 중 가장 높은 주의 수준을 대표 상태로 사용한다.
     val textScoreStatus: MarkerStatus get() {
+        if (isTutorialDemo) return MarkerStatus.GOOD
         if (linguisticMarkers.isEmpty()) return MarkerStatus.INSUFFICIENT_DATA
         return linguisticMarkers.maxByOrNull { markerSeverity(it.status) }?.status
             ?: MarkerStatus.INSUFFICIENT_DATA
@@ -208,14 +289,16 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun doLoadLinguisticMarkers() {
         val userId = resolveUserId()
-        if (userId <= 0) return
+        if (userId <= 0 || isTutorialDemo) return
         runCatching { api.getLinguisticMarkers(userId) }
             .onSuccess { resp ->
+                if (isTutorialDemo) return@onSuccess
                 resp.body()?.data?.let { list ->
                     linguisticMarkers = buildLinguisticMarkerUiList(list)
                 }
             }
-            .onFailure { e -> networkError = toErrorCode(e) }
+            .onFailure { e -> if (e is CancellationException) throw e
+                if (!isTutorialDemo) networkError = toErrorCode(e) }
     }
 
     private data class MarkerDef(
@@ -237,9 +320,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             { it.repetitionScore }, { it.repetitionScoreZScore })
     )
 
-    /** 최소 3개 과거 세션이 있어야 z-score가 안정적이므로, 그전에는 기준선 없음으로 본다. */
+    // 기준 데이터가 없으면 측정 중 상태로 표시한다.
     private fun classifyMarker(zScore: Float?, increaseIsBad: Boolean): MarkerStatus {
-        if (zScore == null) return MarkerStatus.INSUFFICIENT_DATA
+        if (zScore == null || !zScore.isFinite()) return MarkerStatus.INSUFFICIENT_DATA
         val concerningZ = if (increaseIsBad) zScore else -zScore
         return when {
             concerningZ >= 2f -> MarkerStatus.DANGER
@@ -252,13 +335,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         history: List<LinguisticMarkerResponse>,
         valueOf: (LinguisticMarkerResponse) -> Float?
     ): Float? {
-        val past = history.drop(1).mapNotNull(valueOf)
+        val past = history.drop(1).mapNotNull(valueOf).filter { it.isFinite() }
         if (past.size < 3) return null
         return (past.sum() / past.size)
     }
 
     private fun formatDiffText(today: Float?, baselineMean: Float?): String {
-        if (today == null || baselineMean == null) return "-"
+        if (today == null || baselineMean == null || !today.isFinite() || !baselineMean.isFinite()) return "-"
         val diff = today - baselineMean
         val sign = if (diff >= 0f) "+" else ""
         return "$sign${String.format(Locale.getDefault(), "%.2f", diff)}"
@@ -313,9 +396,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // ── 홈 화면용 ─────────────────────────────────────────────────────────────
-
-    /** 최근 7일 각 날짜에 분석 데이터가 있는지 여부 (index 0 = 6일 전, index 6 = 오늘) */
+    // 최근 7일 분석 기록 유무(0: 6일 전, 6: 오늘)
     val weeklyChecks: List<Boolean>
         get() = if (graphPoints.size == 7) {
             graphPoints.map { it.score > 0 }
@@ -323,7 +404,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             List(7) { false }
         }
 
-    /** 최근 7일 요일 라벨 (index 0 = 6일 전, index 6 = 오늘) */
+    // 최근 7일 요일 라벨(0: 6일 전, 6: 오늘)
     val weeklyDayLabels: List<String>
         get() {
             val dayNames = listOf("일", "월", "화", "수", "목", "금", "토")
@@ -333,7 +414,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-    /** 오늘은 항상 마지막(index 6) */
+    // 오늘은 주간 목록의 마지막 인덱스다.
     val todayDayIndex: Int get() = 6
 
     private fun applyBody(body: com.midas26.mobileapp.network.SessionSummaryResponse) {
@@ -345,10 +426,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         analyzedAt     = body.analyzedAt
     }
 
-    // ── 헤더 ──────────────────────────────────────────────────────────────────
+    // 분석 결과 헤더
 
-    /** 오늘 데이터를 보고 있는지 여부 (선택 날짜가 없거나 오늘이면 true) */
+    // 선택된 날짜가 없거나 오늘이면 true
     val isViewingToday: Boolean get() {
+        if (isTutorialDemo) return demoSelectedIndex == 6
         val selDate = selectedDayScore?.date ?: return true
         return parseDate(selDate.substring(0, 10))?.isSameDay(todayCal()) ?: true
     }
@@ -363,19 +445,19 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 get(Calendar.DAY_OF_YEAR) == other.get(Calendar.DAY_OF_YEAR)
 
     private fun riskToHealthScore(score: Float?): Float? =
-        score?.let { (100f - it).coerceIn(0f, 100f) }
+        score?.takeIf { it.isFinite() }?.let { (100f - it).coerceIn(0f, 100f) }
 
     private fun displayHealthScore(score: Float?): Int =
         riskToHealthScore(score)?.roundToInt() ?: 0
 
     private fun formatScore(score: Float?): String =
-        score?.roundToInt()?.let { "${it}점" } ?: "-"
+        score?.takeIf { it.isFinite() }?.roundToInt()?.let { "${it}점" } ?: "-"
 
     private fun formatHealthScoreFromRisk(score: Float?): String =
         formatScore(riskToHealthScore(score))
 
     private fun formatMemoryScore(score: Float?): String {
-        if (score == null || score <= 0f) return "측정 전"
+        if (score == null || !score.isFinite() || score <= 0f) return "측정 전"
         return formatScore(score)
     }
 
@@ -391,23 +473,24 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** 헤더에 표시할 종합 점수. 서버 finalRiskScore는 위험도라 앱에서는 건강 점수로 변환한다. */
-    val displayScore: Int get() = selectedDayScore
-        ?.finalRiskScore?.let { displayHealthScore(it) }
+    // 서버 위험도를 건강 점수(100 - 위험도)로 변환한다.
+    val displayScore: Int get() = if (isTutorialDemo) demoScores[demoSelectedIndex]
+    else selectedDayScore?.finalRiskScore?.let { displayHealthScore(it) }
         ?: displayHealthScore(finalRiskScore)
 
-    /** 헤더 배지 — 위험 등급 */
+    // 분석 결과 헤더 배지 — 위험 등급
     val displayRiskLevel: String get() =
-        formatRiskLevel(selectedDayScore?.riskLevel ?: riskLevel)
+        if (isTutorialDemo) "안정" else formatRiskLevel(selectedDayScore?.riskLevel ?: riskLevel)
 
-    /**
-     * 그래프에서 강조할 인덱스.
-     * - 날짜 직접 선택 중: 해당 날짜의 인덱스
-     * - 오늘 데이터 있음: 마지막 인덱스(오늘)
-     * - fallback(latest): latest의 날짜가 그래프 범위 안이면 해당 인덱스, 밖이면 -1(강조 없음)
-     */
+    // 드래그·선택 날짜를 우선 강조하고, 없으면 오늘 또는 최신 기록을 사용한다.
     val graphHighlightIndex: Int
         get() {
+            if (isTutorialDemo) {
+                val dragged = dragHighlightDate?.let { date ->
+                    demoGraphPoints.indexOfFirst { it.date == date.take(10) }
+                } ?: -1
+                return if (dragged >= 0) dragged else demoSelectedIndex
+            }
             val dragDate = dragHighlightDate
             if (dragDate != null) {
                 val idx = graphPoints.indexOfFirst { it.date?.startsWith(dragDate.take(10)) == true }
@@ -427,9 +510,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             return if (idx >= 0) idx else -1
         }
 
-    /** 헤더 날짜 라벨 */
+    // 분석 결과 헤더 날짜 라벨
     val displayDateLabel: String
         get() {
+            if (isTutorialDemo) {
+                val date = demoGraphPoints[demoSelectedIndex].date.orEmpty()
+                return if (demoSelectedIndex == 6) "오늘의 분석 결과" else formatDragLabel(date)
+            }
             dragPreviewDateLabel?.let { return it }
             if (isViewingToday && hasTodayData) return "오늘의 분석 결과"
             val raw = selectedDayScore?.date ?: analyzedAt ?: return "분석 결과"
@@ -441,14 +528,21 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             } catch (_: Exception) { "분석 결과" }
         }
 
-    // ── 4 카드 ─────────────────────────────────────────────────────────────────
+    // 음성·기억력·어휘 분석 카드에 사용할 데이터
 
     val todayItems: List<AnalysisItem>
         get() {
+            if (isTutorialDemo) return listOf(
+                AnalysisItem(Icons.Default.BarChart, "종합 위험도", "안정", "", AnalysisItem.Trend.Steady),
+                AnalysisItem(Icons.Default.RecordVoiceOver, "음성 점수", "88점", "", AnalysisItem.Trend.Steady),
+                AnalysisItem(Icons.Default.Psychology, "기억력 점수", "82점", "", AnalysisItem.Trend.Steady),
+                AnalysisItem(Icons.AutoMirrored.Filled.MenuBook, "어휘 점수", "86점", "", AnalysisItem.Trend.Steady)
+            )
             val sel = selectedDayScore
             val dRisk       = sel?.riskLevel   ?: riskLevel
             val dSpeechRisk = sel?.speechScore ?: speechScore
             val dTextScore  = sel?.textScore   ?: textScore
+            val dRecallScore = recallScore
 
             return listOf(
                 AnalysisItem(
@@ -468,7 +562,7 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                 AnalysisItem(
                     icon      = Icons.Default.Psychology,
                     label     = "기억력 점수",
-                    valueText = formatMemoryScore(dTextScore),
+                    valueText = formatMemoryScore(dRecallScore),
                     trendText = "",
                     trend     = AnalysisItem.Trend.Steady
                 ),
@@ -482,10 +576,13 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             )
         }
 
-    // ── 주간 그래프 ───────────────────────────────────────────────────────────
+    // 주간 그래프 데이터 및 날짜별 조회
 
-    var graphPoints by mutableStateOf<List<DailyScore>>(emptyList())
-        private set
+    private var realGraphPoints by mutableStateOf<List<DailyScore>>(emptyList())
+
+    var graphPoints: List<DailyScore>
+        get() = if (isTutorialDemo) demoGraphPoints else realGraphPoints
+        private set(value) { realGraphPoints = value }
 
     var streakDays by mutableIntStateOf(0)
         private set
@@ -504,10 +601,11 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun doLoadWeeklyScores() {
         val userId = resolveUserId()
-        if (userId <= 0) return
+        if (userId <= 0 || isTutorialDemo) return
 
         runCatching { api.getWeeklyScores(userId) }
             .onSuccess { resp ->
+                if (isTutorialDemo) return@onSuccess
                 resp.body()?.data?.let { list ->
                     val dayNames = listOf("일", "월", "화", "수", "목", "금", "토")
                     graphPoints = list.map { d ->
@@ -522,7 +620,8 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
             }
-            .onFailure { e -> networkError = toErrorCode(e) }
+            .onFailure { e -> if (e is CancellationException) throw e
+                if (!isTutorialDemo) networkError = toErrorCode(e) }
     }
 
     private fun toErrorCode(e: Throwable): String = when (e) {
@@ -533,28 +632,48 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun onGraphPointTapped(dateStr: String?) {
+        if (isTutorialDemo) {
+            val index = demoGraphPoints.indexOfFirst { it.date == dateStr?.take(10) }
+            if (index >= 0) demoSelectedIndex = index
+            return
+        }
         val userId = resolveUserId()
         if (userId <= 0 || dateStr == null) return
 
-        viewModelScope.launch {
+        dayLoadJob?.cancel()
+        dayLoadJob = viewModelScope.launch {
             isDayLoading = true
-            runCatching { api.getDailyScore(userId, dateStr) }
-                .onSuccess { resp -> selectedDayScore = resp.body()?.data }
-            isDayLoading = false
+            try {
+                val response = api.getDailyScore(userId, dateStr)
+                if (!isTutorialDemo && resolveUserId() == userId) {
+                    selectedDayScore = response.body()?.data
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (!isTutorialDemo) networkError = toErrorCode(e)
+            } finally {
+                isDayLoading = false
+            }
         }
     }
 
     fun clearSelectedDay() {
+        if (isTutorialDemo) {
+            demoSelectedIndex = 6
+            return
+        }
+        dayLoadJob?.cancel()
         selectedDayScore = null
     }
 
-    // ── 그래프 롱프레스 드래그 ─────────────────────────────────────────────────
+    // 그래프 길게 누르기 및 드래그
 
-    /** 현재 그래프를 롱프레스+드래그 중인지 여부 */
+    /** 그래프 드래그 진행 여부. */
     var isDraggingGraph by mutableStateOf(false)
         private set
 
-    /** 드래그 중 헤더에 미리 보여줄 날짜 문자열 (점수는 바뀌지 않음) */
+    /** 드래그 중 헤더에 표시할 날짜(점수는 확정 시 변경). */
     var dragPreviewDateLabel by mutableStateOf<String?>(null)
         private set
 

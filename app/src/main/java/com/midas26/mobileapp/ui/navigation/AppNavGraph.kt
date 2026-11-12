@@ -1,6 +1,5 @@
 package com.midas26.mobileapp.ui.navigation
 
-import com.midas26.mobileapp.ui.theme.AppColor
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.layout.Box
@@ -67,12 +66,14 @@ import com.midas26.mobileapp.ui.settings.ProfileEditScreen
 import com.midas26.mobileapp.ui.settings.SettingsScreen
 import com.midas26.mobileapp.ui.settings.WithdrawScreen
 import com.midas26.mobileapp.ui.settings.WithdrawVerifyScreen
+import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.FontSizeLevel
 import com.midas26.mobileapp.ui.tutorial.TutorialBottomTab
 import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
 import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianBottomTab
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.ui.voicechat.VoiceChatDisconnectedScreen
@@ -83,6 +84,21 @@ import kotlinx.coroutines.delay
 private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 private const val GuardianManagedUsersRoute = "guardian_managed_users"
+private const val TutorialLocationUserId = "tutorial-demo"
+
+// 예시 사용자는 화면에서만 사용하며 서버나 환경설정에 저장하지 않는다.
+private val tutorialLocationUser = LinkedUser(
+    id = TutorialLocationUserId,
+    name = "예시 사용자",
+    relation = "예시",
+    address = "튜토리얼용 위치 예시",
+    phone = "",
+    lastUpdatedMin = 0,
+    totalDistanceKm = 0.0,
+    visitedPlaces = 0,
+    travelHours = 0,
+    timeline = emptyList()
+)
 
 private val mainRoutes = setOf(
     Routes.UserHome,
@@ -127,20 +143,22 @@ fun AppNavHost(
 
     val tutorialViewModel: TutorialViewModel = viewModel()
     val tutorialState by tutorialViewModel.state.collectAsState()
-
-    /*
-     * 보호자 튜토리얼은 사용자 튜토리얼과 별도의 ViewModel로 관리합니다.
-     * 현재 단계에서는 보호자 화면 호출부에 전달하기 위해 생성합니다.
-     */
     val guardianTutorialViewModel: GuardianTutorialViewModel = viewModel()
-    val guardianTutorialState by
-    guardianTutorialViewModel.state.collectAsState()
+    val guardianTutorialState by guardianTutorialViewModel.state.collectAsState()
 
     val prefs = PrefsManager.from(context)
     val role = prefs.getUserRole()
     val isGuardian = role == PrefsManager.ROLE_GUARDIAN
     val isPatient = role == PrefsManager.ROLE_USER
     val homeRoute = if (isGuardian) Routes.GuardianHome else Routes.UserHome
+
+    val guardianPatients by guardianViewModel.patients.collectAsState()
+    var guardianPatientsRequested by remember { mutableStateOf(false) }
+    var guardianPatientsLoaded by remember { mutableStateOf(false) }
+
+    // 튜토리얼용 데이터는 실제 연결 사용자 및 서버 데이터와 분리한다.
+    val isGuardianDemo = isGuardian && guardianTutorialState.isRunning
+
 
     var hasAttemptedUserTutorialAutoStart by remember {
         mutableStateOf(false)
@@ -149,13 +167,6 @@ fun AppNavHost(
     var hasAttemptedGuardianTutorialAutoStart by remember {
         mutableStateOf(false)
     }
-
-    /*
-     * 설정에서 사용자가 선택한 다시 보기 대상을 임시로 보관합니다.
-     *
-     * null이면 다시 보기 요청이 없는 상태입니다.
-     * 튜토리얼 완료 기록은 변경하지 않습니다.
-     */
     var pendingReplayTarget by remember {
         mutableStateOf<TutorialReplayTarget?>(null)
     }
@@ -163,13 +174,6 @@ fun AppNavHost(
     var pendingGuardianReplayTarget by remember {
         mutableStateOf<GuardianTutorialReplayTarget?>(null)
     }
-
-    /*
-     * AppBottomBar에서 직접 측정한 각 사용자 탭의 실제 Bounds입니다.
-     *
-     * 전체 하단 바를 임의로 4등분하지 않고,
-     * 각 탭의 선택 표시선·아이콘·라벨 영역을 그대로 사용합니다.
-     */
     var userBottomTabBounds by remember {
         mutableStateOf<Map<TabId, Rect>>(emptyMap())
     }
@@ -183,7 +187,8 @@ fun AppNavHost(
         currentRoute,
         role,
         tutorialState.isRunning,
-        guardianTutorialState.isRunning
+        guardianTutorialState.isRunning,
+        guardianPatientsLoaded
     ) {
         when {
             isPatient &&
@@ -193,11 +198,6 @@ fun AppNavHost(
                 hasAttemptedUserTutorialAutoStart = true
 
                 if (prefs.shouldStartUserTutorial()) {
-                    /*
-                     * 자동 튜토리얼은 이 계정에서 최초 한 번만 실행합니다.
-                     * 시작 직전에 기록하므로 앱을 다시 실행하거나
-                     * 시뮬레이션을 재시작해도 자동으로 반복되지 않습니다.
-                     */
                     prefs.setUserTutorialCompleted(true)
                     tutorialViewModel.startFullTutorial()
                 }
@@ -206,29 +206,18 @@ fun AppNavHost(
             isGuardian &&
                     currentRoute == Routes.GuardianHome &&
                     !guardianTutorialState.isRunning &&
-                    !hasAttemptedGuardianTutorialAutoStart -> {
+                    !hasAttemptedGuardianTutorialAutoStart &&
+                    guardianPatientsRequested &&
+                    guardianPatientsLoaded -> {
                 hasAttemptedGuardianTutorialAutoStart = true
 
                 if (prefs.shouldStartGuardianTutorial()) {
-                    /*
-                     * 보호자 튜토리얼도 계정별 최초 한 번만
-                     * 자동으로 실행합니다.
-                     */
                     prefs.setGuardianTutorialCompleted(true)
                     guardianTutorialViewModel.startFullTutorial()
                 }
             }
         }
     }
-
-    /*
-     * 설정에서 선택한 화면으로 이동이 완료된 뒤 해당 튜토리얼을 시작합니다.
-     *
-     * 화면 전환 직후 바로 ViewModel 상태를 변경하면 대상 화면의 Composable과
-     * 하이라이트 Bounds가 아직 준비되지 않은 상태일 수 있으므로 잠시 기다립니다.
-     *
-     * 다시 보기에서는 PrefsManager의 최초 튜토리얼 완료 기록을 변경하지 않습니다.
-     */
     LaunchedEffect(
         currentRoute,
         pendingReplayTarget,
@@ -253,16 +242,7 @@ fun AppNavHost(
         if (currentRoute != targetRoute) {
             return@LaunchedEffect
         }
-
-        /*
-         * 대상 화면이 한 번 구성되고 onGloballyPositioned가 실행될 시간을 확보합니다.
-         * 이 지연은 화면만 이동하고 튜토리얼이 보이지 않는 현상을 줄여줍니다.
-         */
         delay(180)
-
-        /*
-         * 대기 중 사용자가 다른 요청을 선택한 경우 오래된 요청을 실행하지 않습니다.
-         */
         if (pendingReplayTarget != target) {
             return@LaunchedEffect
         }
@@ -313,8 +293,16 @@ fun AppNavHost(
 
         pendingGuardianReplayTarget = null
         hasAttemptedGuardianTutorialAutoStart = true
-        guardianTutorialViewModel
-            .startReplayTutorial(target)
+        if (target == GuardianTutorialReplayTarget.ANALYSIS) {
+            analysisViewModel.startTutorialDemo()
+        }
+        guardianTutorialViewModel.startReplayTutorial(target)
+    }
+
+    LaunchedEffect(guardianTutorialState.isRunning) {
+        if (!guardianTutorialState.isRunning) {
+            analysisViewModel.stopTutorialDemo()
+        }
     }
 
     val selectedTab: TabId = when (currentRoute) {
@@ -364,12 +352,6 @@ fun AppNavHost(
         GuardianBottomTab.SETTINGS -> GuardianHomeTab.Settings
         null -> null
     }
-
-    /*
-     * LocalDensity.current는 @Composable 컨텍스트에서 한 번만 읽습니다.
-     * 아래 createBottomTabHighlightBounds 함수는 일반 함수이므로
-     * @Composable API를 직접 호출하지 않습니다.
-     */
     val density = LocalDensity.current
 
     val horizontalPaddingPx =
@@ -381,25 +363,16 @@ fun AppNavHost(
     val bottomPaddingPx =
         with(density) { 8.dp.toPx() }
 
-    val verticalOffsetPx =
-        with(density) { 10.dp.toPx() }
-
-    fun createBottomTabHighlightBounds(
-        bounds: Rect?
-    ): Rect? {
+    // 탭의 실제 측정 영역을 기준으로 강조 테두리의 여백을 적용한다.
+    // 임의의 수직 이동값은 적용하지 않아 강조 영역이 위로 치우치지 않게 한다.
+    fun createBottomTabHighlightBounds(bounds: Rect?): Rect? {
         bounds ?: return null
 
         return Rect(
             left = bounds.left - horizontalPaddingPx,
-            top =
-                bounds.top -
-                        topPaddingPx -
-                        verticalOffsetPx,
+            top = bounds.top - topPaddingPx,
             right = bounds.right + horizontalPaddingPx,
-            bottom =
-                bounds.bottom +
-                        bottomPaddingPx -
-                        verticalOffsetPx
+            bottom = bounds.bottom + bottomPaddingPx
         )
     }
 
@@ -410,12 +383,27 @@ fun AppNavHost(
             }
         )
 
+    // 보호자 튜토리얼: 탭 전체가 아닌 아이콘과 글자 주변만 강조한다.
+    // 실제 탭 영역의 중심을 기준으로 배치해 네 탭의 위치를 동일하게 맞춘다.
+    val guardianHighlightWidthPx = with(density) { 64.dp.toPx() }
+    val guardianHighlightHeightPx = with(density) { 76.dp.toPx() }
+
     val highlightedGuardianBottomTabBounds =
-        createBottomTabHighlightBounds(
-            highlightedGuardianTab?.let {
-                guardianBottomTabBounds[it]
+        highlightedGuardianTab?.let { tab ->
+            guardianBottomTabBounds[tab]?.let { bounds ->
+                val highlightWidth = minOf(guardianHighlightWidthPx, bounds.width)
+                val highlightHeight = minOf(guardianHighlightHeightPx, bounds.height)
+                val centerX = (bounds.left + bounds.right) / 2f
+                val centerY = (bounds.top + bounds.bottom) / 2f
+
+                Rect(
+                    left = centerX - highlightWidth / 2f,
+                    top = centerY - highlightHeight / 2f,
+                    right = centerX + highlightWidth / 2f,
+                    bottom = centerY + highlightHeight / 2f
+                )
             }
-        )
+        }
 
 
     val handleBottomTabClick: (TabId) -> Unit = { tabId ->
@@ -470,15 +458,19 @@ fun AppNavHost(
                             number = nextNumber
                         )
 
-                    GuardianHomeTab.Location ->
+                    GuardianHomeTab.Location -> {
+                        analysisViewModel.stopTutorialDemo()
                         guardianTutorialViewModel.moveToLocation(
                             number = nextNumber
                         )
+                    }
 
-                    GuardianHomeTab.Settings ->
+                    GuardianHomeTab.Settings -> {
+                        analysisViewModel.stopTutorialDemo()
                         guardianTutorialViewModel.moveToSettings(
                             number = nextNumber
                         )
+                    }
 
                     else -> Unit
                 }
@@ -505,6 +497,7 @@ fun AppNavHost(
                     guardianTutorialState.isRunning
                 ) {
                     guardianTutorialViewModel.stopTutorial()
+                    analysisViewModel.stopTutorialDemo()
                 }
 
                 true
@@ -620,7 +613,9 @@ fun AppNavHost(
                     composable(Routes.LoginForm) {
                         LoginFormScreen(
                             onNavigateToHome = {
-                                analysisViewModel.refresh()
+                                if (PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_USER) {
+                                    analysisViewModel.refresh()
+                                }
                                 hasAttemptedUserTutorialAutoStart = false
                                 hasAttemptedGuardianTutorialAutoStart = false
 
@@ -837,7 +832,13 @@ fun AppNavHost(
                         val patientScores by guardianViewModel.patientScores.collectAsState()
 
                         LaunchedEffect(guardianId) {
-                            guardianViewModel.loadPatients(guardianId)
+                            guardianPatientsRequested = true
+                            guardianPatientsLoaded = false
+                            try {
+                                guardianViewModel.loadPatients(guardianId)
+                            } finally {
+                                guardianPatientsLoaded = true
+                            }
                         }
 
                         LaunchedEffect(patients) {
@@ -849,7 +850,7 @@ fun AppNavHost(
                                 guardianTutorialViewModel,
                             guardianName = guardianName,
                             patients = patients,
-                            isLoading = isLoadingPatients,
+                            isLoading = isLoadingPatients && !(isGuardianDemo && patients.isEmpty()),
                             patientScores = patientScores,
                             onMenuClick = { menu ->
                                 when (menu) {
@@ -869,7 +870,11 @@ fun AppNavHost(
 
                     composable(Routes.LocationList) {
                         val patients by guardianViewModel.patients.collectAsState()
-                        val linkedUsers = patients.map { it.toLinkedUser() }
+                        val linkedUsers = if (isGuardianDemo) {
+                            listOf(tutorialLocationUser)
+                        } else {
+                            patients.map { it.toLinkedUser() }
+                        }
 
                         LocationListScreen(
                             guardianTutorialViewModel =
@@ -894,7 +899,11 @@ fun AppNavHost(
                     ) { back ->
                         val userId = back.arguments?.getString(Routes.LocationDetailArgUserId) ?: ""
                         val patients by guardianViewModel.patients.collectAsState()
-                        val linkedUsers = patients.map { it.toLinkedUser() }
+                        val linkedUsers = if (isGuardianDemo) {
+                            listOf(tutorialLocationUser)
+                        } else {
+                            patients.map { it.toLinkedUser() }
+                        }
                         val user = linkedUsers.find { it.id == userId }
                             ?: linkedUsers.firstOrNull()
                             ?: return@composable
@@ -922,7 +931,11 @@ fun AppNavHost(
                     ) { back ->
                         val userId = back.arguments?.getString(Routes.LocationRouteArgUserId) ?: ""
                         val patients by guardianViewModel.patients.collectAsState()
-                        val linkedUsers = patients.map { it.toLinkedUser() }
+                        val linkedUsers = if (isGuardianDemo) {
+                            listOf(tutorialLocationUser)
+                        } else {
+                            patients.map { it.toLinkedUser() }
+                        }
                         val user = linkedUsers.find { it.id == userId }
                             ?: linkedUsers.firstOrNull()
                             ?: return@composable
@@ -988,8 +1001,8 @@ fun AppNavHost(
                                     )
                                 },
                                 onReplayTutorial = { target ->
-                                    guardianTutorialViewModel
-                                        .stopTutorial()
+                                    guardianTutorialViewModel.stopTutorial()
+                                    analysisViewModel.stopTutorialDemo()
                                     hasAttemptedGuardianTutorialAutoStart =
                                         true
 
@@ -1010,8 +1023,10 @@ fun AppNavHost(
 
                                     if (currentRoute == destination) {
                                         pendingGuardianReplayTarget = null
-                                        guardianTutorialViewModel
-                                            .startReplayTutorial(target)
+                                        if (target == GuardianTutorialReplayTarget.ANALYSIS) {
+                                            analysisViewModel.startTutorialDemo()
+                                        }
+                                        guardianTutorialViewModel.startReplayTutorial(target)
                                     } else {
                                         pendingGuardianReplayTarget = target
 
@@ -1053,10 +1068,6 @@ fun AppNavHost(
                                     navController.navigate(Routes.ProfileEdit)
                                 },
                                 onReplayTutorial = { target ->
-                                    /*
-                                     * 다시 보기 실행 전 기존 튜토리얼 상태를 정리합니다.
-                                     * 최초 완료 기록은 변경하지 않습니다.
-                                     */
                                     tutorialViewModel.stopTutorial()
                                     hasAttemptedUserTutorialAutoStart = true
 
@@ -1070,19 +1081,9 @@ fun AppNavHost(
                                     }
 
                                     if (currentRoute == destination) {
-                                        /*
-                                         * 현재 화면의 사용법을 선택한 경우에는 화면 이동이 없으므로
-                                         * pending 상태를 남기지 않고 즉시 시작합니다.
-                                         */
                                         pendingReplayTarget = null
                                         tutorialViewModel.startReplayTutorial(target)
                                     } else {
-                                        /*
-                                         * 다른 화면의 사용법을 선택한 경우:
-                                         * 1. 다시 보기 대상을 저장하고
-                                         * 2. 해당 화면으로 이동한 뒤
-                                         * 3. 상단 LaunchedEffect에서 화면 구성이 끝난 후 시작합니다.
-                                         */
                                         pendingReplayTarget = target
 
                                         navController.navigate(destination) {
@@ -1215,8 +1216,6 @@ fun AppNavHost(
                                 analysisViewModel.refresh()
                             },
                             onNavigateHome = {
-                                analysisViewModel.refresh()
-
                                 navController.navigate(Routes.UserHome) {
                                     popUpTo(Routes.UserHome) {
                                         inclusive = false
@@ -1225,13 +1224,6 @@ fun AppNavHost(
                                 }
                             },
                             onNavigateAnalysis = {
-                                /*
-                                 * 전체 튜토리얼의 음성 대화 단계가 끝나면
-                                 * 분석 결과 화면으로 이동합니다.
-                                 *
-                                 * TutorialViewModel의 currentScreen은
-                                 * VoiceChatScreen에서 ANALYSIS로 먼저 변경됩니다.
-                                 */
                                 analysisViewModel.refresh()
 
                                 navController.navigate(Routes.AnalysisResult) {
@@ -1262,8 +1254,10 @@ fun AppNavHost(
                         val isLoadingPatients by guardianViewModel.isLoading.collectAsState()
                         val patientStatuses by guardianViewModel.patientStatuses.collectAsState()
 
-                        LaunchedEffect(patients) {
-                            if (patients.isNotEmpty()) guardianViewModel.loadPatientStatuses()
+                        LaunchedEffect(patients, isGuardianDemo) {
+                            if (!isGuardianDemo && patients.isNotEmpty()) {
+                                guardianViewModel.loadPatientStatuses()
+                            }
                         }
 
                         AnalysisUserSelectScreen(
@@ -1276,26 +1270,23 @@ fun AppNavHost(
                                 navController.popBackStackIfCurrent(Routes.AnalysisUserSelect)
                             },
                             onUserClick = { patient: LinkedUserInfo ->
-                                patient.userId?.let { patientId ->
-                                    if (guardianTutorialState.isRunning) {
-                                        guardianTutorialViewModel
-                                            .moveToAnalysisResult(
-                                                number =
-                                                    guardianTutorialState
-                                                        .currentNumber + 1
-                                            )
-                                    }
-
-                                    guardianViewModel.markPatientViewed(
-                                        patientId
+                                if (guardianTutorialState.isRunning &&
+                                    guardianTutorialState.currentScreen == GuardianTutorialScreen.ANALYSIS_SELECT) {
+                                    // 튜토리얼 예시 사용자 선택 시 서버 요청을 생략한다.
+                                    analysisViewModel.startTutorialDemo()
+                                    guardianTutorialViewModel.moveToAnalysisResult(
+                                        number = guardianTutorialState.currentNumber + 1
                                     )
-                                    analysisViewModel.loadForPatient(
-                                        patientId
-                                    )
-                                    navController.navigate(
-                                        Routes.AnalysisResult
-                                    ) {
+                                    navController.navigate(Routes.AnalysisResult) {
                                         launchSingleTop = true
+                                    }
+                                } else {
+                                    patient.userId?.let { patientId ->
+                                        guardianViewModel.markPatientViewed(patientId)
+                                        analysisViewModel.loadForPatient(patientId)
+                                        navController.navigate(Routes.AnalysisResult) {
+                                            launchSingleTop = true
+                                        }
                                     }
                                 }
                             }
@@ -1308,10 +1299,13 @@ fun AppNavHost(
                             guardianTutorialViewModel =
                                 guardianTutorialViewModel,
                             onBack = {
+                                analysisViewModel.stopTutorialDemo()
                                 analysisViewModel.resetToSelf()
+                                if (isGuardian && guardianTutorialState.isRunning) {
+                                    guardianTutorialViewModel.stopTutorial()
+                                }
 
                                 if (isGuardian) {
-                                    // 보호자 분석 결과 화면에서는 항상 사용자 선택 화면으로 이동합니다.
                                     navController.navigate(Routes.AnalysisUserSelect) {
                                         popUpTo(Routes.AnalysisResult) {
                                             inclusive = true
@@ -1319,7 +1313,6 @@ fun AppNavHost(
                                         launchSingleTop = true
                                     }
                                 } else {
-                                    // 사용자 모드에서는 기존처럼 이전 화면으로 돌아갑니다.
                                     navController.popBackStackIfCurrent(Routes.AnalysisResult)
                                 }
                             },
@@ -1355,13 +1348,6 @@ fun AppNavHost(
                 }
             }
         }
-
-        /*
-         * 하단 탭 튜토리얼은 Scaffold 바깥의 최상위 Box에 표시합니다.
-         *
-         * Scaffold content 안에 있으면 bottomBar가 오버레이 위에 그려져
-         * 강조 테두리와 안내창이 하단 탭에 가려질 수 있습니다.
-         */
         if (
             isPatient &&
             tutorialState.isRunning &&
@@ -1473,6 +1459,7 @@ fun AppNavHost(
                 onSkip = {
                     prefs.setGuardianTutorialCompleted(true)
                     guardianTutorialViewModel.stopTutorial()
+                    analysisViewModel.stopTutorialDemo()
                 },
                 isBottomTabGuide = true,
                 tutorialColor = GuardianTutorialAccentColor
