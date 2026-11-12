@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -26,8 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +41,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,12 +55,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
@@ -67,9 +70,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlin.math.roundToInt
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
@@ -77,6 +82,9 @@ import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 import com.midas26.mobileapp.ui.tutorial.AnalysisTutorialStep
 import com.midas26.mobileapp.ui.tutorial.TutorialScreen
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianAnalysisTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
 import kotlin.math.abs
@@ -87,7 +95,9 @@ fun AnalysisResultScreen(
     tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
     onNavigateSettings: () -> Unit = {},
-    viewModel: AnalysisViewModel = viewModel()
+    onNavigateTextScoreDetail: () -> Unit = {},
+    viewModel: AnalysisViewModel = viewModel(),
+    guardianTutorialViewModel: GuardianTutorialViewModel? = null
 ) {
     val context = LocalContext.current
     val isGuardian = PrefsManager.from(context).getUserRole() == PrefsManager.ROLE_GUARDIAN
@@ -96,8 +106,10 @@ fun AnalysisResultScreen(
         tutorialViewModel = tutorialViewModel,
         onBack = onBack,
         onNavigateSettings = onNavigateSettings,
+        onNavigateTextScoreDetail = onNavigateTextScoreDetail,
         viewModel = viewModel,
-        isGuardian = isGuardian
+        isGuardian = isGuardian,
+        guardianTutorialViewModel = guardianTutorialViewModel
     )
 }
 
@@ -106,19 +118,25 @@ private fun UserAnalysisResultContent(
     tutorialViewModel: TutorialViewModel,
     onBack: () -> Unit,
     onNavigateSettings: () -> Unit,
+    onNavigateTextScoreDetail: () -> Unit = {},
     viewModel: AnalysisViewModel,
-    isGuardian: Boolean = false
+    isGuardian: Boolean = false,
+    guardianTutorialViewModel: GuardianTutorialViewModel? = null
 ) {
     val fontScale = LocalFontSizeScale.current.scale
     val tutorialState by tutorialViewModel.state.collectAsState()
 
-    /*
-     * boundsInRoot()로 최상위 화면과 각 강조 대상의 위치를 측정한 뒤,
-     * 루트 위치를 빼서 오버레이 내부 좌표로 변환합니다.
-     */
+    val guardianTutorialState =
+        if (guardianTutorialViewModel != null) {
+            guardianTutorialViewModel.state.collectAsState().value
+        } else {
+            null
+        }
+
+    // 튜토리얼 강조 영역을 화면 루트 기준의 상대 좌표로 관리한다.
     var tutorialRootBounds by remember { mutableStateOf<Rect?>(null) }
 
-    // TutorialOverlay에 전달할 실제 UI 위치입니다.
+    // 단계별 강조 대상 영역.
     var mainScoreBounds by remember { mutableStateOf<Rect?>(null) }
     var weeklyGraphBounds by remember { mutableStateOf<Rect?>(null) }
     var detailScoresBounds by remember { mutableStateOf<Rect?>(null) }
@@ -133,7 +151,8 @@ private fun UserAnalysisResultContent(
         }
     }
 
-    val showLoading = viewModel.showLoadingScreen && (viewModel.isLoading || !minTimeElapsed)
+    val showLoading = !viewModel.isTutorialDemo &&
+            viewModel.showLoadingScreen && (viewModel.isLoading || !minTimeElapsed)
 
     LaunchedEffect(showLoading) {
         if (!showLoading && viewModel.showLoadingScreen) {
@@ -176,7 +195,7 @@ private fun UserAnalysisResultContent(
             Column(
                 modifier = Modifier.fillMaxSize()
             ) {
-                val isToday = viewModel.isViewingToday && viewModel.hasTodayData
+                val isToday = viewModel.isViewingToday
 
                 val animSpec = tween<Color>(durationMillis = 400)
 
@@ -211,15 +230,12 @@ private fun UserAnalysisResultContent(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = {
-                                    if (!isToday) viewModel.clearSelectedDay()
-                                    else onBack()
-                                },
+                                onClick = onBack,
                                 modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = if (isToday) "뒤로가기" else "오늘로 돌아가기",
+                                    contentDescription = "뒤로가기",
                                     tint = BrandWhite,
                                     modifier = Modifier.size(28.dp)
                                 )
@@ -246,7 +262,7 @@ private fun UserAnalysisResultContent(
                                 .padding(start = 24.dp, end = 24.dp, bottom = 28.dp)
                         ) {
                             Text(
-                                text = viewModel.displayDateLabel,
+                                text = if (viewModel.isViewingToday) "오늘의 분석 결과" else viewModel.displayDateLabel,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = Color.Transparent
                             )
@@ -262,7 +278,15 @@ private fun UserAnalysisResultContent(
                                 verticalAlignment = Alignment.Bottom
                             ) {
                                 Text(
-                                    text = viewModel.displayScore.toString(),
+                                    text = if (
+                                        viewModel.isViewingToday &&
+                                        !viewModel.hasTodayData &&
+                                        !viewModel.isTutorialDemo
+                                    ) {
+                                        "0"
+                                    } else {
+                                        viewModel.displayScore.toString()
+                                    },
                                     fontSize = (56 * fontScale).sp,
                                     color = BrandWhite,
                                     fontWeight = FontWeight.Bold
@@ -286,7 +310,15 @@ private fun UserAnalysisResultContent(
                                     modifier = Modifier.padding(bottom = 14.dp)
                                 ) {
                                     Text(
-                                        text = viewModel.displayRiskLevel,
+                                        text = if (
+                                            viewModel.isViewingToday &&
+                                            !viewModel.hasTodayData &&
+                                            !viewModel.isTutorialDemo
+                                        ) {
+                                            "-"
+                                        } else {
+                                            viewModel.displayRiskLevel
+                                        },
                                         style = MaterialTheme.typography.bodySmall,
                                         color = if (isToday) (if (isGuardian) AppColor.guardianDark else AppColor.accentDark) else AppColor.textSecondary,
                                         fontWeight = FontWeight.Bold,
@@ -304,7 +336,7 @@ private fun UserAnalysisResultContent(
                     )
 
                     Text(
-                        text = viewModel.displayDateLabel,
+                        text = if (viewModel.isViewingToday) "오늘의 분석 결과" else viewModel.displayDateLabel,
                         style = MaterialTheme.typography.bodyLarge,
                         color = BrandWhite.copy(alpha = 0.92f),
                         fontWeight = if (isDragging) FontWeight.ExtraBold else FontWeight.Normal,
@@ -320,7 +352,20 @@ private fun UserAnalysisResultContent(
                 val graphCardHeightDp = with(density) { graphCardHeightPx.toDp() }
 
                 Box(modifier = Modifier.fillMaxSize()) {
-                    val items = viewModel.todayItems
+                    val items = if (
+                        viewModel.isViewingToday &&
+                        !viewModel.hasTodayData &&
+                        !viewModel.isTutorialDemo
+                    ) {
+                        viewModel.todayItems.mapIndexed { index, item ->
+                            when (index) {
+                                1, 2 -> item.copy(valueText = "측정 전")
+                                else -> item
+                            }
+                        }
+                    } else {
+                        viewModel.todayItems
+                    }
 
                     Column(
                         modifier = Modifier
@@ -328,13 +373,10 @@ private fun UserAnalysisResultContent(
                             .padding(top = 12.dp + graphCardHeightDp)
                             .padding(horizontal = 16.dp)
                     ) {
-                        Spacer(modifier = Modifier.weight(2f))
+                        // 카드 간격을 고정해 화면 크기에 따른 변동을 방지한다.
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        /*
-                         * 세부 분석 카드 4개만 감싸는 영역에 좌표 측정을 적용합니다.
-                         * 위아래 Spacer는 하이라이트 영역에서 제외되므로
-                         * 기존보다 하이라이트 박스 높이가 작아집니다.
-                         */
+                        // 세부 점수 카드 영역을 튜토리얼 강조 대상으로 사용한다.
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -344,26 +386,19 @@ private fun UserAnalysisResultContent(
                                         .relativeTo(tutorialRootBounds)
                                 }
                         ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ItemCard(item = items[0], modifier = Modifier.weight(1f))
-                                ItemCard(item = items[1], modifier = Modifier.weight(1f))
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ItemCard(item = items[2], modifier = Modifier.weight(1f))
-                                ItemCard(item = items[3], modifier = Modifier.weight(1f))
+                            // 분석 항목이 아직 로딩되지 않았을 때 인덱스 오류를 방지한다.
+                            if (items.size >= 3) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    ItemCard(item = items[1], modifier = Modifier.weight(1f))
+                                    ItemCard(item = items[2], modifier = Modifier.weight(1f))
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.weight(2f))
+                        Spacer(modifier = Modifier.weight(1f))
                     }
 
                     Box(
@@ -390,6 +425,23 @@ private fun UserAnalysisResultContent(
                         Column(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)
                         ) {
+                            if (viewModel.isTutorialDemo) {
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFFFF1EC)
+                                ) {
+                                    Text(
+                                        text = "튜토리얼 예시 데이터입니다. 실제 분석 결과가 아닙니다.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = AppColor.guardianDark,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+
                             Text(
                                 text = "이번 주 추이",
                                 style = MaterialTheme.typography.titleMedium,
@@ -418,7 +470,7 @@ private fun UserAnalysisResultContent(
                                 onDragCancel = { viewModel.onGraphDragCancel() },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(160.dp)
+                                    .height(if (viewModel.isTutorialDemo) 116.dp else 160.dp)
                             )
                         }
                     }
@@ -428,12 +480,14 @@ private fun UserAnalysisResultContent(
             if (
                 !isGuardian &&
                 tutorialState.isRunning &&
-                tutorialState.currentScreen == TutorialScreen.ANALYSIS
+                tutorialState.currentScreen == TutorialScreen.ANALYSIS &&
+                tutorialState.analysisStep != AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB
             ) {
                 val targetBounds = when (tutorialState.analysisStep) {
                     AnalysisTutorialStep.MAIN_SCORE -> mainScoreBounds
                     AnalysisTutorialStep.WEEKLY_GRAPH -> weeklyGraphBounds
                     AnalysisTutorialStep.DETAIL_SCORES -> detailScoresBounds
+                    AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> null
                     AnalysisTutorialStep.COMPLETED -> null
                 }
 
@@ -460,11 +514,17 @@ private fun UserAnalysisResultContent(
 
                             AnalysisTutorialStep.DETAIL_SCORES -> {
                                 if (tutorialViewModel.isFullTutorial()) {
-                                    tutorialViewModel.moveToSettings()
-                                    onNavigateSettings()
+                                    // 다음 탭 안내는 내비게이션에서 처리한다.
+                                    tutorialViewModel.showSettingsTabGuide(
+                                        number = tutorialState.currentNumber + 1
+                                    )
                                 } else {
                                     tutorialViewModel.completeTutorial()
                                 }
+                            }
+
+                            AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> {
+                                // 탭 이동은 내비게이션에서 처리한다.
                             }
 
                             AnalysisTutorialStep.COMPLETED -> {
@@ -477,18 +537,131 @@ private fun UserAnalysisResultContent(
                     }
                 )
             }
+
+            val guardianState = guardianTutorialState
+
+            if (
+                isGuardian &&
+                guardianTutorialViewModel != null &&
+                guardianState?.isRunning == true &&
+                guardianState.currentScreen ==
+                GuardianTutorialScreen.ANALYSIS_RESULT &&
+                guardianState.analysisStep !=
+                GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB &&
+                guardianState.analysisStep !=
+                GuardianAnalysisTutorialStep.COMPLETED
+            ) {
+                val mappedStep = when (
+                    guardianState.analysisStep
+                ) {
+                    GuardianAnalysisTutorialStep.MAIN_SCORE ->
+                        AnalysisTutorialStep.MAIN_SCORE
+
+                    GuardianAnalysisTutorialStep.WEEKLY_GRAPH ->
+                        AnalysisTutorialStep.WEEKLY_GRAPH
+
+                    GuardianAnalysisTutorialStep.DETAIL_SCORES ->
+                        AnalysisTutorialStep.DETAIL_SCORES
+
+                    GuardianAnalysisTutorialStep.USER_SELECT,
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.COMPLETED ->
+                        null
+                }
+
+                val guardianTargetBounds = when (
+                    guardianState.analysisStep
+                ) {
+                    GuardianAnalysisTutorialStep.MAIN_SCORE ->
+                        mainScoreBounds
+
+                    GuardianAnalysisTutorialStep.WEEKLY_GRAPH ->
+                        weeklyGraphBounds
+
+                    GuardianAnalysisTutorialStep.DETAIL_SCORES ->
+                        detailScoresBounds
+
+                    GuardianAnalysisTutorialStep.USER_SELECT,
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.COMPLETED ->
+                        null
+                }
+
+                if (
+                    mappedStep != null &&
+                    guardianTargetBounds != null
+                ) {
+                    AnalysisTutorialOverlay(
+                        step = mappedStep,
+                        targetBounds = guardianTargetBounds,
+                        currentNumber =
+                            guardianState.currentNumber,
+                        totalNumber =
+                            guardianState.totalNumber,
+                        onNext = {
+                            when (
+                                guardianState.analysisStep
+                            ) {
+                                GuardianAnalysisTutorialStep.MAIN_SCORE -> {
+                                    guardianTutorialViewModel
+                                        .moveAnalysisStep(
+                                            step =
+                                                GuardianAnalysisTutorialStep
+                                                    .WEEKLY_GRAPH,
+                                            number =
+                                                guardianState.currentNumber + 1
+                                        )
+                                }
+
+                                GuardianAnalysisTutorialStep.WEEKLY_GRAPH -> {
+                                    guardianTutorialViewModel
+                                        .moveAnalysisStep(
+                                            step =
+                                                GuardianAnalysisTutorialStep
+                                                    .DETAIL_SCORES,
+                                            number =
+                                                guardianState.currentNumber + 1
+                                        )
+                                }
+
+                                GuardianAnalysisTutorialStep.DETAIL_SCORES -> {
+                                    if (
+                                        guardianTutorialViewModel
+                                            .isFullTutorial()
+                                    ) {
+                                        guardianTutorialViewModel
+                                            .showLocationTabGuide(
+                                                number =
+                                                    guardianState
+                                                        .currentNumber + 1
+                                            )
+                                    } else {
+                                        guardianTutorialViewModel
+                                            .completeTutorial()
+                                    }
+                                }
+
+                                GuardianAnalysisTutorialStep.USER_SELECT,
+                                GuardianAnalysisTutorialStep
+                                    .MOVE_TO_LOCATION_TAB ->
+                                    Unit
+
+                                GuardianAnalysisTutorialStep.COMPLETED ->
+                                    guardianTutorialViewModel
+                                        .completeTutorial()
+                            }
+                        },
+                        onSkip = {
+                            guardianTutorialViewModel
+                                .stopTutorial()
+                        },
+                        tutorialColor = Color(0xFFC85E48)
+                    )
+                }
+            }
+
         }
     }
-
-    /*
-     * UserAnalysisResultContent 종료
-     *
-     * 위의 세 중괄호는 각각:
-     * 1. 최상위 Box
-     * 2. Crossfade content lambda
-     * 3. UserAnalysisResultContent 함수
-     * 를 닫습니다.
-     */
 }
 
 private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
@@ -509,15 +682,26 @@ private fun AnalysisTutorialOverlay(
     currentNumber: Int,
     totalNumber: Int,
     onNext: () -> Unit,
-    onSkip: () -> Unit
+    onSkip: () -> Unit,
+    tutorialColor: Color = AppColor.greenPrimary
 ) {
     val density = LocalDensity.current
-    val highlightColor = AppColor.greenPrimary
+    val highlightColor = tutorialColor
+    var popupHeightPx by remember { mutableStateOf(0f) }
+    // 주간 그래프 안내 창은 아래로 내리고, 세부 점수 안내 창은 카드에 더 가깝게 배치한다.
+    val popupGapPx = with(density) {
+        when (step) {
+            AnalysisTutorialStep.WEEKLY_GRAPH -> 26.dp.toPx()
+            AnalysisTutorialStep.DETAIL_SCORES -> 22.dp.toPx()
+            else -> 12.dp.toPx()
+        }
+    }
 
     val title = when (step) {
         AnalysisTutorialStep.MAIN_SCORE -> "오늘의 인지 점수"
         AnalysisTutorialStep.WEEKLY_GRAPH -> "이번 주 점수 추이"
         AnalysisTutorialStep.DETAIL_SCORES -> "세부 분석 결과"
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB -> "앱 설정 살펴보기"
         AnalysisTutorialStep.COMPLETED -> "분석 결과 사용법 완료"
     }
 
@@ -529,7 +713,10 @@ private fun AnalysisTutorialOverlay(
             "최근 7일 동안 점수가 어떻게 변했는지 그래프로 확인할 수 있어요. 그래프를 길게 누르면 날짜별 결과를 볼 수 있어요."
 
         AnalysisTutorialStep.DETAIL_SCORES ->
-            "기억력과 어휘력 등 세부 항목별 분석 결과를 확인할 수 있어요."
+            "음성 점수와 기억력 점수를 확인해보세요!"
+
+        AnalysisTutorialStep.MOVE_TO_SETTINGS_TAB ->
+            "하단 설정 탭에서 알림, 위치 공유와 접근성 기능을 변경할 수 있어요."
 
         AnalysisTutorialStep.COMPLETED ->
             "분석 결과 화면의 주요 기능을 모두 살펴봤어요."
@@ -541,14 +728,38 @@ private fun AnalysisTutorialOverlay(
             .clickable(onClick = {})
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        val showPopupAtTop = targetBounds?.center?.y?.let {
-            it > screenHeightPx * 0.52f
-        } ?: false
+        // 주간 그래프는 하단 공간이 좁으므로 최소 화면 여백만 확보한다.
+        val edgeMarginPx = with(density) {
+            if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 4.dp.toPx()
+            else 16.dp.toPx()
+        }
+        val defaultPopupHeightPx = with(density) { 300.dp.toPx() }
+        val cardHeightPx = if (popupHeightPx > 0f) popupHeightPx else defaultPopupHeightPx
+        val target = targetBounds
 
-        val popupAlignment = if (showPopupAtTop) {
-            Alignment.TopCenter
+        // 강조 영역을 기준으로 안내 창을 배치한다.
+        // 화면 경계에 걸리는 경우 실제 측정된 카드 높이를 사용해 위치를 제한한다.
+        val popupTopPx = if (target == null) {
+            ((screenHeightPx - cardHeightPx) / 2f).coerceAtLeast(edgeMarginPx)
         } else {
-            Alignment.BottomCenter
+            val below = target.bottom + popupGapPx
+            val above = target.top - popupGapPx - cardHeightPx
+            val canFitBelow = below + cardHeightPx <= screenHeightPx - edgeMarginPx
+            val canFitAbove = above >= edgeMarginPx
+            val desiredTop = when {
+                // 세부 점수 단계는 항상 점수 카드 바로 위에 배치한다.
+                step == AnalysisTutorialStep.DETAIL_SCORES && canFitAbove -> above
+                step == AnalysisTutorialStep.WEEKLY_GRAPH && canFitBelow -> below
+                canFitBelow -> below
+                canFitAbove -> above
+                // 공간이 부족한 경우에는 가용 공간이 더 큰 쪽을 선택한다.
+                screenHeightPx - target.bottom >= target.top -> below
+                else -> above
+            }
+            desiredTop.coerceIn(
+                edgeMarginPx,
+                (screenHeightPx - cardHeightPx - edgeMarginPx).coerceAtLeast(edgeMarginPx)
+            )
         }
 
         Canvas(
@@ -562,10 +773,12 @@ private fun AnalysisTutorialOverlay(
 
             targetBounds?.let { bounds ->
                 val padding = 5.dp.toPx()
-                val left = (bounds.left - padding).coerceAtLeast(0f)
-                val top = (bounds.top - padding).coerceAtLeast(0f)
-                val right = (bounds.right + padding).coerceAtMost(size.width)
-                val bottom = (bounds.bottom + padding).coerceAtMost(size.height)
+                val strokeInset = 2.dp.toPx()
+                val left = (bounds.left - padding).coerceIn(strokeInset, size.width)
+                val top = (bounds.top - padding).coerceIn(strokeInset, size.height)
+                val right = (bounds.right + padding).coerceIn(0f, size.width - strokeInset)
+                val bottom = (bounds.bottom + padding).coerceIn(0f, size.height - strokeInset)
+                // 하이라이트 자체를 잘라내지 않고 안내 창의 위치만 조정한다.
 
                 val topLeft = Offset(left, top)
                 val highlightSize = Size(
@@ -574,43 +787,53 @@ private fun AnalysisTutorialOverlay(
                 )
                 val cornerRadius = CornerRadius(20.dp.toPx(), 20.dp.toPx())
 
-                drawRoundRect(
-                    color = Color.Transparent,
-                    topLeft = topLeft,
-                    size = highlightSize,
-                    cornerRadius = cornerRadius,
-                    blendMode = BlendMode.Clear
-                )
+                if (highlightSize.width > 0f && highlightSize.height > 0f) {
+                    drawRoundRect(
+                        color = Color.Transparent,
+                        topLeft = topLeft,
+                        size = highlightSize,
+                        cornerRadius = cornerRadius,
+                        blendMode = BlendMode.Clear
+                    )
 
-                drawRoundRect(
-                    color = highlightColor,
-                    topLeft = topLeft,
-                    size = highlightSize,
-                    cornerRadius = cornerRadius,
-                    style = Stroke(width = 4.dp.toPx())
-                )
+                    drawRoundRect(
+                        color = highlightColor,
+                        topLeft = topLeft,
+                        size = highlightSize,
+                        cornerRadius = cornerRadius,
+                        style = Stroke(width = 4.dp.toPx())
+                    )
+                }
             }
         }
 
         Surface(
             modifier = Modifier
-                .align(popupAlignment)
+                .align(Alignment.TopCenter)
+                .offset { IntOffset(0, popupTopPx.roundToInt()) }
                 .fillMaxWidth()
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = if (showPopupAtTop) 24.dp else 20.dp,
-                    bottom = if (showPopupAtTop) 20.dp else 28.dp
-                ),
+                .padding(horizontal = 20.dp)
+                .onGloballyPositioned { coordinates ->
+                    val newHeight = coordinates.size.height.toFloat()
+                    if (newHeight > 0f && popupHeightPx != newHeight) {
+                        popupHeightPx = newHeight
+                    }
+                },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite,
             shadowElevation = 12.dp
         ) {
-            Column(modifier = Modifier.padding(22.dp)) {
+            // 주간 그래프 단계에서만 세로 여백을 줄여 카드가 아래로 이동할 공간을 확보한다.
+            Column(
+                modifier = Modifier.padding(
+                    horizontal = 22.dp,
+                    vertical = if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 10.dp else 22.dp
+                )
+            ) {
                 Text(
                     text = "$currentNumber / $totalNumber",
                     style = MaterialTheme.typography.labelLarge,
-                    color = AppColor.greenPrimary,
+                    color = tutorialColor,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -631,7 +854,9 @@ private fun AnalysisTutorialOverlay(
                     color = AppColor.textSecondary
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(
+                    if (step == AnalysisTutorialStep.WEEKLY_GRAPH) 8.dp else 20.dp
+                ))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -656,7 +881,7 @@ private fun AnalysisTutorialOverlay(
                             } else {
                                 "다음"
                             },
-                            color = AppColor.greenPrimary,
+                            color = tutorialColor,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -707,15 +932,14 @@ private fun WeeklyLineChart(
         label = "highlight"
     )
 
-    var computedXs = remember { listOf<Float>() }
-    var lastDragIdx = remember { -1 }
+    // 그래프에 표시된 점의 X좌표를 터치 판정에 재사용한다.
+    val computedXs = remember(points) { mutableStateListOf<Float>() }
 
-    // Canvas는 @Composable 컨텍스트가 아니므로 색상 미리 캡처
+    // 그래프 색상은 그리기 전에 결정한다.
     val colorPrimary       = if (isGuardian) AppColor.guardianPrimary else AppColor.greenPrimary
     val colorDark          = if (isGuardian) AppColor.guardianDark    else AppColor.accentDark
     val colorSecondary     = if (isGuardian) AppColor.guardianPrimary else AppColor.greenSecondary
     val colorTextTertiary  = AppColor.textTertiary
-    // 기존 변수명 유지 (Canvas 블록에서 참조)
     val colorGreenPrimary   = colorPrimary
     val colorAccentDark     = colorDark
     val colorGreenSecondary = colorSecondary
@@ -723,15 +947,14 @@ private fun WeeklyLineChart(
     fun nearestIdx(offsetX: Float): Int {
         if (computedXs.isEmpty()) return -1
 
-        return computedXs.indices.minByOrNull {
-            abs(computedXs[it] - offsetX)
-        }?.takeIf {
-            hasData[it]
-        } ?: -1
+        // 데이터가 있는 날짜 중 가장 가까운 점을 선택한다.
+        return computedXs.indices
+            .filter { it < hasData.size && hasData[it] }
+            .minByOrNull { abs(computedXs[it] - offsetX) } ?: -1
     }
 
     val density = LocalDensity.current
-    // 포인트 X 계산에 쓰이는 좌우 여백 — Canvas 와 요일 Row 에서 동일하게 사용
+    // 그래프 점과 요일 레이블에 동일한 가로 여백을 적용한다.
     val hPadDp = 8.dp
     val hPadPx = with(density) { hPadDp.toPx() }
 
@@ -747,8 +970,7 @@ private fun WeeklyLineChart(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
 
-                        lastDragIdx = -1
-
+                        var lastDragIdx = -1
                         var isDragging = false
                         val downTime = System.currentTimeMillis()
                         var longPressTriggered = false
@@ -824,10 +1046,13 @@ private fun WeeklyLineChart(
             val span = (maxScore - minScore).coerceAtLeast(1f)
 
             val xs = points.indices.map { i ->
-                pad + (w - 2 * pad) * i / (points.size - 1).coerceAtLeast(1)
+                if (points.size == 1) w / 2f else pad + (w - 2 * pad) * i / (points.size - 1)
             }
 
-            computedXs = xs
+            if (computedXs != xs) {
+                computedXs.clear()
+                computedXs.addAll(xs)
+            }
 
             val ys = filledScores.map { score ->
                 h - pad - (h - 2 * pad) * (score - minScore) / span
@@ -838,8 +1063,7 @@ private fun WeeklyLineChart(
                 lineTo(xs.first(), ys.first())
 
                 for (i in 1 until xs.size) {
-                    val cx = (xs[i - 1] + xs[i]) / 2f
-                    cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
+                    lineTo(xs[i], ys[i])
                 }
 
                 lineTo(xs.last(), h - pad)
@@ -860,8 +1084,7 @@ private fun WeeklyLineChart(
                 moveTo(xs.first(), ys.first())
 
                 for (i in 1 until xs.size) {
-                    val cx = (xs[i - 1] + xs[i]) / 2f
-                    cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
+                    lineTo(xs[i], ys[i])
                 }
             }
 
@@ -872,7 +1095,7 @@ private fun WeeklyLineChart(
                     startX = 0f,
                     endX = w
                 ),
-                style = Stroke(width = 8f)
+                style = Stroke(width = 8f, join = StrokeJoin.Miter)
             )
 
             for (i in points.indices) {
@@ -901,8 +1124,7 @@ private fun WeeklyLineChart(
             }
         }
 
-        // Canvas 포인트 절대 X = 2*hPadPx + (fullWidth - 4*hPadPx) * i/(n-1)
-        // BoxWithConstraints 에 padding 없이 fullWidth 로 동일 공식 적용
+        // 각 날짜 레이블을 그래프 점의 가로 위치에 맞춘다.
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
             val fullW = with(density) { maxWidth.toPx() }
             val n = points.size
@@ -930,38 +1152,166 @@ private fun ItemCard(
 ) {
     val fontScale = LocalFontSizeScale.current.scale
 
+    // 접근성 글자 확대 시 카드 내부 배치를 보호한다.
+    val cardFontScale = fontScale.coerceAtMost(1.15f)
+    val scoreColor = AppColor.greenPrimary
+
+    // 점수의 숫자와 단위를 분리해 표시한다.
+    val displayValue = if (
+        item.label == "음성 점수" && item.valueText == "-"
+    ) {
+        "측정 전"
+    } else {
+        item.valueText
+    }
+
+    val numberText = displayValue.takeWhile { it.isDigit() }
+    val unitText = displayValue.drop(numberText.length)
+
     Surface(
-        modifier = modifier,
+        modifier = modifier.height(168.dp),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
         border = BorderStroke(1.5.dp, AppColor.divider)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 18.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = item.icon,
                     contentDescription = null,
-                    tint = AppColor.textTertiary,
-                    modifier = Modifier.size(18.dp)
+                    tint = AppColor.textPrimary,
+                    modifier = Modifier.size(25.dp)
                 )
 
-                Spacer(modifier = Modifier.size(6.dp))
+                Spacer(modifier = Modifier.size(8.dp))
 
                 Text(
                     text = item.label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppColor.textTertiary,
-                    fontWeight = FontWeight.SemiBold
+                    fontSize = (19 * cardFontScale).sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.weight(1f))
 
-            Text(
-                text = item.valueText,
-                fontSize = (26 * fontScale).sp,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.Bold
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 20.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (numberText.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = numberText,
+                            fontSize = (42 * cardFontScale).sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            color = scoreColor,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+
+                        if (unitText.isNotEmpty()) {
+                            Spacer(modifier = Modifier.size(4.dp))
+
+                            Text(
+                                text = unitText,
+                                fontSize = (18 * cardFontScale).sp,
+                                maxLines = 1,
+                                softWrap = false,
+                                color = AppColor.textPrimary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 7.dp)
+                            )
+                        }
+                    }
+                } else {
+                    Text(
+                        text = displayValue,
+                        fontSize = (26 * cardFontScale).sp,
+                        maxLines = 1,
+                        softWrap = false,
+                        color = AppColor.textPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 어휘 점수 카드는 점수 또는 측정 상태를 표시하지 않고,
+ * 상세 화면으로 이동하는 메뉴 형태로 표시한다.
+ */
+@Composable
+private fun TextScoreCard(
+    item: AnalysisItem,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val fontScale = LocalFontSizeScale.current.scale
+
+    Surface(
+        modifier = modifier
+            .height(88.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        color = BrandWhite,
+        border = BorderStroke(1.5.dp, AppColor.divider)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = null,
+                tint = AppColor.textPrimary,
+                modifier = Modifier.size(30.dp)
+            )
+
+            Spacer(modifier = Modifier.size(14.dp))
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = item.label,
+                    fontSize = (20 * fontScale).sp,
+                    color = AppColor.textPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "눌러서 상세 점수 확인하기",
+                    fontSize = (14 * fontScale).sp,
+                    color = AppColor.textSecondary,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = "눌러서 상세 점수 확인하기",
+                tint = AppColor.textTertiary,
+                modifier = Modifier.size((26 * fontScale).dp)
             )
         }
     }

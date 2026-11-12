@@ -266,7 +266,7 @@ private fun ManagedUserItem(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = patient.phone ?: "",
+                    text = formatManagedPhoneNumber(patient.phone),
                     style = MaterialTheme.typography.titleMedium,
                     color = AppColor.textSecondary
                 )
@@ -323,7 +323,7 @@ private fun PatientDetailDialog(
                     colors = disabledColors
                 )
                 OutlinedTextField(
-                    value = patient.phone ?: "",
+                    value = formatManagedPhoneNumber(patient.phone),
                     onValueChange = {},
                     label = { Text("전화번호") },
                     enabled = false,
@@ -477,4 +477,14 @@ private fun AddPatientDialog(
         containerColor = BrandWhite,
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+private fun formatManagedPhoneNumber(phone: String?): String {
+    if (phone.isNullOrBlank()) return ""
+    val digits = phone.filter { it.isDigit() }
+    return if (digits.length == 11) {
+        "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
+    } else {
+        phone
+    }
 }

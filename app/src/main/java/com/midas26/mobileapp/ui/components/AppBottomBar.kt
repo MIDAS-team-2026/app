@@ -7,18 +7,19 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,11 +27,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,41 +44,100 @@ import com.midas26.mobileapp.ui.theme.BrandWhite
 import com.midas26.mobileapp.ui.theme.LocalHapticEnabled
 
 sealed interface TabId
-enum class UserHomeTab : TabId { Home, Chat, Analysis, Settings }
-enum class GuardianHomeTab : TabId { Home, Analysis, Location, Settings }
 
-data class TabItem(val id: TabId, val icon: ImageVector, val labelRes: Int)
+enum class UserHomeTab : TabId {
+    Home,
+    Chat,
+    Analysis,
+    Settings
+}
+
+enum class GuardianHomeTab : TabId {
+    Home,
+    Analysis,
+    Location,
+    Settings
+}
+
+data class TabItem(
+    val id: TabId,
+    val icon: ImageVector,
+    val labelRes: Int
+)
 
 val userTabs = listOf(
-    TabItem(UserHomeTab.Home,     Icons.Default.Home,       R.string.tab_home),
-    TabItem(UserHomeTab.Chat,     Icons.Default.Mic,        R.string.tab_chat),
-    TabItem(UserHomeTab.Analysis, Icons.AutoMirrored.Filled.TrendingUp, R.string.tab_analysis),
-    TabItem(UserHomeTab.Settings, Icons.Default.Settings,   R.string.menu_settings)
+    TabItem(
+        id = UserHomeTab.Home,
+        icon = Icons.Default.Home,
+        labelRes = R.string.tab_home
+    ),
+    TabItem(
+        id = UserHomeTab.Chat,
+        icon = Icons.Default.Mic,
+        labelRes = R.string.tab_chat
+    ),
+    TabItem(
+        id = UserHomeTab.Analysis,
+        icon = Icons.AutoMirrored.Filled.TrendingUp,
+        labelRes = R.string.tab_analysis
+    ),
+    TabItem(
+        id = UserHomeTab.Settings,
+        icon = Icons.Default.Settings,
+        labelRes = R.string.menu_settings
+    )
 )
 
 val guardianTabs = listOf(
-    TabItem(GuardianHomeTab.Home,     Icons.Default.Home,       R.string.tab_home),
-    TabItem(GuardianHomeTab.Analysis, Icons.Default.BarChart,   R.string.tab_analysis),
-    TabItem(GuardianHomeTab.Location, Icons.Default.LocationOn, R.string.guardian_tab_location),
-    TabItem(GuardianHomeTab.Settings, Icons.Default.Settings,   R.string.menu_settings)
+    TabItem(
+        id = GuardianHomeTab.Home,
+        icon = Icons.Default.Home,
+        labelRes = R.string.tab_home
+    ),
+    TabItem(
+        id = GuardianHomeTab.Analysis,
+        icon = Icons.Default.BarChart,
+        labelRes = R.string.tab_analysis
+    ),
+    TabItem(
+        id = GuardianHomeTab.Location,
+        icon = Icons.Default.LocationOn,
+        labelRes = R.string.guardian_tab_location
+    ),
+    TabItem(
+        id = GuardianHomeTab.Settings,
+        icon = Icons.Default.Settings,
+        labelRes = R.string.menu_settings
+    )
 )
 
+/**
+ * 앱 하단 네비게이션 바입니다.
+ *
+ * 각 탭 내부의 72dp × 60dp 고정 영역을 직접 측정합니다.
+ * 이 영역 안에 선택 표시선, 아이콘, 라벨이 모두 포함됩니다.
+ */
 @Composable
 fun AppBottomBar(
     modifier: Modifier = Modifier,
     tabs: List<TabItem>,
     selectedTab: TabId,
     onTabClick: (TabId) -> Unit,
-    accent: Color
+    accent: Color,
+    onTabBoundsChanged: (TabId, Rect) -> Unit = { _, _ -> }
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = BrandWhite,
         shadowElevation = 0.dp,
-        border = BorderStroke(width = 1.dp, color = AppColor.divider)
+        border = BorderStroke(
+            width = 1.dp,
+            color = AppColor.divider
+        )
     ) {
         val haptic = LocalHapticFeedback.current
         val hapticEnabled = LocalHapticEnabled.current
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -84,40 +147,86 @@ fun AppBottomBar(
         ) {
             tabs.forEach { tab ->
                 val selected = tab.id == selectedTab
-                Column(
+
+                Box(
                     modifier = Modifier
                         .weight(1f)
+                        .fillMaxSize()
                         .clickable(enabled = !selected) {
-                            if (hapticEnabled) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (hapticEnabled) {
+                                haptic.performHapticFeedback(
+                                    HapticFeedbackType.LongPress
+                                )
+                            }
                             onTabClick(tab.id)
-                        }
-                        .padding(vertical = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    if (selected) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 24.dp, height = 4.dp)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(accent)
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                    } else {
-                        Spacer(modifier = Modifier.height(6.dp))
+                    /*
+                     * offset을 사용하지 않고 고정 크기 영역 자체를 측정합니다.
+                     * 따라서 시각적 위치와 boundsInRoot() 좌표가 정확히 일치합니다.
+                     */
+                    Box(
+                        modifier = Modifier
+                            .size(
+                                width = 72.dp,
+                                height = 60.dp
+                            )
+                            .onGloballyPositioned { coordinates ->
+                                onTabBoundsChanged(
+                                    tab.id,
+                                    coordinates.boundsInRoot()
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            if (selected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(
+                                            width = 24.dp,
+                                            height = 4.dp
+                                        )
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(accent)
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                            } else {
+                                Spacer(modifier = Modifier.height(6.dp))
+                            }
+
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = null,
+                                tint = if (selected) {
+                                    accent
+                                } else {
+                                    AppColor.textTertiary
+                                },
+                                modifier = Modifier.size(24.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Text(
+                                text = stringResource(tab.labelRes),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (selected) {
+                                    accent
+                                } else {
+                                    AppColor.textTertiary
+                                },
+                                fontWeight = if (selected) {
+                                    FontWeight.SemiBold
+                                } else {
+                                    FontWeight.Normal
+                                }
+                            )
+                        }
                     }
-                    Icon(
-                        imageVector = tab.icon,
-                        contentDescription = null,
-                        tint = if (selected) accent else AppColor.textTertiary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(tab.labelRes),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (selected) accent else AppColor.textTertiary,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                    )
                 }
             }
         }

@@ -16,7 +16,7 @@ import java.util.Locale
  * - 알림 설정
  * - 접근성 설정
  * - 보호자와 사용자 관계
- * - 사용자별 최초 튜토리얼 완료 여부
+ * - 사용자·보호자 계정별 최초 튜토리얼 완료 여부
  */
 class PrefsManager private constructor(context: Context) {
 
@@ -44,26 +44,44 @@ class PrefsManager private constructor(context: Context) {
     // =========================================================
 
     /**
-     * 현재 로그인한 사용자에게 대응하는 튜토리얼 완료 키를 반환합니다.
+     * 현재 로그인 계정의 역할과 사용자 ID를 기준으로
+     * 튜토리얼 완료 상태를 저장할 키를 생성합니다.
      *
-     * 동일한 기기에서 여러 일반 사용자가 로그인할 수 있으므로,
-     * 서버 사용자 ID가 있으면 사용자별 완료 상태를 따로 저장합니다.
-     *
-     * 사용자 ID가 아직 저장되지 않은 예외 상황에서는 기존 공용 키를
-     * 사용하여 앱이 비정상 종료되지 않도록 처리합니다.
+     * 사용자와 보호자는 서로 다른 접두사를 사용하므로
+     * 두 모드의 완료 기록이 섞이지 않습니다.
      */
-    private fun getTutorialCompletedKey(): String {
+    private fun getTutorialCompletedKey(
+        role: String = getUserRole()
+    ): String {
         val userId = getUserId()
 
+        val prefix = when (role) {
+            ROLE_GUARDIAN ->
+                KEY_GUARDIAN_TUTORIAL_COMPLETED_PREFIX
+
+            else ->
+                KEY_USER_TUTORIAL_COMPLETED_PREFIX
+        }
+
         return if (userId > 0) {
-            "$KEY_TUTORIAL_COMPLETED_PREFIX$userId"
+            "$prefix$userId"
         } else {
-            KEY_TUTORIAL_COMPLETED_FALLBACK
+            when (role) {
+                ROLE_GUARDIAN ->
+                    KEY_GUARDIAN_TUTORIAL_COMPLETED_FALLBACK
+
+                else ->
+                    KEY_USER_TUTORIAL_COMPLETED_FALLBACK
+            }
         }
     }
 
     /**
-     * 현재 로그인한 사용자가 앱 사용법 튜토리얼을 완료했는지 확인합니다.
+     * 현재 로그인한 계정의 튜토리얼 완료 여부를 반환합니다.
+     *
+     * 기존 사용자 튜토리얼 코드와의 호환성을 위해 유지합니다.
+     * 현재 역할이 사용자이면 사용자 기록을,
+     * 보호자이면 보호자 기록을 확인합니다.
      */
     fun hasCompletedTutorial(): Boolean {
         return prefs.getBoolean(
@@ -73,12 +91,71 @@ class PrefsManager private constructor(context: Context) {
     }
 
     /**
-     * 현재 로그인한 사용자의 튜토리얼 완료 여부를 저장합니다.
-     *
-     * 완료 버튼뿐 아니라 '건너뛰기'를 선택했을 때도 true를 저장하면
-     * 다음 로그인부터 자동으로 다시 나타나지 않습니다.
+     * 일반 사용자 튜토리얼 완료 여부를 반환합니다.
      */
-    fun setTutorialCompleted(completed: Boolean = true) {
+    fun hasCompletedUserTutorial(): Boolean {
+        return hasCompletedTutorialForRole(
+            role = ROLE_USER,
+            fallbackKey =
+                KEY_USER_TUTORIAL_COMPLETED_FALLBACK
+        )
+    }
+
+    /**
+     * 보호자 튜토리얼 완료 여부를 반환합니다.
+     */
+    fun hasCompletedGuardianTutorial(): Boolean {
+        return hasCompletedTutorialForRole(
+            role = ROLE_GUARDIAN,
+            fallbackKey =
+                KEY_GUARDIAN_TUTORIAL_COMPLETED_FALLBACK
+        )
+    }
+
+    /**
+     * 계정별 완료 키를 우선 확인하고, 사용자 ID 저장 전에 사용했던
+     * 역할별 대체 키가 true라면 현재 계정 키로 한 번 이전합니다.
+     *
+     * 로그인 직후 userId 저장 시점 차이 때문에 최초 실행 기록이
+     * 사라지는 현상을 방지합니다.
+     */
+    private fun hasCompletedTutorialForRole(
+        role: String,
+        fallbackKey: String
+    ): Boolean {
+        val accountKey = getTutorialCompletedKey(role)
+
+        if (prefs.getBoolean(accountKey, false)) {
+            return true
+        }
+
+        val fallbackCompleted =
+            prefs.getBoolean(fallbackKey, false)
+
+        if (!fallbackCompleted) {
+            return false
+        }
+
+        val userId = getUserId()
+
+        if (userId > 0 && accountKey != fallbackKey) {
+            prefs.edit()
+                .putBoolean(accountKey, true)
+                .remove(fallbackKey)
+                .apply()
+        }
+
+        return true
+    }
+
+    /**
+     * 현재 로그인한 계정의 역할에 맞는 튜토리얼 완료 상태를 저장합니다.
+     *
+     * 기존 코드와의 호환성을 위해 유지합니다.
+     */
+    fun setTutorialCompleted(
+        completed: Boolean = true
+    ) {
         prefs.edit()
             .putBoolean(
                 getTutorialCompletedKey(),
@@ -87,35 +164,126 @@ class PrefsManager private constructor(context: Context) {
             .apply()
     }
 
-    /**
-     * 튜토리얼을 자동으로 시작해야 하는지 확인합니다.
-     *
-     * 다음 조건을 모두 만족할 때만 true를 반환합니다.
-     * - 로그인 토큰이 존재함
-     * - 일반 사용자(PATIENT) 계정임
-     * - 튜토리얼을 아직 완료하지 않음
-     *
-     * 보호자(PROTECTOR) 계정에서는 항상 false입니다.
-     */
-    fun shouldStartTutorial(): Boolean {
-        return isLoggedIn() &&
-                getUserRole() == ROLE_USER &&
-                !hasCompletedTutorial()
+    fun isUserTutorialCompleted(): Boolean {
+        return hasCompletedUserTutorial()
+    }
+
+    fun isGuardianTutorialCompleted(): Boolean {
+        return hasCompletedGuardianTutorial()
     }
 
     /**
-     * 이전 코드와의 호환성을 위해 유지하는 함수입니다.
+     * 일반 사용자 튜토리얼 완료 상태를 저장합니다.
      *
-     * '앱 사용법 다시 보기'는 최초 튜토리얼 완료 기록을 변경하면 안 되므로
-     * 이 함수는 더 이상 완료 여부를 false로 초기화하지 않습니다.
+     * 전체 튜토리얼을 완료하거나 건너뛰었을 때 true를 저장하면
+     * 같은 계정에서 자동 튜토리얼이 다시 실행되지 않습니다.
+     */
+    fun setUserTutorialCompleted(
+        completed: Boolean = true
+    ) {
+        prefs.edit()
+            .putBoolean(
+                getTutorialCompletedKey(ROLE_USER),
+                completed
+            )
+            .apply()
+    }
+
+    /**
+     * 보호자 튜토리얼 완료 상태를 저장합니다.
      *
-     * 다시 보기는 TutorialViewModel의 수동 실행 함수만 호출해야 합니다.
+     * 사용자 튜토리얼 완료 기록과 별도로 관리됩니다.
+     */
+    fun setGuardianTutorialCompleted(
+        completed: Boolean = true
+    ) {
+        prefs.edit()
+            .putBoolean(
+                getTutorialCompletedKey(ROLE_GUARDIAN),
+                completed
+            )
+            .apply()
+    }
+
+    /**
+     * 일반 사용자 튜토리얼을 자동으로 시작해야 하는지 확인합니다.
+     *
+     * 다음 조건을 모두 만족할 때만 true입니다.
+     * - 로그인 상태
+     * - 일반 사용자 계정
+     * - 해당 계정의 사용자 튜토리얼 미완료
+     */
+    fun shouldStartUserTutorial(): Boolean {
+        return isLoggedIn() &&
+                getUserRole() == ROLE_USER &&
+                !hasCompletedUserTutorial()
+    }
+
+    /**
+     * 보호자 튜토리얼을 자동으로 시작해야 하는지 확인합니다.
+     *
+     * 다음 조건을 모두 만족할 때만 true입니다.
+     * - 로그인 상태
+     * - 보호자 계정
+     * - 해당 계정의 보호자 튜토리얼 미완료
+     */
+    fun shouldStartGuardianTutorial(): Boolean {
+        return isLoggedIn() &&
+                getUserRole() == ROLE_GUARDIAN &&
+                !hasCompletedGuardianTutorial()
+    }
+
+    /**
+     * 현재 로그인한 역할의 튜토리얼을 자동으로 시작해야 하는지 확인합니다.
+     *
+     * 기존 AppNavGraph 코드와의 호환성을 위해 유지합니다.
+     */
+    fun shouldStartTutorial(): Boolean {
+        return when (getUserRole()) {
+            ROLE_USER -> shouldStartUserTutorial()
+            ROLE_GUARDIAN -> shouldStartGuardianTutorial()
+            else -> false
+        }
+    }
+
+    /**
+     * 사용자 튜토리얼 완료 기록을 삭제합니다.
+     *
+     * 개발 중 최초 실행을 다시 확인할 때 사용할 수 있습니다.
+     * 설정의 '앱 사용법 다시 보기'에서는 호출하지 않습니다.
+     */
+    fun clearUserTutorialCompleted() {
+        prefs.edit()
+            .remove(getTutorialCompletedKey(ROLE_USER))
+            .apply()
+    }
+
+    /**
+     * 보호자 튜토리얼 완료 기록을 삭제합니다.
+     *
+     * 개발 중 최초 실행을 다시 확인할 때 사용할 수 있습니다.
+     * 설정의 '앱 사용법 다시 보기'에서는 호출하지 않습니다.
+     */
+    fun clearGuardianTutorialCompleted() {
+        prefs.edit()
+            .remove(getTutorialCompletedKey(ROLE_GUARDIAN))
+            .apply()
+    }
+
+    /**
+     * 현재 역할의 튜토리얼 완료 기록을 삭제합니다.
+     *
+     * 기존 코드와의 호환성을 위해 유지하지만,
+     * 실제 다시 보기에서는 완료 기록을 초기화하지 않는 것이 안전합니다.
      */
     @Deprecated(
-        message = "다시 보기에서는 완료 기록을 초기화하지 않습니다. TutorialViewModel의 수동 실행 함수를 사용하세요."
+        message = "다시 보기에서는 완료 기록을 초기화하지 않습니다. 각 TutorialViewModel의 수동 실행 함수를 사용하세요."
     )
     fun resetTutorial() {
-        // 의도적으로 아무 작업도 하지 않습니다.
+        when (getUserRole()) {
+            ROLE_USER -> clearUserTutorialCompleted()
+            ROLE_GUARDIAN -> clearGuardianTutorialCompleted()
+        }
     }
 
     // =========================================================
@@ -416,15 +584,21 @@ class PrefsManager private constructor(context: Context) {
         private const val KEY_ONBOARDING = "seen_onboarding"
 
         // 튜토리얼
-        private const val KEY_TUTORIAL_COMPLETED_PREFIX =
+        private const val KEY_USER_TUTORIAL_COMPLETED_PREFIX =
             "tutorial_completed_user_"
+
+        private const val KEY_GUARDIAN_TUTORIAL_COMPLETED_PREFIX =
+            "tutorial_completed_guardian_"
 
         /*
          * 로그인 직후 사용자 ID가 아직 저장되지 않은 예외 상황에서만
-         * 사용하는 공용 대체 키입니다.
+         * 사용하는 역할별 대체 키입니다.
          */
-        private const val KEY_TUTORIAL_COMPLETED_FALLBACK =
-            "tutorial_completed"
+        private const val KEY_USER_TUTORIAL_COMPLETED_FALLBACK =
+            "tutorial_completed_user"
+
+        private const val KEY_GUARDIAN_TUTORIAL_COMPLETED_FALLBACK =
+            "tutorial_completed_guardian"
 
         // 로그인
         private const val KEY_TOKEN = "auth_token"

@@ -141,14 +141,18 @@ fun UserHomeScreen(
 
         if (
             tutorialState.isRunning &&
-            tutorialState.currentScreen == TutorialScreen.HOME
+            tutorialState.currentScreen == TutorialScreen.HOME &&
+            tutorialState.homeStep != HomeTutorialStep.MOVE_TO_HOME_TAB &&
+            tutorialState.homeStep != HomeTutorialStep.MOVE_TO_VOICE_TAB
         ) {
             val targetBounds = when (tutorialState.homeStep) {
+                HomeTutorialStep.MOVE_TO_HOME_TAB -> null
                 HomeTutorialStep.WELCOME -> null
                 HomeTutorialStep.WEEKLY_CHECK -> weeklyCheckBounds
                 HomeTutorialStep.VOICE_CHAT -> voiceChatBounds
                 HomeTutorialStep.ANALYSIS -> analysisBounds
                 HomeTutorialStep.SETTINGS -> settingsBounds
+                HomeTutorialStep.MOVE_TO_VOICE_TAB -> null
                 HomeTutorialStep.COMPLETED -> null
             }
 
@@ -159,6 +163,10 @@ fun UserHomeScreen(
                 totalNumber = tutorialState.totalNumber,
                 onNext = {
                     when (tutorialState.homeStep) {
+                        HomeTutorialStep.MOVE_TO_HOME_TAB -> {
+                            // AppNavGraph에서 하단 홈 탭 안내와 클릭을 처리합니다.
+                        }
+
                         HomeTutorialStep.WELCOME -> {
                             tutorialViewModel.moveHomeStep(
                                 step = HomeTutorialStep.WEEKLY_CHECK,
@@ -190,14 +198,21 @@ fun UserHomeScreen(
                         HomeTutorialStep.SETTINGS -> {
                             if (tutorialViewModel.isFullTutorial()) {
                                 /*
-                                 * 전체 튜토리얼이라면 홈 설명 다음에
-                                 * 음성 대화 화면으로 이동해 6단계부터 이어갑니다.
+                                 * 홈 설명이 끝나면 바로 화면을 이동하지 않고
+                                 * AppNavGraph에서 하단 대화 탭을 안내합니다.
                                  */
-                                tutorialViewModel.moveToVoiceChat()
-                                onMenuClick(UserMenu.VoiceChat)
+                                tutorialViewModel.showVoiceTabGuide(
+                                    number = tutorialState.currentNumber + 1
+                                )
                             } else {
                                 tutorialViewModel.completeTutorial()
                             }
+                        }
+
+                        HomeTutorialStep.MOVE_TO_VOICE_TAB -> {
+                            /*
+                             * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
+                             */
                         }
 
                         HomeTutorialStep.COMPLETED -> {
@@ -249,15 +264,20 @@ private fun HomeTutorialOverlay(
     val highlightColor = AppColor.greenPrimary
 
     val title = when (step) {
+        HomeTutorialStep.MOVE_TO_HOME_TAB -> "홈 화면 살펴보기"
         HomeTutorialStep.WELCOME -> "똑똑 사용법을 알아볼까요?"
         HomeTutorialStep.WEEKLY_CHECK -> "요일별 음성 점검"
         HomeTutorialStep.VOICE_CHAT -> "음성 대화"
         HomeTutorialStep.ANALYSIS -> "분석 결과"
         HomeTutorialStep.SETTINGS -> "설정"
+        HomeTutorialStep.MOVE_TO_VOICE_TAB -> "음성 대화 시작하기"
         HomeTutorialStep.COMPLETED -> "홈 화면 사용법 완료"
     }
 
     val description = when (step) {
+        HomeTutorialStep.MOVE_TO_HOME_TAB ->
+            "홈 탭에서는 오늘의 점검 상태와 주요 기능을 확인할 수 있어요."
+
         HomeTutorialStep.WELCOME ->
             "화면의 주요 기능을 하나씩 천천히 알려드릴게요."
 
@@ -272,6 +292,9 @@ private fun HomeTutorialOverlay(
 
         HomeTutorialStep.SETTINGS ->
             "접근성, 위치 공유, 알림 등 앱 설정을 변경할 수 있어요."
+
+        HomeTutorialStep.MOVE_TO_VOICE_TAB ->
+            "하단 대화 탭을 누르면 또바기와 음성으로 대화할 수 있어요."
 
         HomeTutorialStep.COMPLETED ->
             "홈 화면의 주요 기능을 모두 살펴봤어요."

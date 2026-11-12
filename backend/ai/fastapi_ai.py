@@ -8,6 +8,7 @@ import os
 import tempfile
 from dataclasses import dataclass
 from functools import lru_cache
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 from groq import Groq
@@ -30,7 +31,16 @@ from session_speech_summary import summarize_session_speech
 from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+LOG_FILE = Path(__file__).resolve().parent / "ai_server.log"
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"),
+    ],
+)
 logger = logging.getLogger(__name__)
 
 DEFAULT_STT_MODEL = "openai/whisper-small"
@@ -301,9 +311,9 @@ def transcribe(request: SttRequest):
         정제된 문장:
         """.strip()
 
-        # llama-3.3-70b-versatile 또는 llama3-8b-8192 모델 사용
+        # llama-3.3-70b-versatile은 2026-08-16 Groq에서 폐기되어 openai/gpt-oss-120b로 교체
         llm_response = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="openai/gpt-oss-120b",
             messages=[{"role": "user", "content": refine_prompt}],
             temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
         )
@@ -314,7 +324,7 @@ def transcribe(request: SttRequest):
         return SttResponse(
             transcriptText=clean_text,
             confidence=None,
-            modelName="groq-whisper-large-v3 + llama3"
+            modelName="groq-whisper-large-v3 + gpt-oss-120b"
         )
 
     except requests.RequestException as exc:

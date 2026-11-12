@@ -451,12 +451,14 @@ fun VoiceChatScreen(
 
     if (
         tutorialState.isRunning &&
-        tutorialState.currentScreen == TutorialScreen.VOICE_CHAT
+        tutorialState.currentScreen == TutorialScreen.VOICE_CHAT &&
+        tutorialState.voiceChatStep != VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB
     ) {
         val targetBounds = when (tutorialState.voiceChatStep) {
             VoiceChatTutorialStep.MESSAGE -> speechBubbleBounds
             VoiceChatTutorialStep.MICROPHONE -> microphoneBounds
             VoiceChatTutorialStep.END_BUTTON -> endButtonBounds
+            VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB -> null
             VoiceChatTutorialStep.COMPLETED -> null
         }
 
@@ -492,11 +494,22 @@ fun VoiceChatScreen(
 
                         VoiceChatTutorialStep.END_BUTTON -> {
                             if (tutorialViewModel.isFullTutorial()) {
-                                tutorialViewModel.moveToAnalysis()
-                                onNavigateAnalysis()
+                                /*
+                                 * 음성 대화 설명이 끝나면 AppNavGraph에서
+                                 * 하단 분석 탭을 안내합니다.
+                                 */
+                                tutorialViewModel.showAnalysisTabGuide(
+                                    number = tutorialState.currentNumber + 1
+                                )
                             } else {
                                 tutorialViewModel.completeTutorial()
                             }
+                        }
+
+                        VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB -> {
+                            /*
+                             * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
+                             */
                         }
 
                         VoiceChatTutorialStep.COMPLETED -> {
@@ -544,6 +557,7 @@ private fun VoiceChatTutorialOverlay(
         VoiceChatTutorialStep.MESSAGE -> "또바기의 말 확인하기"
         VoiceChatTutorialStep.MICROPHONE -> "마이크로 대화하기"
         VoiceChatTutorialStep.END_BUTTON -> "대화 종료하기"
+        VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB -> "분석 결과 확인하기"
         VoiceChatTutorialStep.COMPLETED -> "음성 대화 사용법 완료"
     }
 
@@ -556,6 +570,9 @@ private fun VoiceChatTutorialOverlay(
 
         VoiceChatTutorialStep.END_BUTTON ->
             "대화를 마치고 싶을 때는 대화종료 버튼을 눌러 주세요."
+
+        VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB ->
+            "하단 분석 탭에서 오늘의 인지 점수와 주간 변화를 확인할 수 있어요."
 
         VoiceChatTutorialStep.COMPLETED ->
             "음성 대화 화면의 주요 기능을 모두 살펴봤어요."

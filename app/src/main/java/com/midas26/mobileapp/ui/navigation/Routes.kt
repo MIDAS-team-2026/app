@@ -51,6 +51,7 @@ object Routes {
 
     // 분석
     const val AnalysisResult  = "analysis_result"
+    const val LinguisticMarkerDetail = "linguistic_marker_detail"
 
     // 보호자 분석 - 사용자 선택
     const val AnalysisUserSelect = "analysis_user_select"

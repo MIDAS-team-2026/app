@@ -20,6 +20,7 @@ public class AiProcessTriggerService {
     private String pythonBaseUrl;
     private final RestTemplate restTemplate = new RestTemplate();
     private final AudioRecordRepository audioRecordRepository;
+    private final S3Service s3Service;
 
     public void triggerProcess(Long recordId, Long sessionId, Integer userId) {
 
@@ -35,7 +36,8 @@ public class AiProcessTriggerService {
             body.put("sessionId", sessionId);
             body.put("userId", userId);
 
-            body.put("audioPath", record.getAudioFilePath());
+            // DB에는 S3 object key가 저장되므로 Python 서버가 내려받을 수 있게 사전 서명 URL로 변환한다.
+            body.put("audioPath", s3Service.generatePresignedGetUrl(record.getAudioFilePath()));
             body.put("transcriptText", record.getTranscriptText());
             body.put("durationSec",
                     record.getAudioDuration() == null
@@ -43,7 +45,7 @@ public class AiProcessTriggerService {
                             : record.getAudioDuration().doubleValue());
 
             log.info(
-                    "Python 분석 요청 recordId={} audioPath={} transcriptLen={}",
+                    "Python 분석 요청 recordId={} audioKey={} transcriptLen={}",
                     recordId,
                     record.getAudioFilePath(),
                     record.getTranscriptText() == null

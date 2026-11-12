@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,54 +18,82 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
 import com.midas26.mobileapp.ui.guardian.PatientAnalysisStatus
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.ui.theme.LocalFontSizeScale
+import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianAnalysisTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
+
+private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisUserSelectScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     patients: List<LinkedUserInfo>,
     isLoading: Boolean = false,
     patientStatuses: Map<Int, PatientAnalysisStatus> = emptyMap(),
     onBack: () -> Unit,
     onUserClick: (LinkedUserInfo) -> Unit
 ) {
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
+
+    // 분석 튜토리얼에서는 실제 연결 사용자 대신 예시 사용자만 표시한다.
+    val isAnalysisTutorial = tutorialState.isRunning &&
+            tutorialState.currentScreen == GuardianTutorialScreen.ANALYSIS_SELECT
+    val demoPatient = remember {
+        LinkedUserInfo(
+            userId = null,
+            phone = null,
+            name = "예시 사용자",
+            role = "USER",
+            patientCode = null
+        )
+    }
+    val visiblePatients = if (isAnalysisTutorial) listOf(demoPatient) else patients
+
+    // 접근성 글자 크기 확대 시 화면 넘침을 방지한다.
+    val fontScale = LocalFontSizeScale.current.scale
+    val screenFontScale = fontScale.coerceAtMost(1.35f)
+
+    var firstUserBounds by remember(isAnalysisTutorial) {
+        mutableStateOf<Rect?>(null)
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AnalysisChartIcon(
-                            color = AppColor.textPrimary,
-                            modifier = Modifier.size(32.dp)
-                        )
-
-                        Spacer(modifier = Modifier.width(10.dp))
-
-                        Text(
-                            text = "분석 결과 확인",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 22.sp,
-                            color = AppColor.textPrimary
-                        )
-                    }
+                    Text(
+                        text = "분석 결과 확인",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = (22 * screenFontScale).sp,
+                        color = AppColor.textPrimary,
+                        maxLines = 1
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -91,15 +118,16 @@ fun AnalysisUserSelectScreen(
                 .padding(innerPadding)
         ) {
             when {
-                isLoading -> {
+                isLoading && !isAnalysisTutorial -> {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
 
-                patients.isEmpty() -> {
+                visiblePatients.isEmpty() -> {
                     Text(
                         text = "연결된 사용자가 없습니다",
+                        fontSize = (16 * screenFontScale).sp,
                         color = AppColor.textSecondary,
                         modifier = Modifier.align(Alignment.Center)
                     )
@@ -132,14 +160,23 @@ fun AnalysisUserSelectScreen(
 
                                 Text(
                                     text = "분석 결과를 확인할 사용자를 선택하세요!",
-                                    fontSize = 18.sp,
+                                    fontSize = (18 * screenFontScale).sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFFC85E48)
                                 )
                             }
                         }
 
-                        patients.forEach { patient ->
+                        if (isAnalysisTutorial) {
+                            Text(
+                                text = "튜토리얼 예시 사용자입니다. 실제 연결된 사용자가 아닙니다.",
+                                fontSize = (13 * screenFontScale).sp,
+                                color = AppColor.textSecondary,
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp)
+                            )
+                        }
+
+                        visiblePatients.forEachIndexed { index, patient ->
                             val status = patient.userId?.let {
                                 patientStatuses[it]
                             }
@@ -147,6 +184,13 @@ fun AnalysisUserSelectScreen(
                             AnalysisUserCard(
                                 patient = patient,
                                 status = status,
+                                fontScale = fontScale,
+                                isTutorialExample = isAnalysisTutorial,
+                                onBoundsChanged = { bounds ->
+                                    if (index == 0) {
+                                        firstUserBounds = bounds
+                                    }
+                                },
                                 onClick = {
                                     onUserClick(patient)
                                 }
@@ -160,66 +204,56 @@ fun AnalysisUserSelectScreen(
                     )
                 }
             }
+
+            if (
+                tutorialState.isRunning &&
+                tutorialState.currentScreen ==
+                GuardianTutorialScreen.ANALYSIS_SELECT &&
+                tutorialState.analysisStep !=
+                GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB &&
+                tutorialState.analysisStep !=
+                GuardianAnalysisTutorialStep.COMPLETED
+            ) {
+                val targetBounds = when (
+                    tutorialState.analysisStep
+                ) {
+                    GuardianAnalysisTutorialStep.USER_SELECT ->
+                        firstUserBounds
+
+                    GuardianAnalysisTutorialStep.MOVE_TO_LOCATION_TAB,
+                    GuardianAnalysisTutorialStep.COMPLETED ->
+                        null
+
+                    else -> null
+                }
+
+                val firstPatient = visiblePatients.firstOrNull()
+
+                if (targetBounds != null && firstPatient != null) {
+                    // 튜토리얼 단계 전환과 화면 이동은 AppNavGraph에서 처리한다.
+                    val openFirstUserResult = {
+                        onUserClick(firstPatient)
+                    }
+
+                    TutorialOverlay(
+                        targetBounds = targetBounds,
+                        title = "분석할 사용자 선택",
+                        message =
+                            "예시 사용자를 선택해 분석 결과 화면을 살펴볼게요. 표시되는 점수는 실제 결과가 아닙니다.",
+                        currentStep =
+                            tutorialState.currentNumber,
+                        totalSteps =
+                            tutorialState.totalNumber,
+                        onNext = openFirstUserResult,
+                        onTargetClick = openFirstUserResult,
+                        onSkip = {
+                            guardianTutorialViewModel.stopTutorial()
+                        },
+                        tutorialColor = GuardianTutorialAccentColor
+                    )
+                }
+            }
         }
-    }
-}
-
-/**
- * 첨부된 이미지와 비슷한 형태의 막대그래프 아이콘
- *
- * color에 제목 글자와 동일한 색상을 전달하여
- * 아이콘과 제목 색상이 함께 변경되도록 구성
- */
-@Composable
-private fun AnalysisChartIcon(
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val iconWidth = size.width
-        val iconHeight = size.height
-
-        val barWidth = iconWidth * 0.20f
-        val bottomPosition = iconHeight * 0.88f
-
-        // 왼쪽 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.08f,
-                y = iconHeight * 0.42f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.42f
-            )
-        )
-
-        // 가운데 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.40f,
-                y = iconHeight * 0.14f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.14f
-            )
-        )
-
-        // 오른쪽 막대
-        drawRect(
-            color = color,
-            topLeft = Offset(
-                x = iconWidth * 0.72f,
-                y = iconHeight * 0.58f
-            ),
-            size = Size(
-                width = barWidth,
-                height = bottomPosition - iconHeight * 0.58f
-            )
-        )
     }
 }
 
@@ -227,11 +261,14 @@ private fun AnalysisChartIcon(
 private fun AnalysisUserCard(
     patient: LinkedUserInfo,
     status: PatientAnalysisStatus?,
+    fontScale: Float,
+    isTutorialExample: Boolean = false,
+    onBoundsChanged: (Rect) -> Unit = {},
     onClick: () -> Unit
 ) {
     val context = LocalContext.current
 
-    val relation = patient.userId
+    val relation = if (isTutorialExample) "예시" else patient.userId
         ?.let {
             PrefsManager.from(context).getPatientRelation(it)
         }
@@ -240,9 +277,10 @@ private fun AnalysisUserCard(
         }
         ?: "사용자"
 
-    val pillFontSize = with(LocalDensity.current) {
-        14.dp.toSp()
-    }
+    // 카드 내부 텍스트가 잘리지 않도록 확대 비율을 제한한다.
+    val cardFontScale = fontScale.coerceAtMost(1.25f)
+    val cardHeight = (100f + ((cardFontScale - 1f) * 56f)).dp
+    val pillFontSize = (14 * cardFontScale).sp
 
     Surface(
         modifier = Modifier
@@ -251,7 +289,12 @@ private fun AnalysisUserCard(
                 horizontal = 12.dp,
                 vertical = 6.dp
             )
-            .height(100.dp)
+            .height(cardHeight)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(
+                    coordinates.boundsInRoot()
+                )
+            }
             .clickable {
                 onClick()
             }
@@ -272,13 +315,15 @@ private fun AnalysisUserCard(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                // 이름과 관계 표시
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = patient.name ?: "이름 없음",
-                        fontSize = 25.sp,
+                        fontSize = (25 * cardFontScale).sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
                         fontWeight = FontWeight.Bold,
                         color = AppColor.textPrimary
                     )
@@ -306,8 +351,14 @@ private fun AnalysisUserCard(
 
                 Spacer(modifier = Modifier.height(5.dp))
 
-                // 분석 결과 상태 문구
-                when (status) {
+                // 예시 사용자에게는 실제 분석 상태를 표시하지 않는다.
+                if (isTutorialExample) {
+                    Text(
+                        text = "튜토리얼용 가상 분석 결과 보기",
+                        fontSize = (13 * cardFontScale).sp,
+                        color = AppColor.textSecondary
+                    )
+                } else when (status) {
                     PatientAnalysisStatus.LOADING -> {
                         StatusShimmer()
                     }
@@ -315,7 +366,7 @@ private fun AnalysisUserCard(
                     PatientAnalysisStatus.NEW_RESULT -> {
                         Text(
                             text = "새로운 분석 결과가 나왔어요!",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFFF59E0B)
                         )
@@ -324,7 +375,7 @@ private fun AnalysisUserCard(
                     PatientAnalysisStatus.VIEWED_TODAY -> {
                         Text(
                             text = "오늘의 분석 결과를 확인했어요!",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             color = AppColor.textTertiary
                         )
                     }
@@ -333,7 +384,7 @@ private fun AnalysisUserCard(
                     null -> {
                         Text(
                             text = "아직 오늘의 분석 결과가 도착하지 않았어요",
-                            fontSize = 13.sp,
+                            fontSize = (13 * cardFontScale).sp,
                             color = AppColor.textTertiary
                         )
                     }
@@ -344,15 +395,13 @@ private fun AnalysisUserCard(
                 imageVector = Icons.Default.ChevronRight,
                 contentDescription = "분석 결과 확인",
                 tint = AppColor.textTertiary,
-                modifier = Modifier.size(26.dp)
+                modifier = Modifier.size((26 * cardFontScale.coerceAtMost(1.15f)).dp)
             )
         }
     }
 }
 
-/**
- * 상태 로딩 중 shimmer 효과
- */
+/** 분석 상태 조회 중 표시하는 로딩 효과. */
 @Composable
 private fun StatusShimmer() {
     val transition = rememberInfiniteTransition(

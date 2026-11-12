@@ -1,7 +1,5 @@
 package com.midas26.mobileapp.ui.home
 
-import com.midas26.mobileapp.ui.theme.AppColor
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,17 +17,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.ui.theme.*
+import com.midas26.mobileapp.ui.tutorial.TutorialOverlay
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianHomeTutorialStep
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
+import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
+
+private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 enum class GuardianMenu {
     Analysis,
@@ -39,40 +47,215 @@ enum class GuardianMenu {
 
 @Composable
 fun GuardianHomeScreen(
+    guardianTutorialViewModel: GuardianTutorialViewModel,
     guardianName: String,
     patients: List<LinkedUserInfo>,
     isLoading: Boolean = false,
     patientScores: Map<Int, Int?> = emptyMap(),
     onMenuClick: (GuardianMenu) -> Unit = {}
 ) {
-    var selectedPatient by remember(patients) {
-        mutableStateOf(patients.firstOrNull())
+    val tutorialState by guardianTutorialViewModel.state.collectAsState()
+
+    // 튜토리얼 중에는 실제 연결 사용자 정보를 노출하지 않는다.
+    val showDemoPatient = tutorialState.isRunning &&
+            tutorialState.currentScreen == GuardianTutorialScreen.HOME
+    val demoPatient = remember {
+        LinkedUserInfo(
+            userId = null,
+            phone = null,
+            name = "예시 사용자",
+            role = "USER",
+            patientCode = null
+        )
+    }
+    val displayedPatients = if (showDemoPatient) listOf(demoPatient) else patients
+
+    // 사용자 목록이 갱신되면 가능한 경우 기존 선택을 유지한다.
+    var selectedPatientId by remember { mutableStateOf<Int?>(null) }
+    val selectedPatient = displayedPatients.firstOrNull {
+        it.userId != null && it.userId == selectedPatientId
+    } ?: displayedPatients.firstOrNull()
+
+    var linkedUserBounds by remember {
+        mutableStateOf<Rect?>(null)
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+    var todayScoreBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+
+    var analysisMenuBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+
+    var locationMenuBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+
+    var settingsMenuBounds by remember {
+        mutableStateOf<Rect?>(null)
+    }
+
+    // 실제 UI의 루트 좌표를 튜토리얼 강조 영역에 전달한다.
+    Box(
+        modifier = Modifier.fillMaxSize()
     ) {
-        GuardianHomeHeader(
-            guardianName = guardianName,
-            patients = patients,
-            selectedPatient = selectedPatient,
-            isLoading = isLoading,
-            todayScore = selectedPatient?.userId?.let { patientScores[it] },
-            onPatientSelected = { selectedPatient = it }
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            GuardianHomeHeader(
+                guardianName = guardianName,
+                patients = displayedPatients,
+                selectedPatient = selectedPatient,
+                isLoading = isLoading && !showDemoPatient,
+                todayScore = if (showDemoPatient) 85 else selectedPatient?.userId?.let {
+                    patientScores[it]
+                },
+                isTutorialExample = showDemoPatient,
+                onPatientSelected = {
+                    selectedPatientId = it.userId
+                },
+                onLinkedUserBoundsChanged = {
+                    linkedUserBounds = it
+                },
+                onTodayScoreBoundsChanged = {
+                    todayScoreBounds = it
+                }
+            )
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        GuardianMenuList(
-            onMenuClick = onMenuClick,
-            modifier = Modifier.weight(1f)
-        )
+            GuardianMenuList(
+                onMenuClick = onMenuClick,
+                onAnalysisBoundsChanged = {
+                    analysisMenuBounds = it
+                },
+                onLocationBoundsChanged = {
+                    locationMenuBounds = it
+                },
+                onSettingsBoundsChanged = {
+                    settingsMenuBounds = it
+                },
+                modifier = Modifier.weight(1f)
+            )
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        if (
+            tutorialState.isRunning &&
+            tutorialState.currentScreen ==
+            GuardianTutorialScreen.HOME &&
+            tutorialState.homeStep !=
+            GuardianHomeTutorialStep.MOVE_TO_HOME_TAB &&
+            tutorialState.homeStep !=
+            GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB
+        ) {
+            val targetBounds = when (
+                tutorialState.homeStep
+            ) {
+                GuardianHomeTutorialStep.LINKED_USER ->
+                    linkedUserBounds
+
+                GuardianHomeTutorialStep.TODAY_SCORE ->
+                    todayScoreBounds
+
+                GuardianHomeTutorialStep.ANALYSIS_MENU ->
+                    analysisMenuBounds
+
+                GuardianHomeTutorialStep.LOCATION_MENU ->
+                    locationMenuBounds
+
+                GuardianHomeTutorialStep.SETTINGS_MENU ->
+                    settingsMenuBounds
+
+                GuardianHomeTutorialStep.MOVE_TO_HOME_TAB,
+                GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB,
+                GuardianHomeTutorialStep.COMPLETED ->
+                    null
+            }
+
+            if (targetBounds != null) {
+                val advanceHomeTutorial = {
+                    when (tutorialState.homeStep) {
+                        GuardianHomeTutorialStep.LINKED_USER -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.TODAY_SCORE,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.TODAY_SCORE -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.ANALYSIS_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.ANALYSIS_MENU -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.LOCATION_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.LOCATION_MENU -> {
+                            guardianTutorialViewModel.moveToHome(
+                                step =
+                                    GuardianHomeTutorialStep.SETTINGS_MENU,
+                                number =
+                                    tutorialState.currentNumber + 1
+                            )
+                        }
+
+                        GuardianHomeTutorialStep.SETTINGS_MENU -> {
+                            if (guardianTutorialViewModel.isFullTutorial()) {
+                                guardianTutorialViewModel.showAnalysisTabGuide(
+                                    number = tutorialState.currentNumber + 1
+                                )
+                            } else {
+                                guardianTutorialViewModel.completeTutorial()
+                            }
+                        }
+
+                        GuardianHomeTutorialStep.MOVE_TO_HOME_TAB,
+                        GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB,
+                        GuardianHomeTutorialStep.COMPLETED -> Unit
+                    }
+                }
+
+                TutorialOverlay(
+                    targetBounds = targetBounds,
+                    title = guardianHomeTutorialTitle(
+                        tutorialState.homeStep
+                    ),
+                    message = guardianHomeTutorialMessage(
+                        tutorialState.homeStep
+                    ),
+                    currentStep =
+                        tutorialState.currentNumber,
+                    totalSteps =
+                        tutorialState.totalNumber,
+                    onNext = advanceHomeTutorial,
+                    onTargetClick = advanceHomeTutorial,
+                    onSkip = {
+                        guardianTutorialViewModel.stopTutorial()
+                    },
+                    tutorialColor = GuardianTutorialAccentColor
+                )
+            }
+        }
     }
 }
+
 
 @Composable
 private fun GuardianHomeHeader(
@@ -80,9 +263,15 @@ private fun GuardianHomeHeader(
     patients: List<LinkedUserInfo>,
     selectedPatient: LinkedUserInfo?,
     isLoading: Boolean,
-    todayScore: Int?,           // null이면 "-" 표시
-    onPatientSelected: (LinkedUserInfo) -> Unit
+    todayScore: Int?,
+    isTutorialExample: Boolean,
+    onPatientSelected: (LinkedUserInfo) -> Unit,
+    onLinkedUserBoundsChanged: (Rect) -> Unit,
+    onTodayScoreBoundsChanged: (Rect) -> Unit
 ) {
+    // onGloballyPositioned 콜백에서 dp를 px로 변환하기 위한 밀도.
+    val density = LocalDensity.current
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -96,13 +285,25 @@ private fun GuardianHomeHeader(
                 )
             )
     ) {
-        // 배경 원 장식
         Box(
             modifier = Modifier
                 .size(190.dp)
                 .offset(x = 235.dp, y = 22.dp)
                 .clip(CircleShape)
-                .background(BrandWhite.copy(alpha = 0.16f)),
+                .background(BrandWhite.copy(alpha = 0.16f))
+                .onGloballyPositioned { coordinates ->
+                    // 원형 점수 카드의 가장자리 여백을 제외하고 강조한다.
+                    val bounds = coordinates.boundsInRoot()
+                    val inset = with(density) { 8.dp.toPx() }
+                    onTodayScoreBoundsChanged(
+                        Rect(
+                            bounds.left + inset,
+                            bounds.top + inset,
+                            bounds.right - inset,
+                            bounds.bottom - inset
+                        )
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -172,11 +373,22 @@ private fun GuardianHomeHeader(
                     )
                 }
                 else -> {
-                    LinkedPatientDropdown(
-                        patients = patients,
-                        selectedPatient = selectedPatient,
-                        onPatientSelected = onPatientSelected
-                    )
+                    Column {
+                        LinkedPatientDropdown(
+                            patients = patients,
+                            selectedPatient = selectedPatient,
+                            onPatientSelected = onPatientSelected,
+                            onBoundsChanged = onLinkedUserBoundsChanged
+                        )
+                        if (isTutorialExample) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "튜토리얼 예시 데이터 · 실제 분석 결과가 아닙니다",
+                                fontSize = 12.sp,
+                                color = BrandWhite.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -187,7 +399,8 @@ private fun GuardianHomeHeader(
 private fun LinkedPatientDropdown(
     patients: List<LinkedUserInfo>,
     selectedPatient: LinkedUserInfo?,
-    onPatientSelected: (LinkedUserInfo) -> Unit
+    onPatientSelected: (LinkedUserInfo) -> Unit,
+    onBoundsChanged: (Rect) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -195,6 +408,11 @@ private fun LinkedPatientDropdown(
         Surface(
             modifier = Modifier
                 .widthIn(max = 220.dp)
+                .onGloballyPositioned { coordinates ->
+                    onBoundsChanged(
+                        coordinates.boundsInRoot()
+                    )
+                }
                 .clickable { expanded = !expanded },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite.copy(alpha = 0.22f)
@@ -220,7 +438,8 @@ private fun LinkedPatientDropdown(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Text(
-                    text = " 님 연결됨",
+                    text = if (selectedPatient?.userId == null &&
+                        selectedPatient?.name == "예시 사용자") " 연결됨" else " 님 연결됨",
                     fontSize = 18.sp,
                     color = BrandWhite,
                     fontWeight = FontWeight.SemiBold
@@ -228,7 +447,7 @@ private fun LinkedPatientDropdown(
                 Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp
-                                  else Icons.Default.KeyboardArrowDown,
+                    else Icons.Default.KeyboardArrowDown,
                     contentDescription = null,
                     tint = BrandWhite,
                     modifier = Modifier.size(24.dp)
@@ -244,7 +463,8 @@ private fun LinkedPatientDropdown(
                 DropdownMenuItem(
                     text = {
                         Text(
-                            text = "${patient.name ?: "이름 없음"} 님",
+                            text = if (patient.userId == null && patient.name == "예시 사용자")
+                                "예시 사용자" else "${patient.name ?: "이름 없음"} 님",
                             fontWeight = if (patient.userId == selectedPatient?.userId)
                                 FontWeight.Bold else FontWeight.Normal
                         )
@@ -262,6 +482,9 @@ private fun LinkedPatientDropdown(
 @Composable
 private fun GuardianMenuList(
     onMenuClick: (GuardianMenu) -> Unit,
+    onAnalysisBoundsChanged: (Rect) -> Unit,
+    onLocationBoundsChanged: (Rect) -> Unit,
+    onSettingsBoundsChanged: (Rect) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -278,7 +501,10 @@ private fun GuardianMenuList(
             icon = Icons.Default.BarChart,
             title = stringResource(R.string.guardian_menu_analysis),
             desc = "대화 결과와 인지 점수를 확인해요",
-            onClick = { onMenuClick(GuardianMenu.Analysis) },
+            onClick = {
+                onMenuClick(GuardianMenu.Analysis)
+            },
+            onBoundsChanged = onAnalysisBoundsChanged,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -288,7 +514,10 @@ private fun GuardianMenuList(
             icon = Icons.Default.LocationOn,
             title = stringResource(R.string.guardian_menu_location),
             desc = "보호 대상자의 현재 위치를 확인해요",
-            onClick = { onMenuClick(GuardianMenu.Location) },
+            onClick = {
+                onMenuClick(GuardianMenu.Location)
+            },
+            onBoundsChanged = onLocationBoundsChanged,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -302,7 +531,10 @@ private fun GuardianMenuList(
             icon = Icons.Default.Settings,
             title = stringResource(R.string.menu_settings),
             desc = "앱 환경과 알림을 설정해요",
-            onClick = { onMenuClick(GuardianMenu.Settings) },
+            onClick = {
+                onMenuClick(GuardianMenu.Settings)
+            },
+            onBoundsChanged = onSettingsBoundsChanged,
             accent = AppColor.surfaceElevated,
             iconTint = AppColor.textTertiary,
             modifier = Modifier.fillMaxWidth()
@@ -338,16 +570,22 @@ private fun GuardianMenuCard(
     title: String,
     desc: String,
     onClick: () -> Unit,
+    onBoundsChanged: (Rect) -> Unit = {},
     modifier: Modifier = Modifier,
     accent: Color = Color.Unspecified,
     iconTint: Color = Color.Unspecified
 ) {
-    val resolvedAccent   = if (accent   == Color.Unspecified) AppColor.guardianSurface else accent
-    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark    else iconTint
+    val resolvedAccent = if (accent == Color.Unspecified) AppColor.guardianSurface else accent
+    val resolvedIconTint = if (iconTint == Color.Unspecified) AppColor.guardianDark else iconTint
 
     Surface(
         modifier = modifier
             .height(104.dp)
+            .onGloballyPositioned { coordinates ->
+                onBoundsChanged(
+                    coordinates.boundsInRoot()
+                )
+            }
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),
         color = BrandWhite,
@@ -391,5 +629,65 @@ private fun GuardianMenuCard(
                 }
             }
         }
+    }
+}
+
+private fun guardianHomeTutorialTitle(
+    step: GuardianHomeTutorialStep
+): String {
+    return when (step) {
+        GuardianHomeTutorialStep.MOVE_TO_HOME_TAB ->
+            "보호자 홈 화면"
+
+        GuardianHomeTutorialStep.LINKED_USER ->
+            "연결된 사용자 선택"
+
+        GuardianHomeTutorialStep.TODAY_SCORE ->
+            "오늘의 인지 점수"
+
+        GuardianHomeTutorialStep.ANALYSIS_MENU ->
+            "분석 결과"
+
+        GuardianHomeTutorialStep.LOCATION_MENU ->
+            "위치 정보"
+
+        GuardianHomeTutorialStep.SETTINGS_MENU ->
+            "보호자 설정"
+
+        GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB ->
+            "분석 탭으로 이동하기"
+
+        GuardianHomeTutorialStep.COMPLETED ->
+            "보호자 홈 사용법 완료"
+    }
+}
+
+private fun guardianHomeTutorialMessage(
+    step: GuardianHomeTutorialStep
+): String {
+    return when (step) {
+        GuardianHomeTutorialStep.MOVE_TO_HOME_TAB ->
+            "홈 탭에서는 연결된 사용자와 오늘의 점수를 확인할 수 있어요."
+
+        GuardianHomeTutorialStep.LINKED_USER ->
+            "여기를 눌러 현재 확인할 사용자를 선택할 수 있어요."
+
+        GuardianHomeTutorialStep.TODAY_SCORE ->
+            "선택한 사용자의 오늘 인지 점수가 표시돼요."
+
+        GuardianHomeTutorialStep.ANALYSIS_MENU ->
+            "대화 결과와 인지 점수의 상세 분석을 확인할 수 있어요."
+
+        GuardianHomeTutorialStep.LOCATION_MENU ->
+            "보호 대상자의 현재 위치와 이동 정보를 확인할 수 있어요."
+
+        GuardianHomeTutorialStep.SETTINGS_MENU ->
+            "관리 사용자, 알림과 접근성 등 보호자 앱 설정을 변경할 수 있어요."
+
+        GuardianHomeTutorialStep.MOVE_TO_ANALYSIS_TAB ->
+            "하단 분석 탭을 눌러 연결된 사용자의 분석 결과를 확인해 보세요."
+
+        GuardianHomeTutorialStep.COMPLETED ->
+            "보호자 홈 화면의 주요 기능 안내가 끝났어요."
     }
 }
