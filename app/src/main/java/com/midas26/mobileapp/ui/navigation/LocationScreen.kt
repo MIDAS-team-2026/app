@@ -63,6 +63,9 @@ import kotlin.math.roundToInt
 private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
 private const val GPS_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+private const val TUTORIAL_EXAMPLE_USER_ID = "tutorial-demo"
+
+private fun LinkedUser.isTutorialExample(): Boolean = id == TUTORIAL_EXAMPLE_USER_ID
 
 
 data class LinkedUser(
@@ -111,15 +114,11 @@ fun LocationListScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
-    /*
-     * 앱 설정에서 선택한 글자 크기를 위치 사용자 선택 화면에도 적용합니다.
-     * 화면 폭이 좁을 때 레이아웃이 깨지지 않도록 최대 배율을 제한합니다.
-     */
+    // 글자 확대 시 제목이 화면 밖으로 잘리지 않도록 배율을 제한한다.
     val fontScale = LocalFontSizeScale.current.scale
     val screenFontScale = fontScale.coerceAtMost(1.35f)
 
     var refreshKey by remember { mutableStateOf(0) }
-    var guideBounds by remember { mutableStateOf<Rect?>(null) }
     var firstUserBounds by remember { mutableStateOf<Rect?>(null) }
 
     LaunchedEffect(Unit) {
@@ -173,10 +172,7 @@ fun LocationListScreen(
                 Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                        .onGloballyPositioned { coordinates ->
-                            guideBounds = coordinates.boundsInRoot()
-                        },
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
                     shape = RoundedCornerShape(18.dp),
                     color = Color(0xFFFFE5DF)
                 ) {
@@ -214,6 +210,15 @@ fun LocationListScreen(
                             )
                         }
                     }
+                }
+
+                if (users.any { it.isTutorialExample() }) {
+                    Text(
+                        text = "튜토리얼 예시 데이터입니다. 실제 위치 정보가 아닙니다.",
+                        fontSize = (13 * screenFontScale).sp,
+                        color = GuardianTutorialAccentColor,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    )
                 }
 
                 users.forEachIndexed { index, user ->
@@ -292,18 +297,21 @@ private fun UserLocationCard(
     val relation =
         if (userId > 0) PrefsManager.from(context).getPatientRelation(userId).ifEmpty { "사용자" }
         else "사용자"
-    /*
-     * 사용자 위치 카드는 최대 1.25배까지만 확대해
-     * 이름, 관계, 주소가 잘리지 않도록 합니다.
-     */
+    // 카드 내부 텍스트와 배지의 겹침을 방지한다.
     val cardFontScale = fontScale.coerceAtMost(1.25f)
     val cardMinHeight = (126f + ((cardFontScale - 1f) * 72f)).dp
     val pillFontSize = (14 * cardFontScale).sp
 
-    var locationText by remember { mutableStateOf("위치 불러오는 중...") }
+    var locationText by remember { mutableStateOf("위치 정보를 불러오는 중") }
     var timeAgoText by remember { mutableStateOf("") }
 
+    // 튜토리얼 사용자는 서버에 존재하지 않으므로 위치 API를 호출하지 않는다.
     LaunchedEffect(userId, refreshKey) {
+        if (user.isTutorialExample()) {
+            locationText = user.address.ifBlank { "튜토리얼 예시 위치" }
+            timeAgoText = ""
+            return@LaunchedEffect
+        }
         if (userId <= 0) {
             locationText = "위치 정보 없음"
             timeAgoText = ""
@@ -469,6 +477,19 @@ fun LocationDetailScreen(
     }
 
     LaunchedEffect(userId, refreshKey) {
+        if (user.isTutorialExample()) {
+            serverLatitude = user.latitude
+            serverLongitude = user.longitude
+            locationError = ""
+            locationTimeAgo = ""
+            isLoadingLocation = false
+            return@LaunchedEffect
+        }
+        if (userId <= 0) {
+            locationError = "위치를 조회할 사용자가 없습니다"
+            isLoadingLocation = false
+            return@LaunchedEffect
+        }
         isLoadingLocation = true
         locationError = ""
         locationTimeAgo = ""
@@ -535,6 +556,7 @@ fun LocationDetailScreen(
                 when {
                     isLoadingLocation -> LoadingBar()
                     locationError.isNotBlank() -> StatusBar(locationError, isError = true)
+                    user.isTutorialExample() -> StatusBar("튜토리얼 예시 위치입니다. 실제 데이터가 아닙니다.", isError = false)
                     else -> StatusBar("$locationTimeAgo 위치 정보를 가져왔습니다.", isError = false)
                 }
 
@@ -766,6 +788,7 @@ fun LocationRouteScreen(
 ) {
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
     val context = LocalContext.current
+    val density = LocalDensity.current
     var routeScreenBounds by remember { mutableStateOf<Rect?>(null) }
 
     val today = remember {
@@ -784,7 +807,23 @@ fun LocationRouteScreen(
     var isLoadingRoute by remember { mutableStateOf(true) }
     var routeError by remember { mutableStateOf("") }
 
+    // 예시 경로는 네트워크 조회 없이 로컬 데이터만 표시한다.
     LaunchedEffect(userId) {
+        if (user.isTutorialExample()) {
+            routePoints = user.routePoints
+            timelineItems = user.timeline
+            totalDistanceKm = user.totalDistanceKm
+            visitedPlaces = user.visitedPlaces
+            travelTimeText = "${user.travelHours}시간"
+            routeError = ""
+            isLoadingRoute = false
+            return@LaunchedEffect
+        }
+        if (userId <= 0) {
+            routeError = "이동 경로를 조회할 사용자가 없습니다"
+            isLoadingRoute = false
+            return@LaunchedEffect
+        }
         isLoadingRoute = true
         routeError = ""
 
@@ -797,9 +836,7 @@ fun LocationRouteScreen(
                 totalDistanceKm = calculateTotalDistanceKm(routePoints)
                 visitedPlaces = estimateVisitedPlaces(routePoints)
 
-                val recordedTimes = points.mapNotNull {
-                    runCatching { it.recordedAt }.getOrNull()
-                }
+                val recordedTimes = points.map { it.recordedAt }
 
                 travelTimeText = calculateTravelTimeText(recordedTimes)
 
@@ -865,9 +902,6 @@ fun LocationRouteScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .onGloballyPositioned { coordinates ->
-                    routeScreenBounds = coordinates.boundsInRoot()
-                }
         ) {
             Column(
                 modifier = Modifier
@@ -879,6 +913,7 @@ fun LocationRouteScreen(
                 when {
                     isLoadingRoute -> LoadingBar()
                     routeError.isNotBlank() -> StatusBar(routeError, isError = true)
+                    user.isTutorialExample() -> StatusBar("튜토리얼 예시 경로입니다. 실제 데이터가 아닙니다.", isError = false)
                     else -> StatusBar("서버에서 이동 경로 조회 완료", isError = false)
                 }
 
@@ -894,37 +929,55 @@ fun LocationRouteScreen(
                     )
                 }
 
-                SummaryRow("총 경로", String.format(Locale.KOREA, "%.1f km", totalDistanceKm))
-                SummaryRow("방문 장소", "$visitedPlaces 곳")
-                SummaryRow("이동 시간", travelTimeText)
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "타임 라인",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AppColor.textPrimary
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                if (timelineItems.isEmpty()) {
-                    Text(
-                        text = "표시할 타임라인이 없어요",
-                        fontSize = 14.sp,
-                        color = AppColor.textTertiary
-                    )
-                } else {
-                    Column {
-                        timelineItems.forEachIndexed { idx, item ->
-                            TimelineRow(
-                                item = item,
-                                isLast = idx == timelineItems.size - 1
+                // 경로 요약부터 타임라인 끝까지를 하나의 강조 영역으로 측정한다.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { coordinates ->
+                            val bounds = coordinates.boundsInRoot()
+                            val inset = with(density) { 4.dp.toPx() }
+                            routeScreenBounds = Rect(
+                                bounds.left + inset,
+                                bounds.top + inset,
+                                bounds.right - inset,
+                                bounds.bottom - inset
                             )
+                        },
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    SummaryRow("총 경로", String.format(Locale.KOREA, "%.1f km", totalDistanceKm))
+                    SummaryRow("방문 장소", "$visitedPlaces 곳")
+                    SummaryRow("이동 시간", travelTimeText)
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "타임 라인",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColor.textPrimary
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (timelineItems.isEmpty()) {
+                        Text(
+                            text = "표시할 타임라인이 없어요",
+                            fontSize = 14.sp,
+                            color = AppColor.textTertiary
+                        )
+                    } else {
+                        Column {
+                            timelineItems.forEachIndexed { idx, item ->
+                                TimelineRow(
+                                    item = item,
+                                    isLast = idx == timelineItems.size - 1
+                                )
+                            }
                         }
                     }
-                }
+
+                } // 경로 요약 및 타임라인 강조 영역 끝
 
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -1220,7 +1273,7 @@ private fun LoadingBar() {
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = "GPS 위치 불러오는 중...",
+                text = "GPS 위치 정보를 불러오는 중",
                 fontSize = 12.sp,
                 color = AppColor.textTertiary
             )
@@ -1235,8 +1288,14 @@ fun CallDialog(
     onBoundsChanged: (Rect) -> Unit = {}
 ) {
     val context = LocalContext.current
+    val density = LocalDensity.current
 
+    // 튜토리얼에서는 실제 전화 앱을 실행하지 않는다.
     fun makeCall() {
+        if (user.isTutorialExample() || user.phone.filter(Char::isDigit).isEmpty()) {
+            onDismiss()
+            return
+        }
         context.startActivity(
             Intent(
                 Intent.ACTION_DIAL,
@@ -1260,7 +1319,16 @@ fun CallDialog(
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
                 .onGloballyPositioned { coordinates ->
-                    onBoundsChanged(coordinates.boundsInRoot())
+                    val bounds = coordinates.boundsInRoot()
+                    val inset = with(density) { 6.dp.toPx() }
+                    onBoundsChanged(
+                        Rect(
+                            bounds.left + inset,
+                            bounds.top + inset,
+                            bounds.right - inset,
+                            bounds.bottom - inset
+                        )
+                    )
                 },
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             color = Color.White
@@ -1281,7 +1349,7 @@ fun CallDialog(
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "${user.name}님께 전화 걸기",
+                    text = if (user.isTutorialExample()) "예시 사용자에게 전화 걸기" else "${user.name}님께 전화 걸기",
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black
@@ -1305,7 +1373,7 @@ fun CallDialog(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "${user.name}님",
+                            text = if (user.isTutorialExample()) user.name else "${user.name}님",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black
@@ -1314,7 +1382,7 @@ fun CallDialog(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = formatPhoneNumber(user.phone),
+                            text = if (user.isTutorialExample()) "튜토리얼 예시 번호" else formatPhoneNumber(user.phone),
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black,
@@ -1343,7 +1411,7 @@ fun CallDialog(
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "전화 연결",
+                                text = if (user.isTutorialExample()) "확인" else "전화 연결",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.Black

@@ -1,9 +1,11 @@
 package com.midas26.mobileapp.ui.settings
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.NumberPicker
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -112,27 +114,9 @@ fun GuardianSettingsScreen(
     val context = LocalContext.current
     val tutorialState by guardianTutorialViewModel.state.collectAsState()
 
-    var localSettingsStep by remember {
-        mutableStateOf(tutorialState.settingsStep)
-    }
-
-    var localTutorialNumber by remember {
-        mutableIntStateOf(tutorialState.currentNumber)
-    }
-
-    LaunchedEffect(
-        tutorialState.currentScreen,
-        tutorialState.settingsStep,
-        tutorialState.currentNumber
-    ) {
-        if (
-            tutorialState.currentScreen ==
-            GuardianTutorialScreen.SETTINGS
-        ) {
-            localSettingsStep = tutorialState.settingsStep
-            localTutorialNumber = tutorialState.currentNumber
-        }
-    }
+    // 단계와 번호는 ViewModel을 단일 상태 저장소로 사용한다.
+    val localSettingsStep = tutorialState.settingsStep
+    val localTutorialNumber = tutorialState.currentNumber
 
     var accessibilityBounds by remember {
         mutableStateOf<Rect?>(null)
@@ -165,12 +149,17 @@ fun GuardianSettingsScreen(
     var showReplayTutorialDialog by remember { mutableStateOf(false) }
     var selectedLegalTerm by remember { mutableStateOf<LegalTermsItem?>(null) }
 
-    NotificationHelper.createChannel(context)
+    LaunchedEffect(context) {
+        NotificationHelper.createChannel(context)
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (!granted) {
+        if (granted) {
+            analysisAlertEnabled = true
+            AlarmScheduler.schedule(context, analysisHour, analysisMinute)
+        } else {
             analysisAlertEnabled = false
             Toast.makeText(context, "알림 권한이 필요합니다.", Toast.LENGTH_SHORT).show()
         }
@@ -217,7 +206,6 @@ fun GuardianSettingsScreen(
                 }
 
                 GuardianSettingsTutorialStep.COMPLETED -> Unit
-                else -> Unit
             }
         }
     }
@@ -303,16 +291,21 @@ fun GuardianSettingsScreen(
                         analysisNotificationBounds = it
                     },
                     onCheckedChange = { enabled ->
-                        analysisAlertEnabled = enabled
-
-                        if (enabled) {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-
-                            AlarmScheduler.schedule(context, analysisHour, analysisMinute)
-                        } else {
+                        if (!enabled) {
+                            analysisAlertEnabled = false
                             AlarmScheduler.cancel(context)
+                        } else if (
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            // 권한을 얻은 후에만 알림을 예약한다.
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            analysisAlertEnabled = true
+                            AlarmScheduler.schedule(context, analysisHour, analysisMinute)
                         }
                     }
                 )
@@ -449,8 +442,6 @@ fun GuardianSettingsScreen(
 
                 GuardianSettingsTutorialStep.COMPLETED ->
                     null
-
-                else -> null
             }
 
             if (targetBounds != null) {
@@ -471,8 +462,6 @@ fun GuardianSettingsScreen(
 
                     GuardianSettingsTutorialStep.COMPLETED ->
                         ""
-
-                    else -> ""
                 }
 
                 val message = when (
@@ -494,6 +483,37 @@ fun GuardianSettingsScreen(
                         ""
                 }
 
+                // 다음 버튼과 강조 영역 선택에 동일한 단계 전환을 적용한다.
+                val advanceSettingsTutorial: () -> Unit = {
+                    when (localSettingsStep) {
+                        GuardianSettingsTutorialStep.ACCESSIBILITY -> {
+                            guardianTutorialViewModel.moveSettingsStep(
+                                GuardianSettingsTutorialStep.MANAGED_USERS,
+                                localTutorialNumber + 1
+                            )
+                        }
+                        GuardianSettingsTutorialStep.MANAGED_USERS -> {
+                            guardianTutorialViewModel.moveSettingsStep(
+                                GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION,
+                                localTutorialNumber + 1
+                            )
+                        }
+                        GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
+                            guardianTutorialViewModel.moveSettingsStep(
+                                GuardianSettingsTutorialStep.REPLAY_TUTORIAL,
+                                localTutorialNumber + 1
+                            )
+                        }
+                        GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
+                            if (guardianTutorialViewModel.isFullTutorial()) {
+                                PrefsManager.from(context).setGuardianTutorialCompleted(true)
+                            }
+                            guardianTutorialViewModel.completeTutorial()
+                        }
+                        GuardianSettingsTutorialStep.COMPLETED -> Unit
+                    }
+                }
+
                 TutorialOverlay(
                     targetBounds = targetBounds,
                     title = title,
@@ -502,83 +522,13 @@ fun GuardianSettingsScreen(
                         localTutorialNumber,
                     totalSteps =
                         tutorialState.totalNumber,
-                    onNext = {
-                        when (localSettingsStep) {
-                            GuardianSettingsTutorialStep.ACCESSIBILITY -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.MANAGED_USERS
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.MANAGED_USERS -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
-                                if (
-                                    guardianTutorialViewModel
-                                        .isFullTutorial()
-                                ) {
-                                    PrefsManager.from(context)
-                                        .setGuardianTutorialCompleted(true)
-                                }
-
-                                guardianTutorialViewModel
-                                    .completeTutorial()
-                            }
-
-                            GuardianSettingsTutorialStep.COMPLETED -> Unit
-                            else -> Unit
-                        }
-                    },
-                    onTargetClick = {
-                        when (localSettingsStep) {
-                            GuardianSettingsTutorialStep.ACCESSIBILITY -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.MANAGED_USERS
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.MANAGED_USERS -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.ANALYSIS_NOTIFICATION -> {
-                                localSettingsStep =
-                                    GuardianSettingsTutorialStep.REPLAY_TUTORIAL
-                                localTutorialNumber += 1
-                            }
-
-                            GuardianSettingsTutorialStep.REPLAY_TUTORIAL -> {
-                                if (
-                                    guardianTutorialViewModel
-                                        .isFullTutorial()
-                                ) {
-                                    PrefsManager.from(context)
-                                        .setGuardianTutorialCompleted(true)
-                                }
-
-                                guardianTutorialViewModel
-                                    .completeTutorial()
-                            }
-
-                            GuardianSettingsTutorialStep.COMPLETED -> Unit
-                            else -> Unit
-                        }
-                    },
+                    onNext = advanceSettingsTutorial,
+                    onTargetClick = advanceSettingsTutorial,
                     onSkip = {
-                        PrefsManager.from(context)
-                            .setGuardianTutorialCompleted(true)
+                        if (guardianTutorialViewModel.isFullTutorial()) {
+                            PrefsManager.from(context)
+                                .setGuardianTutorialCompleted(true)
+                        }
                         guardianTutorialViewModel.stopTutorial()
                     },
                     tutorialColor = GuardianTutorialAccentColor
@@ -832,9 +782,17 @@ private fun WheelNumberPicker(
             }
         },
         update = { picker ->
-            picker.minValue = range.first
-            picker.maxValue = range.last
-            picker.displayedValues = displayedValues.toTypedArray()
+            // 표시 문자열 변경 전에 기존 배열을 해제해 NumberPicker 예외를 방지한다.
+            val values = displayedValues.toTypedArray()
+            if (picker.minValue != range.first ||
+                picker.maxValue != range.last ||
+                !picker.displayedValues.contentEquals(values)
+            ) {
+                picker.displayedValues = null
+                picker.minValue = range.first
+                picker.maxValue = range.last
+                picker.displayedValues = values
+            }
 
             if (picker.value != value) {
                 picker.value = value
@@ -1161,12 +1119,22 @@ private fun SettingsToggleRow(
     onBoundsChanged: (Rect) -> Unit = {},
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val density = LocalDensity.current
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .onGloballyPositioned { coordinates ->
+                val bounds = coordinates.boundsInRoot()
+                val insetX = with(density) { 8.dp.toPx() }
+                val insetY = with(density) { 3.dp.toPx() }
                 onBoundsChanged(
-                    coordinates.boundsInRoot()
+                    Rect(
+                        bounds.left + insetX,
+                        bounds.top + insetY,
+                        bounds.right - insetX,
+                        bounds.bottom - insetY
+                    )
                 )
             }
             .padding(horizontal = 20.dp, vertical = 14.dp),

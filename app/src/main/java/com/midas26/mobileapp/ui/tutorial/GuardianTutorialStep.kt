@@ -1,5 +1,7 @@
+
 package com.midas26.mobileapp.ui.tutorial.guardian
 
+/** 보호자 튜토리얼에서 현재 안내하는 화면. */
 enum class GuardianTutorialScreen {
     HOME,
     ANALYSIS_SELECT,
@@ -11,6 +13,7 @@ enum class GuardianTutorialScreen {
     COMPLETED
 }
 
+/** 튜토리얼에서 강조하는 하단 탐색 탭. */
 enum class GuardianBottomTab {
     HOME,
     ANALYSIS,
@@ -18,6 +21,7 @@ enum class GuardianBottomTab {
     SETTINGS
 }
 
+/** 설정에서 다시 볼 튜토리얼의 범위. */
 enum class GuardianTutorialReplayTarget {
     FULL,
     HOME,
@@ -26,6 +30,7 @@ enum class GuardianTutorialReplayTarget {
     SETTINGS
 }
 
+/** 보호자 홈 화면의 안내 단계. */
 enum class GuardianHomeTutorialStep {
     MOVE_TO_HOME_TAB,
     LINKED_USER,
@@ -37,6 +42,7 @@ enum class GuardianHomeTutorialStep {
     COMPLETED
 }
 
+/** 분석 대상 선택 및 분석 결과 화면의 안내 단계. */
 enum class GuardianAnalysisTutorialStep {
     USER_SELECT,
     MAIN_SCORE,
@@ -46,6 +52,7 @@ enum class GuardianAnalysisTutorialStep {
     COMPLETED
 }
 
+/** 사용자 위치, 이동 경로 및 전화 기능의 안내 단계. */
 enum class GuardianLocationTutorialStep {
     USER_SELECT,
     CURRENT_LOCATION,
@@ -57,6 +64,7 @@ enum class GuardianLocationTutorialStep {
     COMPLETED
 }
 
+/** 보호자 설정 화면의 안내 단계. */
 enum class GuardianSettingsTutorialStep {
     ACCESSIBILITY,
     MANAGED_USERS,
