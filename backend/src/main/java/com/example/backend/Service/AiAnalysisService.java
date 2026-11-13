@@ -189,7 +189,7 @@ public class AiAnalysisService {
 
         riskAnalysisRepository.save(result);
 
-        if (dto.getFinalRiskScore() >= 70.0) {
+        if (dto.getFinalRiskScore() >= 60.0) {
             User patient = session.getUser();
             String title = "인지 건강 위험 알림";
             String content = String.format("[%s] 님의 오늘 분석 점수가 %.1f점으로 '위험' 단계입니다. 상세 리포트를 확인해주세요.",
@@ -355,7 +355,9 @@ public class AiAnalysisService {
     }
 
     private String resolveRiskLevel(float score) {
-        if (score < 30f) return "LOW";
+        // 서비스 운영 기준: LOW < 40, MEDIUM < 60, HIGH >= 60.
+        // HIGH 경계는 보호자 알림 기준(60점)과 동일하게 유지한다.
+        if (score < 40f) return "LOW";
         if (score < 60f) return "MEDIUM";
         return "HIGH";
     }
