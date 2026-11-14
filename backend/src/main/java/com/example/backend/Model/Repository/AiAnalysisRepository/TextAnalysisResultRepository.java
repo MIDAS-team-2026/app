@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface TextAnalysisResultRepository extends JpaRepository<TextAnalysisResult, Long> {
+    java.util.Optional<TextAnalysisResult> findFirstByAudioRecord_IdOrderByIdDesc(Long recordId);
 }

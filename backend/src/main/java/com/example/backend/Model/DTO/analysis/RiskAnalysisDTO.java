@@ -6,6 +6,10 @@ import lombok.Setter;
 @Getter
 @Setter
 public class RiskAnalysisDTO {
+    private String evaluationStatus;
+    private String evaluationReason;
+    private Integer evaluatedRecallCount;
+    private Integer totalRecallCount;
     private Long sessionId;
     private Float speechScore;
     private Float textScore;

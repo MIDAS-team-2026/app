@@ -6,6 +6,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public class RecallAnalysisDTO {
+    private String evaluationStatus;
+    private String evaluationReason;
     private Long recallQuestionId;
     private Long pastRecordId;
     private Long currentRecordId;

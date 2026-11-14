@@ -9,6 +9,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AudioRecordRepository extends JpaRepository<AudioRecord, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT a FROM AudioRecord a WHERE a.id = :id")
+    Optional<AudioRecord> findByIdForUpdate(@Param("id") Long id);
+
     @Query("SELECT COALESCE(MAX(a.turnOrder), 0) FROM AudioRecord a WHERE a.chatSession.id = :sessionId")
     Integer findMaxTurnOrderByChatSessionId(@Param("sessionId") Long sessionId);
 
