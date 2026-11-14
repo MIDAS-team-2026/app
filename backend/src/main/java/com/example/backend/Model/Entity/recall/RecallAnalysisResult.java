@@ -12,6 +12,13 @@ import java.time.LocalDateTime;
 @Table(name = "recall_analysis_results")
 public class RecallAnalysisResult {
 
+    @Column(name = "evaluation_status", length = 30)
+    private String evaluationStatus;
+
+    @Column(name = "evaluation_reason", length = 500)
+    private String evaluationReason;
+
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "recall_result_id", nullable = false)

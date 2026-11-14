@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface SpeechAnalysisResultRepository extends JpaRepository<SpeechAnalysisResult, Long> {
+    java.util.Optional<SpeechAnalysisResult> findFirstByAudioRecord_IdOrderByIdDesc(Long recordId);
 }
