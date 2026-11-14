@@ -133,7 +133,14 @@ public class VoiceController {
                     .body(ApiResponse.fail(400, "recordId와 replyText는 필수입니다."));
         }
         try {
-            voiceService.saveAiReply(request.getRecordId(), request.getReplyText());
+            voiceService.saveAiReply(
+                    request.getRecordId(),
+                    request.getReplyText(),
+                    request.getEpisodeId(),
+                    request.getConversationTopic(),
+                    request.getConversationStage(),
+                    request.getPresentedRecallQuestionId()
+            );
             return ResponseEntity.ok(ApiResponse.success());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404)

@@ -52,12 +52,24 @@ public class AudioRecord {
     @Column(name = "recall_question_id")
     private Long recallQuestionId;
 
+    @Column(name = "presented_recall_question_id")
+    private Long presentedRecallQuestionId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_record_id")
     private AudioRecord parentRecord;
 
     @Column(name = "answer_role", length = 50)
     private String answerRole;
+
+    @Column(name = "episode_id", length = 120)
+    private String episodeId;
+
+    @Column(name = "conversation_topic", length = 50)
+    private String conversationTopic;
+
+    @Column(name = "conversation_stage", length = 50)
+    private String conversationStage;
 
     @Column(name = "audio_file_path", length = 1000)
     private String audioFilePath;
