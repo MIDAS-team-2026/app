@@ -11,6 +11,7 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.AudioRecordRepository;
 import com.example.backend.Model.Repository.AiAnalysisRepository.ChatSessionRepository;
 import com.example.backend.Model.Repository.UserRepository;
+import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class VoiceService {
     private final AudioRecordRepository audioRecordRepository;
     private final UserRepository userRepository;
     private final ChatSessionRepository chatSessionRepository;
+    private final RecallQuestionRepository recallQuestionRepository;
 
     private final STTService sttService;
 
@@ -50,7 +52,10 @@ public class VoiceService {
             String answerRole,
             MultipartFile file) throws IOException {
 
+        long uploadStarted = System.nanoTime();
         String fileUrl = s3Service.uploadFile(file);
+        log.info("voice_stage stage=s3_upload sessionId={} elapsed_ms={}", sessionId,
+                (System.nanoTime() - uploadStarted) / 1_000_000);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
@@ -70,7 +75,10 @@ public class VoiceService {
         record.setParentRecord(null);
 
         AudioRecord savedRecord = audioRecordRepository.save(record);
+        long sttStarted = System.nanoTime();
         STTService.SttResult sttResult = sttService.transcribeAndSave(savedRecord.getId());
+        log.info("voice_stage stage=stt recordId={} elapsed_ms={}", savedRecord.getId(),
+                (System.nanoTime() - sttStarted) / 1_000_000);
         Long recordId = savedRecord.getId();
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 
@@ -104,10 +112,37 @@ public class VoiceService {
     }
 
     @Transactional
-    public void saveAiReply(Long recordId, String replyText) {
+    public void saveAiReply(
+            Long recordId,
+            String replyText,
+            String episodeId,
+            String conversationTopic,
+            String conversationStage,
+            Long presentedRecallQuestionId
+    ) {
         AudioRecord record = audioRecordRepository.findById(recordId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
+        if (presentedRecallQuestionId != null) {
+            var question = recallQuestionRepository.findById(presentedRecallQuestionId)
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown presented recall question"));
+            if (record.getUser() == null || question.getUser() == null
+                    || record.getUser().getId() == null
+                    || !record.getUser().getId().equals(question.getUser().getId())
+                    || replyText == null || replyText.isBlank()) {
+                throw new IllegalArgumentException("Invalid recall presentation");
+            }
+        }
         record.setAiReplyText(replyText);
+        record.setPresentedRecallQuestionId(presentedRecallQuestionId);
+        if (episodeId != null && !episodeId.isBlank()) {
+            record.setEpisodeId(episodeId);
+        }
+        if (conversationTopic != null && !conversationTopic.isBlank()) {
+            record.setConversationTopic(conversationTopic);
+        }
+        if (conversationStage != null && !conversationStage.isBlank()) {
+            record.setConversationStage(conversationStage);
+        }
         audioRecordRepository.save(record);
         log.info("AI reply 저장 완료 recordId={}", recordId);
     }
@@ -175,7 +210,13 @@ public class VoiceService {
                         record.getAnswerRole() != null ? record.getAnswerRole().toString() : null,
                         record.getRecallQuestionId(),
                         record.getParentRecord() != null ? record.getParentRecord().getId() : null,
-                        record.getAiReplyText()
+                        record.getAiReplyText(),
+                        record.getEpisodeId(),
+                        record.getConversationTopic(),
+                        record.getConversationStage(),
+                        record.getTurnOrder(),
+                        record.getRecordedAt(),
+                        record.getPresentedRecallQuestionId()
                 ))
 
                 .collect(Collectors.toList());
@@ -183,4 +224,3 @@ public class VoiceService {
     }
 
 }
-
