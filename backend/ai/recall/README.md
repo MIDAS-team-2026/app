@@ -33,16 +33,18 @@ backend/ai/
 - `speech_risk_score`: 높을수록 음성 기반 위험이 큼
 - `recall_score`: 높을수록 회상 상태가 양호함
 
-회상 점수는 `recall_risk_score = 100 - recall_score`로 위험도 방향을
-맞춘 뒤 다음 비율로 `final_risk_score`를 계산한다.
+민정님 커밋 `4a79883`의 비율은 음성 33%, 회상/텍스트 67%다.
+회상 전용 계산 함수는 `100 - recall_score`를 사용한다.
+실제 세션 집계 경로는 고정 인지 질문과 자연 회상을 합친 `textScore`를 사용한다.
 
 ```text
-final_risk_score =
-(0.33 × speech_risk_score) +
-(0.67 × recall_risk_score)
+textScore = fixedScore * (3/7) + recallScore * (4/7)
+finalRiskScore = speechRiskScore * 0.33 + (100 - textScore) * 0.67
 ```
 
-회상 위험도 67%, 음성 위험도 33%를 반영한다.
+두 텍스트 구성 점수가 모두 있을 때의 공식이다. 하나만 있으면 해당 점수를
+사용하고 PARTIAL로 표시한다. 음성 근거가 없으면 종합 점수는 보류한다.
+이 가중치는 팀 설계값이며 임상 정확도나 검증된 최적 비율을 의미하지 않는다.
 
 서비스 운영용 위험 구간은 다음과 같다.
 

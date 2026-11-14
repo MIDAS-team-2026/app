@@ -1,10 +1,15 @@
 import re
+import math
+from numbers import Real
+from functools import lru_cache
 from typing import List, Optional, Tuple
 
 from sentence_transformers import SentenceTransformer, util
+from recall.dialogue_act import conversation_control, is_clarification_request
 
 
 embedding_model = SentenceTransformer("jhgan/ko-sroberta-multitask")
+SCORING_POLICY_VERSION = "recall-rules-v2-20261112"
 
 
 KEYWORD_STOPWORDS = {
@@ -136,6 +141,11 @@ NON_PARTICLE_COMPOUND_WORDS = {
 }
 
 
+STT_SOFT_MATCH_KEYWORD_GROUPS = (
+    {"손", "팔", "발", "다리"},
+)
+
+
 def clean_text(text: str) -> str:
     text = str(text)
     text = re.sub(r"[^가-힣a-zA-Z0-9\s]", " ", text)
@@ -143,8 +153,29 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+class InvalidScore(ValueError):
+    pass
+
+
+def is_valid_score(score) -> bool:
+    return (isinstance(score, Real) and not isinstance(score, bool)
+            and math.isfinite(score) and 0 <= score <= 100)
+
+
 def clamp_score(score: float) -> float:
+    if not isinstance(score, Real) or isinstance(score, bool) or not math.isfinite(score):
+        raise InvalidScore("invalid_numeric_score")
     return round(max(0.0, min(float(score), 100.0)), 2)
+
+
+def _unavailable_recall(reason, keywords):
+    return {
+        **dict.fromkeys(("similarityScore", "keywordScore", "finalRecallScore", "textScore", "recallScore")),
+        "usedKeywords": keywords or [], "evaluationStatus": "NOT_EVALUABLE",
+        "evaluationReasons": [reason],
+        "scoreTrace": {"policyVersion": SCORING_POLICY_VERSION, "status": "NOT_EVALUABLE",
+                       "reason": reason, "finalScore": None},
+    }
 
 
 def normalize_keyword_token(token: str) -> str:
@@ -285,6 +316,30 @@ def is_keyword_matched(
 
             if len(combined) >= len(target):
                 break
+
+    return False
+
+
+def is_keyword_soft_matched_for_stt(
+    keyword: str,
+    current_text: str,
+) -> bool:
+    normalized_keyword = normalize_keyword_token(keyword)
+
+    if not normalized_keyword:
+        return False
+
+    normalized_current_tokens = {
+        normalize_keyword_token(token)
+        for token in clean_text(current_text).split()
+        if normalize_keyword_token(token)
+    }
+
+    for group in STT_SOFT_MATCH_KEYWORD_GROUPS:
+        if normalized_keyword not in group:
+            continue
+
+        return bool((group - {normalized_keyword}).intersection(normalized_current_tokens))
 
     return False
 
@@ -454,6 +509,11 @@ def get_recall_weights(question_type: str) -> Tuple[float, float]:
     return weights.get(question_type, (0.4, 0.6))
 
 
+@lru_cache(maxsize=128)
+def _encode_recall_text(text: str):
+    return embedding_model.encode(text, convert_to_tensor=True)
+
+
 def calculate_similarity_score(
     past_text: str,
     current_text: str,
@@ -464,14 +524,8 @@ def calculate_similarity_score(
     if not past_text or not current_text:
         return 0.0
 
-    past_embedding = embedding_model.encode(
-        past_text,
-        convert_to_tensor=True,
-    )
-    current_embedding = embedding_model.encode(
-        current_text,
-        convert_to_tensor=True,
-    )
+    past_embedding = _encode_recall_text(past_text)
+    current_embedding = _encode_recall_text(current_text)
 
     score = util.cos_sim(
         past_embedding,
@@ -484,13 +538,28 @@ def calculate_similarity_score(
 def calculate_keyword_score(
     keywords: Optional[List[str]],
     current_text: str,
+    *,
+    allow_component_partial: bool = True,
 ) -> float:
+    score, _ = _keyword_evidence(keywords, current_text, allow_component_partial=allow_component_partial)
+    return score
+
+
+def _action_components(text: str) -> tuple[set[str], set[str]]:
+    from recall.memory_evidence_extractor import extract_content_nouns, extract_predicate_forms
+
+    predicates = extract_predicate_forms(text) - {"하", "있", "없", "되", "주"}
+    verbal_nouns = {predicate[:-1] for predicate in predicates if predicate.endswith("하")}
+    return set(extract_content_nouns(text)) - KEYWORD_STOPWORDS - verbal_nouns, predicates
+
+
+def _keyword_evidence(keywords, current_text, *, allow_component_partial=True):
     raw_current_text = str(current_text or "")
     scoring_text = get_final_correction_segment(raw_current_text)
     current_text = clean_text(scoring_text)
 
     if not keywords:
-        return 0.0
+        return 0.0, []
 
     cleaned_keywords = []
 
@@ -501,19 +570,52 @@ def calculate_keyword_score(
             cleaned_keywords.append(cleaned_keyword)
 
     if not cleaned_keywords:
-        return 0.0
+        return 0.0, []
 
-    matched = 0
+    matched = 0.0
+    evidence = []
 
     for keyword in cleaned_keywords:
+        credit = 0.0
+        component_matches, component_missing, ambiguous = [], [], []
         if (
             is_keyword_matched(keyword, current_text)
             and not is_keyword_uncertain(keyword, scoring_text)
             and not is_keyword_explicitly_rejected(keyword, scoring_text)
         ):
-            matched += 1
+            credit = 1.0
+        elif (
+            is_keyword_soft_matched_for_stt(keyword, current_text)
+            and not is_keyword_uncertain(keyword, scoring_text)
+            and not is_keyword_explicitly_rejected(keyword, scoring_text)
+        ):
+            credit = 0.5
+            ambiguous = [keyword]
 
-    return clamp_score((matched / len(cleaned_keywords)) * 100)
+        # Only action phrases can be split. Names, places and food names keep
+        # their original atomic keyword contract; FACT scoring stays strict.
+        nouns, predicates = _action_components(keyword)
+        if predicates and len(nouns) + len(predicates) >= 2:
+            negated = bool(re.search(r"(?:^|\s)(?:안|못)\s|지\s*(?:않|못)|아니", scoring_text))
+            rejected = is_keyword_explicitly_rejected(keyword, scoring_text)
+            if not is_uncertain_answer(scoring_text) and not negated and not rejected:
+                _, current_predicates = _action_components(scoring_text)
+                for kind, units in (("noun", nouns), ("predicate", predicates)):
+                    for unit in sorted(units):
+                        found = is_keyword_matched(unit, scoring_text) if kind == "noun" else unit in current_predicates
+                        (component_matches if found else component_missing).append(f"{kind}:{unit}")
+                        if kind == "noun" and not found and is_keyword_soft_matched_for_stt(unit, scoring_text):
+                            ambiguous.append(unit)
+                if allow_component_partial:
+                    credit = max(credit, len(component_matches) / (len(nouns) + len(predicates)))
+            elif negated or rejected:
+                credit = 0.0
+        matched += credit
+        evidence.append({"keyword": keyword, "credit": round(credit, 4),
+                         "matchedComponents": component_matches, "missingComponents": component_missing,
+                         "ambiguousKeywords": ambiguous})
+
+    return clamp_score((matched / len(cleaned_keywords)) * 100), evidence
 
 
 def calculate_final_recall_score(
@@ -522,18 +624,35 @@ def calculate_final_recall_score(
     keywords: Optional[List[str]] = None,
     question_type: str = "DEFAULT",
 ) -> dict:
+    unavailable_reason = (
+        "missing_reference" if not clean_text(past_text or "") else
+        "missing_answer" if not clean_text(current_text or "") else
+        "conversation_control" if conversation_control(current_text) else
+        "clarification_request" if is_clarification_request(current_text) else None
+    )
+    if unavailable_reason:
+        return _unavailable_recall(unavailable_reason, keywords)
+    normalized_question_type = str(question_type or "DEFAULT").upper()
     if not keywords:
-        keywords = extract_keywords_from_text(past_text)
+        nouns, predicates = _action_components(past_text)
+        keywords = ([past_text] if normalized_question_type != "FACT" and predicates
+                    and len(nouns) + len(predicates) >= 2 else extract_keywords_from_text(past_text))
 
     scoring_current_text = get_final_correction_segment(current_text)
-    similarity_score = calculate_similarity_score(
-        past_text=past_text,
-        current_text=scoring_current_text,
-    )
+    try:
+        similarity_score = calculate_similarity_score(
+            past_text=past_text,
+            current_text=scoring_current_text,
+        )
+    except InvalidScore:
+        return _unavailable_recall("invalid_similarity_score", keywords)
+    if not is_valid_score(similarity_score):
+        return _unavailable_recall("invalid_similarity_score", keywords)
 
-    keyword_score = calculate_keyword_score(
+    keyword_score, keyword_evidence = _keyword_evidence(
         keywords=keywords,
         current_text=current_text,
+        allow_component_partial=normalized_question_type != "FACT",
     )
 
     similarity_weight, keyword_weight = get_recall_weights(question_type)
@@ -542,22 +661,67 @@ def calculate_final_recall_score(
         similarity_score * similarity_weight
         + keyword_score * keyword_weight
     )
+    weighted_score = final_recall_score
+    adjustments = []
 
-    normalized_question_type = str(question_type or "DEFAULT").upper()
+    def trace_adjustment(rule, before, after):
+        if before != after:
+            adjustments.append({"rule": rule, "before": before, "after": after})
 
     if normalized_question_type == "FACT" and keyword_score == 100:
+        before = final_recall_score
         final_recall_score = max(final_recall_score, 90)
+        trace_adjustment("fact_exact_keyword_floor", before, final_recall_score)
 
     if normalized_question_type == "FACT" and keyword_score == 0:
+        before = final_recall_score
         final_recall_score = min(final_recall_score, 49)
+        trace_adjustment("fact_missing_keyword_cap", before, final_recall_score)
+
+    if (
+        normalized_question_type != "FACT"
+        and similarity_score >= 70
+        and keyword_score < 50
+    ):
+        before = final_recall_score
+        final_recall_score = max(final_recall_score, 45)
+        trace_adjustment("semantic_partial_floor", before, final_recall_score)
+
+    if (
+        normalized_question_type != "FACT"
+        and similarity_score >= 80
+        and keyword_score >= 50
+    ):
+        before = final_recall_score
+        final_recall_score = max(final_recall_score, 60)
+        trace_adjustment("combined_partial_floor", before, final_recall_score)
 
     final_recall_score = clamp_score(final_recall_score)
+    ambiguous_keywords = [
+        keyword for keyword in keywords
+        if not is_keyword_matched(keyword, scoring_current_text)
+        and is_keyword_soft_matched_for_stt(keyword, scoring_current_text)
+    ]
+    ambiguous_keywords.extend(unit for item in keyword_evidence for unit in item["ambiguousKeywords"])
 
     return {
         "similarityScore": clamp_score(similarity_score),
         "keywordScore": clamp_score(keyword_score),
         "finalRecallScore": final_recall_score,
         "usedKeywords": keywords or [],
+        "keywordEvidence": keyword_evidence,
+        "scoreTrace": {
+            "policyVersion": SCORING_POLICY_VERSION,
+            "similarityWeight": similarity_weight, "keywordWeight": keyword_weight,
+            "weightedScore": weighted_score, "adjustments": adjustments,
+            "provisionalScore": final_recall_score,
+            "finalScore": None if ambiguous_keywords else final_recall_score,
+            "status": "REVIEW_REQUIRED" if ambiguous_keywords else "SCORED",
+        },
+        # Similar body-part words are not evidence that recognition was wrong.
+        # Keep a provisional score, but do not silently aggregate it as confirmed.
+        "evaluationStatus": "REVIEW_REQUIRED" if ambiguous_keywords else "SCORED",
+        "evaluationReasons": ["possible_transcription_or_content_difference"] if ambiguous_keywords else [],
 
         # 민정님 커밋 기준:
         # textScore는 회상 파트의 의미 유사도 점수(similarityScore)로 저장한다.

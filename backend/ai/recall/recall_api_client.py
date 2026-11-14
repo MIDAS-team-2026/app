@@ -1,14 +1,16 @@
 import argparse
 import re
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
+from recall.episode_context import ordered_records
 
 from recall.recall_score_calculator import (
     calculate_final_recall_score,
+    clamp_score, is_valid_score,
 )
 
 # text_linguistic_markers는 analysis/src에 있다. main.py를 거쳐 import될 때는
@@ -42,6 +44,7 @@ KOREAN_WEEKDAYS = [
     "토요일",
     "일요일",
 ]
+KOREAN_TIMEZONE = timezone(timedelta(hours=9))
 
 
 def clean_text(text: str) -> str:
@@ -49,10 +52,6 @@ def clean_text(text: str) -> str:
     text = re.sub(r"[^가-힣a-zA-Z0-9\s]", "", text)
     text = re.sub(r"\s+", " ", text)
     return text
-
-
-def clamp_score(score: float) -> float:
-    return round(max(0.0, min(float(score), 100.0)), 2)
 
 
 def get_session_records(session_id: int, base_url: str = BASE_URL) -> List[dict]:
@@ -104,6 +103,8 @@ def send_recall_result(
     ai_label: str | None = None,
     ai_confidence: float | None = None,
     base_url: str = BASE_URL,
+    evaluation_status: str | None = None,
+    evaluation_reason: str | None = None,
 ):
     body = {
         "recallQuestionId": recall_question_id,
@@ -112,6 +113,8 @@ def send_recall_result(
         "similarityScore": similarity_score,
         "keywordScore": keyword_score,
         "finalRecallScore": final_recall_score,
+        "evaluationStatus": evaluation_status,
+        "evaluationReason": evaluation_reason,
     }
 
     if ai_label is not None:
@@ -135,6 +138,10 @@ def send_risk_result(
     final_risk_score: float,
     risk_level: str,
     base_url: str = BASE_URL,
+    evaluation_status: str | None = None,
+    evaluation_reason: str | None = None,
+    evaluated_recall_count: int | None = None,
+    total_recall_count: int | None = None,
 ):
     body = {
         "sessionId": session_id,
@@ -143,6 +150,10 @@ def send_risk_result(
         "recallScore": recall_score,
         "finalRiskScore": final_risk_score,
         "riskLevel": risk_level,
+        "evaluationStatus": evaluation_status,
+        "evaluationReason": evaluation_reason,
+        "evaluatedRecallCount": evaluated_recall_count,
+        "totalRecallCount": total_recall_count,
     }
 
     return requests.post(
@@ -235,8 +246,14 @@ def compute_and_send_linguistic_markers(
 
 
 def find_recall_pairs(records: List[dict]) -> List[tuple]:
-    initial_by_question: Dict[int, dict] = {}
-    recall_by_question: Dict[int, dict] = {}
+    try:
+        ordered = ordered_records(records)
+    except (TypeError, ValueError, OverflowError):
+        return []
+    preceding = {row.get("recordId"): ordered[index - 1]
+                 for index, row in enumerate(ordered) if index}
+    initial_by_question: Dict[int, List[dict]] = {}
+    recall_by_question: Dict[int, List[dict]] = {}
 
     for record in records:
         question_id = record.get("recallQuestionId")
@@ -248,29 +265,55 @@ def find_recall_pairs(records: List[dict]) -> List[tuple]:
         question_id = int(question_id)
 
         if answer_role == "INITIAL":
-            initial_by_question[question_id] = record
+            initial_by_question.setdefault(question_id, []).append(record)
         elif answer_role == "RECALL":
-            recall_by_question[question_id] = record
+            recall_by_question.setdefault(question_id, []).append(record)
 
     pairs = []
 
-    for question_id, recall_record in recall_by_question.items():
-        initial_record = initial_by_question.get(question_id)
+    for question_id, recall_records in recall_by_question.items():
+        initial_records = initial_by_question.get(question_id, [])
+        if len(recall_records) != 1 or len(initial_records) > 1:
+            continue
+        recall_record = recall_records[0]
+        initial_record = initial_records[0] if initial_records else None
 
         if initial_record is None:
             parent_id = recall_record.get("parentRecordId")
 
             if parent_id is not None:
-                initial_record = next(
-                    (
-                        record
-                        for record in records
-                        if record.get("recordId") == parent_id
-                    ),
-                    None,
-                )
+                parents = [record for record in records if record.get("recordId") == parent_id]
+                initial_record = parents[0] if len(parents) == 1 else None
 
         if initial_record is None:
+            continue
+
+        # Do not turn inconsistent provenance into a plausible numeric score.
+        source_question = initial_record.get("recallQuestionId")
+        if (str(initial_record.get("answerRole") or "").upper() not in {"", "INITIAL"}
+                or (source_question is not None and int(source_question) != question_id)
+                or recall_record.get("parentRecordId") not in {None, initial_record.get("recordId")}):
+            continue
+        source_id, answer_id = initial_record.get("recordId"), recall_record.get("recordId")
+        if (source_id is None or answer_id is None or source_id == answer_id
+                or any(sum(row.get("recordId") == record_id for row in records) != 1
+                       for record_id in (source_id, answer_id))):
+            continue
+        position_field = "turnOrder" if any(
+            row.get("turnOrder") is not None for row in (initial_record, recall_record)
+        ) else "recordId"
+        try:
+            source_position = int(initial_record.get(position_field) or 0)
+            answer_position = int(recall_record.get(position_field) or 0)
+        except (TypeError, ValueError):
+            continue
+        if not 0 < source_position < answer_position:
+            continue
+
+        # New records carry the outgoing question identity. Never score against
+        # a different question, even if the incoming answer link says otherwise.
+        presented_id = preceding.get(answer_id, {}).get("presentedRecallQuestionId")
+        if presented_id is not None and str(presented_id) != str(question_id):
             continue
 
         pairs.append(
@@ -306,65 +349,61 @@ def calculate_personal_fact_score(
     return 0.0
 
 
-def get_today_weekday_text() -> str:
-    today = datetime.now()
+def get_today_weekday_text(reference_date: date | None = None) -> str:
+    today = reference_date or datetime.now(KOREAN_TIMEZONE).date()
     return KOREAN_WEEKDAYS[today.weekday()]
 
 
-def calculate_weekday_score(current_text: str) -> Optional[float]:
+def calculate_weekday_score(current_text: str, reference_date: date | None = None) -> Optional[float]:
     current_text = clean_text(current_text)
 
     if not current_text:
         return None
 
-    correct_weekday = get_today_weekday_text()
-    correct_short = correct_weekday.replace("요일", "")
+    mentioned = set(re.findall(r"[월화수목금토일]요일", current_text))
+    if not mentioned:
+        short = re.fullmatch(r"(?:오늘은?\s*)?([월화수목금토일])(?:\s*(?:요|이요|입니다|이에요|예요))?", current_text)
+        if short:
+            mentioned.add(short.group(1) + "요일")
+    if len(mentioned) != 1:
+        return None
+    return 100.0 if get_today_weekday_text(reference_date) in mentioned else 0.0
 
-    if correct_weekday in current_text or correct_short in current_text:
-        return 100.0
 
-    for weekday in KOREAN_WEEKDAYS:
-        short = weekday.replace("요일", "")
-
-        if weekday in current_text or short in current_text:
-            return 0.0
-
-    return None
+def _parse_calendar_answer(text: str) -> Optional[tuple[int | None, int, int]]:
+    text = str(text or "")
+    patterns = (
+        r"(?<!\d)(?:(\d{4})\s*년\s*)?(\d{1,2})\s*월\s*(\d{1,2})\s*일?",
+        r"(?<!\d)(?:(\d{4})[./-])?(\d{1,2})[./-](\d{1,2})(?!\d)",
+    )
+    answers = {tuple(int(value) if value else None for value in match.groups())
+               for pattern in patterns for match in re.finditer(pattern, text)}
+    return next(iter(answers)) if len(answers) == 1 else None
 
 
 def extract_month_day(text: str) -> Optional[tuple[int, int]]:
-    text = str(text or "")
-
-    match = re.search(r"(\d{1,2})\s*월\s*(\d{1,2})\s*일?", text)
-
-    if match:
-        return int(match.group(1)), int(match.group(2))
-
-    match = re.search(r"(\d{1,2})[./-](\d{1,2})", text)
-
-    if match:
-        return int(match.group(1)), int(match.group(2))
-
-    return None
+    parsed = _parse_calendar_answer(text)
+    return parsed[1:] if parsed else None
 
 
-def calculate_date_score(current_text: str) -> Optional[float]:
-    parsed = extract_month_day(current_text)
+def calculate_date_score(current_text: str, reference_date: date | None = None) -> Optional[float]:
+    parsed = _parse_calendar_answer(current_text)
 
     if parsed is None:
         return None
 
-    month, day = parsed
-
-    today = datetime.now()
-    current_year = today.year
-
-    try:
-        answered_date = datetime(current_year, month, day)
-    except ValueError:
+    year, month, day = parsed
+    today = reference_date or datetime.now(KOREAN_TIMEZONE).date()
+    years = (year,) if year is not None else (today.year - 1, today.year, today.year + 1)
+    differences = []
+    for candidate_year in years:
+        try:
+            differences.append(abs((today - date(candidate_year, month, day)).days))
+        except ValueError:
+            continue
+    if not differences:
         return 0.0
-
-    diff_days = abs((today.date() - answered_date.date()).days)
+    diff_days = min(differences)
 
     if diff_days == 0:
         return 100.0
@@ -384,19 +423,30 @@ def calculate_date_score(current_text: str) -> Optional[float]:
 def calculate_orientation_score(
     expected_answer: str,
     current_text: str,
+    reference_date: date | None = None,
 ) -> Optional[float]:
     expected_answer = str(expected_answer or "").upper()
 
     if expected_answer == "TODAY_WEEKDAY":
-        return calculate_weekday_score(current_text)
+        return calculate_weekday_score(current_text, reference_date)
 
     if expected_answer == "TODAY_DATE":
-        return calculate_date_score(current_text)
+        return calculate_date_score(current_text, reference_date)
 
     return calculate_personal_fact_score(
         expected_answer=expected_answer,
         current_text=current_text,
     )
+
+
+def _recording_date(recorded_at) -> date | None:
+    try:
+        recorded = datetime.fromisoformat(str(recorded_at).replace("Z", "+00:00"))
+        if recorded.tzinfo is not None:
+            recorded = recorded.astimezone(KOREAN_TIMEZONE)
+        return recorded.date()
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 def calculate_initial_fixed_score(
@@ -426,9 +476,13 @@ def calculate_initial_fixed_score(
             )
 
         elif question_type == "ORIENTATION":
+            reference_date = _recording_date(record.get("recordedAt"))
+            if expected_answer.upper() in {"TODAY_DATE", "TODAY_WEEKDAY"} and reference_date is None:
+                continue
             score = calculate_orientation_score(
                 expected_answer=expected_answer,
                 current_text=current_text,
+                reference_date=reference_date,
             )
 
         if score is not None:
@@ -455,13 +509,13 @@ def get_recall_scoring_text(
 def combine_text_score(
     initial_fixed_score: Optional[float],
     recall_score: Optional[float],
-) -> float:
+) -> Optional[float]:
     """
     textScore는 우리 인지/회상 파트 전체 점수다.
 
-    전체 가중치 기준:
-    - 초기 고정 질문 30%
-    - 자연 회상 질문 40%
+    인지/회상 내부 비율은 기존 고정 질문 : 자연 회상 = 3 : 4를 유지한다.
+    최종 합성은 음성 33%, 인지/회상 67%이므로 전체 환산 비중은
+    고정 질문 약 28.71%, 자연 회상 약 38.29%다 (두 점수 모두 있을 때).
 
     textScore 자체는 0~100 점수로 저장한다.
     따라서 내부 비율은:
@@ -481,7 +535,7 @@ def combine_text_score(
     if recall_score is not None:
         return clamp_score(recall_score)
 
-    return 0.0
+    return None
 
 
 def calculate_final_risk_from_text_score(
@@ -523,8 +577,10 @@ def analyze_session_recall(
     base_url: str = BASE_URL,
     target_recall_record_id: Optional[int] = None,
     send_all_recall_results: bool = True,
+    speech_evaluation_status: str | None = None,
+    records_snapshot: Optional[List[dict]] = None,
 ) -> None:
-    records = get_session_records(
+    records = records_snapshot if records_snapshot is not None else get_session_records(
         session_id=session_id,
         base_url=base_url,
     )
@@ -542,9 +598,21 @@ def analyze_session_recall(
     pairs = find_recall_pairs(records)
 
     final_recall_scores = []
+    withheld_statuses = []
+    paired_record_ids = {answer["recordId"] for _, _, answer in pairs}
+    unpaired_recall_count = sum(
+        str(record.get("answerRole") or "").upper() == "RECALL"
+        and record.get("recordId") not in paired_record_ids
+        for record in records
+    )
+    if unpaired_recall_count:
+        withheld_statuses.append("unpaired_recall_record")
 
     for question_id, initial_record, recall_record in pairs:
-        question = questions.get(question_id, {})
+        question = questions.get(question_id)
+        if not question:
+            withheld_statuses.append("missing_recall_question_metadata")
+            continue
 
         past_text = get_recall_scoring_text(
             question=question,
@@ -561,6 +629,17 @@ def analyze_session_recall(
             keywords=keywords,
             question_type=question_type,
         )
+        evaluation_status = recall_scores.get("evaluationStatus", "SCORED")
+        if evaluation_status == "SCORED" and (
+            not is_valid_score(recall_scores.get("finalRecallScore"))
+            or any(key in recall_scores and not is_valid_score(recall_scores[key])
+                   for key in ("similarityScore", "keywordScore"))
+        ):
+            evaluation_status = "NOT_EVALUABLE"
+            recall_scores = {**recall_scores, "evaluationReasons": ["invalid_numeric_score"]}
+        evaluable = evaluation_status == "SCORED"
+        if not evaluable:
+            withheld_statuses.append(evaluation_status)
 
         current_record_id = int(recall_record["recordId"])
         should_send_recall_result = (
@@ -576,9 +655,11 @@ def analyze_session_recall(
                 recall_question_id=question_id,
                 past_record_id=initial_record["recordId"],
                 current_record_id=current_record_id,
-                similarity_score=recall_scores["similarityScore"],
-                keyword_score=recall_scores["keywordScore"],
-                final_recall_score=recall_scores["finalRecallScore"],
+                similarity_score=recall_scores.get("similarityScore") if evaluable else None,
+                keyword_score=recall_scores.get("keywordScore") if evaluable else None,
+                final_recall_score=recall_scores.get("finalRecallScore") if evaluable else None,
+                evaluation_status=evaluation_status,
+                evaluation_reason=", ".join(recall_scores.get("evaluationReasons") or []),
                 base_url=base_url,
             )
 
@@ -590,9 +671,8 @@ def analyze_session_recall(
 
             recall_response.raise_for_status()
 
-        final_recall_scores.append(
-            recall_scores["finalRecallScore"]
-        )
+        if evaluable:
+            final_recall_scores.append(recall_scores["finalRecallScore"])
 
     recall_score = None
 
@@ -607,19 +687,44 @@ def analyze_session_recall(
         recall_score=recall_score,
     )
 
+    speech_available = (is_valid_score(speech_risk_score)
+                        and speech_evaluation_status in {None, "SCORED", "PARTIAL"})
     risk_scores = calculate_final_risk_from_text_score(
         speech_risk_score=speech_risk_score,
         text_score=text_score,
-    )
+    ) if text_score is not None and speech_available else {"finalRiskScore": None, "riskLevel": None}
+    if not speech_available:
+        evaluation_status = "NOT_EVALUABLE"
+    elif text_score is None:
+        evaluation_status = "REVIEW_REQUIRED" if "REVIEW_REQUIRED" in withheld_statuses else "NOT_EVALUABLE"
+    elif (initial_fixed_score is None or recall_score is None or withheld_statuses
+          or speech_evaluation_status == "PARTIAL"):
+        evaluation_status = "PARTIAL"
+    else:
+        evaluation_status = "SCORED"
+    missing = []
+    if initial_fixed_score is None:
+        missing.append("no_fixed_evaluation")
+    if recall_score is None:
+        missing.append("no_recall_evaluation")
+    if not speech_available:
+        missing.append("invalid_or_missing_speech_score")
+    elif speech_evaluation_status == "PARTIAL":
+        missing.append("partial_audio_evaluation")
+    missing.extend(sorted(set(withheld_statuses)))
 
     risk_response = send_risk_result(
         session_id=session_id,
-        speech_risk_score=speech_risk_score,
-        text_score=text_score,
-        recall_score=recall_score if recall_score is not None else 0.0,
+        speech_risk_score=speech_risk_score if speech_available else None,
+        text_score=text_score if speech_available else None,
+        recall_score=recall_score if speech_available else None,
         final_risk_score=risk_scores["finalRiskScore"],
         risk_level=risk_scores["riskLevel"],
         base_url=base_url,
+        evaluation_status=evaluation_status,
+        evaluation_reason=", ".join(missing),
+        evaluated_recall_count=len(final_recall_scores),
+        total_recall_count=len(pairs) + unpaired_recall_count,
     )
 
     print("risk status:", risk_response.status_code, risk_response.text)
