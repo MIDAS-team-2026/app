@@ -118,6 +118,10 @@ class MemoryCandidateSelection:
                         for key, values in candidate.answer_values.items()
                     },
                     "qualityScore": candidate.quality_score,
+                    "episodeScore": candidate.episode_score,
+                    "detailTypes": list(candidate.detail_types),
+                    "missingDetailTypes": list(candidate.missing_detail_types),
+                    "isRecallReady": candidate.is_recall_ready,
                 }
             )
 

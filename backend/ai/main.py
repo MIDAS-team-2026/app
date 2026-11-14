@@ -151,7 +151,7 @@ def compact_speech_result(result):
     return flat
 
 
-def run_record_mode(args):
+def run_record_mode(args, *, analysis_result=None, strict_delivery=False):
     """
     record 1개 음성/STT 분석 모드.
     Java 백엔드가 실제 recordId, sessionId, STT 결과, durationSec를 넘길 때 사용한다.
@@ -163,7 +163,7 @@ def run_record_mode(args):
     if args.audio_path:
         logger.info("audio_path exists=%s path=%s", os.path.exists(args.audio_path), args.audio_path)
 
-    result = analyze_user_turn(
+    result = analysis_result if analysis_result is not None else analyze_user_turn(
         record_id=args.record_id,
         session_id=args.session_id,
         audio_path=args.audio_path,
@@ -199,11 +199,11 @@ def run_record_mode(args):
     }
 
     # 🔥 추가: 분석 완료 직후 Spring으로 결과를 자동 전송
-    send_analysis_to_spring(response)
+    send_analysis_to_spring(response, strict=strict_delivery)
 
     return response
 
-def send_analysis_to_spring(result_dict):
+def send_analysis_to_spring(result_dict, *, strict=False):
     if not result_dict or result_dict.get("success") is False:
         return
 
@@ -244,6 +244,8 @@ def send_analysis_to_spring(result_dict):
 
     except Exception as e:
         print(f"> [Python -> Spring] 분석 결과 전송 실패: {e}")
+        if strict:
+            raise
 
 def run_full_dummy_mode():
     """

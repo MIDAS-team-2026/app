@@ -9,6 +9,15 @@ from recall.memory_event import MemoryAnswerType, parse_answer_type
 
 
 _kiwi = Kiwi()
+CONTEXT_ONLY_PLACES = frozenset({"밖", "바깥", "외부", "어딘가"})
+
+
+def is_context_only_place(value: str) -> bool:
+    forms = {token.form for token in _kiwi.tokenize(value)
+             if token.tag.startswith("NN") or token.tag in {"SL", "SH"}}
+    meaningful = forms - _GENERIC_NOUNS - _TIME_NOUNS - _STANDALONE_TIME_WORDS
+    return bool(meaningful) and meaningful.issubset(CONTEXT_ONLY_PLACES)
+
 _NOUN_TAG_PREFIXES = ("NN",)
 _VALUE_TAGS = {"SL", "SH", "SN", "MM"}
 _TIME_NOUNS = {
@@ -33,8 +42,20 @@ _MEDIA_SOURCE_NOUNS = {
     "휴대폰",
     "핸드폰",
 }
+_GAME_DETAIL_WORDS = {
+    "FPS",
+    "게임",
+    "오락",
+    "퍼즐",
+    "맞고",
+    "고스톱",
+    "화투",
+    "바둑",
+    "장기",
+}
 _RECIPIENT_PARTICLES = {"에게", "한테"}
 _TRANSFER_ACTION_VERBS = {"건네", "보내", "받", "선물하", "주"}
+_OBJECT_ACTION_VERBS = _TRANSFER_ACTION_VERBS | {"사", "고르", "만들", "챙기", "구매하", "구입하", "쓰"}
 _NEGATION_FORMS = {"안", "못", "않", "아니"}
 _CORRECTION_MARKERS = ("아니,", "아니 ", "정정하면", "다시 말하면")
 _NEGATION_CONTRAST_ENDINGS = {"고", "지만", "는데", "라"}
@@ -101,12 +122,31 @@ _GENERIC_NOUNS = {
     "음식",
     "물건",
     "방송",
+    "적",
 }
 
 
 @lru_cache(maxsize=2048)
 def _tokens(text: str):
     return tuple(_kiwi.tokenize(" ".join(str(text or "").split())))
+
+
+def extract_predicate_forms(text: str) -> set[str]:
+    tokens = _tokens(text)
+    predicates = set()
+    for index, token in enumerate(tokens):
+        if token.tag.startswith("VV"):
+            predicates.add(token.form)
+        elif token.tag == "XSV" and index and tokens[index - 1].tag.startswith("NN"):
+            predicates.add(tokens[index - 1].form + token.form)
+    return predicates
+
+
+def extract_content_nouns(text: str) -> frozenset[str]:
+    """Content anchors for dialogue focus, not evidence or scored memory facts."""
+    return frozenset(token.form for token in _tokens(text)
+                     if token.tag.startswith("NN")
+                     and token.form not in _GENERIC_NOUNS | _TIME_NOUNS | _STANDALONE_TIME_WORDS)
 
 
 def _is_value_token(token) -> bool:
@@ -257,6 +297,44 @@ def _nominal_action_candidate(text: str) -> str:
     return ""
 
 
+def _noun_phrase_before_predicate(text: str, predicates: set[str]) -> str:
+    tokens = _tokens(text)
+
+    for index in range(len(tokens) - 1, 0, -1):
+        token = tokens[index]
+        predicate_index = index
+        predicate = token.form
+        if token.tag == "XSV" and tokens[index - 1].tag.startswith(_NOUN_TAG_PREFIXES):
+            predicate_index -= 1
+            predicate = tokens[predicate_index].form + token.form
+        elif not token.tag.startswith("VV"):
+            continue
+        if predicate not in predicates:
+            continue
+
+        end_index = predicate_index - 1
+        if end_index < 0:
+            continue
+        if not tokens[end_index].tag.startswith(_NOUN_TAG_PREFIXES):
+            continue
+
+        start_index = end_index
+        while (
+            start_index > 0
+            and tokens[start_index - 1].tag.startswith(_NOUN_TAG_PREFIXES)
+        ):
+            start_index -= 1
+
+        if not _has_specific_tokens(tokens[start_index:predicate_index]):
+            continue
+
+        start = tokens[start_index].start
+        end_token = tokens[end_index]
+        return text[start : end_token.start + end_token.len].strip()
+
+    return ""
+
+
 def _standalone_noun_phrase(text: str, *, max_nouns: int | None = None) -> str:
     tokens = _tokens(text)
     noun_tokens = [token for token in tokens if _is_value_token(token)]
@@ -316,12 +394,69 @@ def extract_answer_value(
 
     if answer_type == MemoryAnswerType.ACTIVITY:
         action = _nominal_action_candidate(text)
-        return action
+        if action:
+            return action
+
+        game_words = [
+            token.form
+            for token in _tokens(text)
+            if token.form in _GAME_DETAIL_WORDS
+        ]
+        if game_words:
+            return " ".join(game_words)
+
+        return ""
+
+    if answer_type == MemoryAnswerType.FOOD:
+        food = _noun_phrase_before_predicate(text, {"먹", "드시"})
+        if food:
+            return food
+
+    if answer_type == MemoryAnswerType.MEDIA:
+        media = _noun_phrase_before_predicate(text, {"보", "듣", "읽", "시청하"})
+        if media:
+            return media
+
+    if answer_type == MemoryAnswerType.OBJECT:
+        value = _noun_phrase_before_predicate(
+            text, _OBJECT_ACTION_VERBS,
+        )
+        if value:
+            return value
 
     if answer_type == MemoryAnswerType.PERSON:
         return _standalone_noun_phrase(text, max_nouns=1)
 
     return _standalone_noun_phrase(text)
+
+
+def extract_action_object(text: str) -> str:
+    """Object evidence for an otherwise unclassified action, not a new topic list."""
+    if not extract_predicate_forms(text):
+        return ""
+    objects = _particle_candidates(text, MemoryAnswerType.OBJECT)
+    return objects[-1] if objects else _noun_phrase_before_predicate(text, _OBJECT_ACTION_VERBS)
+
+
+def _target_clause(text: str, value: str) -> str:
+    """Do not attach another action clause's time/person/place to this target."""
+    start = text.rfind(value) if value else -1
+    if start < 0:
+        return text
+    boundaries = [0]
+    has_predicate = False
+    for token in _tokens(text):
+        has_predicate = has_predicate or token.tag.startswith("V") or token.tag == "XSV"
+        ends_clause = token.tag == "EF" or (
+            token.tag == "EC" and token.form in {"고", "지만", "는데", "며", "다가"}
+        )
+        if has_predicate and ends_clause:
+            boundaries.append(token.start + token.len)
+            has_predicate = False
+    boundaries.append(len(text))
+    left = max(boundary for boundary in boundaries if boundary <= start)
+    right = min(boundary for boundary in boundaries if boundary >= start + len(value))
+    return text[left:right].strip(" ,.?!") or text
 
 
 def extract_memory_clues(
@@ -352,6 +487,11 @@ def extract_memory_clues(
 
     if confirmed_text != analysis_text:
         analysis_text = confirmed_text
+        tokens = _tokens(analysis_text)
+
+    if preferred_type != MemoryAnswerType.UNKNOWN:
+        target_value = extract_answer_value(analysis_text, preferred_type)
+        analysis_text = _target_clause(analysis_text, target_value)
         tokens = _tokens(analysis_text)
 
     clues = []
@@ -469,6 +609,9 @@ def extract_memory_clues(
             preferred_type,
             extract_answer_value(analysis_text, preferred_type),
         )
+
+    if any(token.form == "혼자" for token in tokens):
+        add(MemoryAnswerType.PERSON, "혼자")
 
     action = _nominal_action_candidate(analysis_text)
     if action:

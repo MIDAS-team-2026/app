@@ -20,16 +20,20 @@ from pydantic import BaseModel
 from transformers import pipeline
 
 from voice_reply_handler import (
+    DialogueStateUnavailable,
     process_voice_reply,
     FIXED_QUESTIONS,
     _get_fixed_question_status,
     _pick_daily_fixed_question_index,
+    _get_fixed_to_free_talk_opener,
 )
 from main import run_record_mode, run_full_dummy_mode
 from user_turn_analysis import analyze_user_turn
 from session_speech_summary import summarize_session_speech
 from recall.recall_api_client import analyze_session_recall, get_session_records
 from recall.recall_score_calculator import calculate_final_recall_score
+from recall.record_execution import record_execution
+from recall.session_analysis import turn_analysis_cache, speech_evaluation
 
 LOG_FILE = Path(__file__).resolve().parent / "ai_server.log"
 
@@ -45,6 +49,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_STT_MODEL = "openai/whisper-small"
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
+# llama-3.3-70b-versatile은 Groq 무료/개발자 요금제에서 2026-08-16 종료되어
+# 공식 권장 대체 모델인 GPT-OSS 120B로 변경했습니다. 필요하면 환경변수로 교체합니다.
+GROQ_REFINEMENT_MODEL = os.getenv("GROQ_REFINEMENT_MODEL", "openai/gpt-oss-120b")
 
 app = FastAPI(title="MIDAS AI Server")
 groq_client = Groq()
@@ -83,11 +90,13 @@ class RecallAnalysisResponse(BaseModel):
     recallQuestionId: int
     pastRecordId: Optional[int]
     currentRecordId: int
-    similarityScore: float
-    keywordScore: float
-    finalRecallScore: float
+    similarityScore: Optional[float]
+    keywordScore: Optional[float]
+    finalRecallScore: Optional[float]
     aiLabel: str
-    aiConfidence: float
+    aiConfidence: Optional[float]
+    evaluationStatus: str = "SCORED"
+    evaluationReason: Optional[str] = None
 
 class RecordAnalysisRequest(BaseModel):
     recordId: int
@@ -133,7 +142,14 @@ def run_session_batch_analysis(
     session_id: int,
     user_id: int,
     current_record_id: int | None = None,
+    current_duration_sec: float = 0.0,
 ) -> None:
+    # Serialize the complete snapshot/aggregate/write, not only one record's reply.
+    with record_execution(("session-analysis", session_id)):
+        _run_session_batch_analysis(session_id, user_id, current_record_id, current_duration_sec)
+
+
+def _run_session_batch_analysis(session_id, user_id, current_record_id=None, current_duration_sec=0.0):
     """
     세션 종료 후 전체 record를 기준으로 회상 분석과 최종 위험도 저장을 실행한다.
     """
@@ -150,21 +166,22 @@ def run_session_batch_analysis(
             logger.info("batch record skip recordId=%s transcript/audio 없음", record.get("recordId"))
             continue
 
-        turn_result = analyze_user_turn(
-            record_id=int(record["recordId"]),
-            session_id=session_id,
-            audio_path=audio_path,
-            audio_url=audio_path,
-            transcript_text=transcript_text,
-            duration_sec=0.0,
+        turn_result = turn_analysis_cache.get_or_analyze(
+            session_id, record, analyze_user_turn,
+            retry_failed=current_record_id is None,
+            duration_sec=current_duration_sec if record['recordId'] == current_record_id else 0.0,
         )
         turn_results.append(turn_result)
+        if current_record_id is None or int(record['recordId']) == current_record_id:
+            # Reuse inference, but retry persistence even when inference was cached.
+            run_record_mode(MainArgsMock(
+                record_id=int(record['recordId']), session_id=session_id,
+                audio_path=audio_path, audio_url=audio_path,
+                transcript_text=transcript_text, duration_sec=0.0,
+            ), analysis_result=turn_result, strict_delivery=True)
 
-    speech_summary = summarize_session_speech(
-        session_id=session_id,
-        turn_results=turn_results,
-    )
-    speech_risk_score = speech_summary.get("speechRiskScore", 0.0)
+    speech_risk_score, speech_status = speech_evaluation(
+        session_id, turn_results, summarize_session_speech)
 
     analyze_session_recall(
         user_id=user_id,
@@ -172,7 +189,9 @@ def run_session_batch_analysis(
         speech_risk_score=speech_risk_score,
         base_url=SPRING_BASE_URL,
         target_recall_record_id=current_record_id,
-        send_all_recall_results=False,
+        send_all_recall_results=current_record_id is None,
+        speech_evaluation_status=speech_status,
+        records_snapshot=records,
     )
 
     logger.info(
@@ -205,17 +224,8 @@ def run_upload_analysis(
         run_realtime_analysis=False,
     )
 
-    mock_args = MainArgsMock(
-        record_id=record_id,
-        session_id=session_id,
-        audio_path=audio_path,
-        audio_url=audio_path,
-        transcript_text=transcript_text,
-        duration_sec=duration_sec,
-    )
-    run_record_mode(mock_args)
-
-    run_session_batch_analysis(session_id, user_id, current_record_id=record_id)
+    run_session_batch_analysis(session_id, user_id, current_record_id=record_id,
+                               current_duration_sec=duration_sec)
     logger.info("upload-analysis 완료 recordId=%s sessionId=%s", record_id, session_id)
 
 # ==========================
@@ -232,15 +242,18 @@ def opening_question(userId: int | None = None):
     - 온보딩(최초 5개) 전: 첫 고정 질문
     - 온보딩 후, 오늘 아직 안 물어봤으면: userId+오늘 날짜로 고정된 무작위 질문 1개
       (process_voice_reply가 실제 답변을 채점할 때도 같은 방식으로 골라서 서로 어긋나지 않는다)
-    - 오늘 이미 물어봤으면: 없음
+    - 오늘 이미 물어봤으면: 구체적인 자유대화 시작 질문
     """
     if userId is None:
         return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
 
-    status = _get_fixed_question_status(userId)
+    try:
+        status = _get_fixed_question_status(userId)
+    except DialogueStateUnavailable as exc:
+        raise HTTPException(status_code=503, detail="dialogue_state_unavailable") from exc
 
     if status["doneToday"]:
-        return {"questionText": None}
+        return {"questionText": _get_fixed_to_free_talk_opener(None)}
 
     if not status["onboardingDone"]:
         return {"questionText": FIXED_QUESTIONS[0]["questionText"]}
@@ -295,7 +308,7 @@ def transcribe(request: SttRequest):
         if not raw_text:
             return SttResponse(transcriptText="", confidence=None, modelName="groq-whisper-large-v3")
 
-        # 4. Groq 무료 LLM(Llama 3)을 사용해 AI 텍스트 정제 수행
+        # 4. Groq LLM을 사용해 AI 텍스트 정제 수행
         # (간투사 제거, 오타 교정, 핵심 정보 보존)
         refine_prompt = f"""
         당신은 텍스트 정제 전문 AI입니다. 
@@ -311,20 +324,35 @@ def transcribe(request: SttRequest):
         정제된 문장:
         """.strip()
 
-        # llama-3.3-70b-versatile은 2026-08-16 Groq에서 폐기되어 openai/gpt-oss-120b로 교체
-        llm_response = groq_client.chat.completions.create(
-            model="openai/gpt-oss-120b",
-            messages=[{"role": "user", "content": refine_prompt}],
-            temperature=0.1,  # 정확한 교정을 위해 창의성 최소화
-        )
-
-        clean_text = llm_response.choices[0].message.content.strip()
+        clean_text = raw_text
+        refinement_model = None
+        try:
+            llm_response = groq_client.chat.completions.create(
+                model=GROQ_REFINEMENT_MODEL,
+                messages=[{"role": "user", "content": refine_prompt}],
+                temperature=0.1,
+                reasoning_effort="low",
+                max_completion_tokens=256,
+            )
+            refined_text = llm_response.choices[0].message.content.strip()
+            if refined_text:
+                clean_text = refined_text
+                refinement_model = GROQ_REFINEMENT_MODEL
+        except Exception as exc:
+            logger.warning(
+                "STT text refinement failed; using the Whisper transcript: %s",
+                exc,
+            )
 
         # 5. 스프링이 원하는 포맷에 맞춰 정제된 텍스트 리턴
         return SttResponse(
             transcriptText=clean_text,
             confidence=None,
-            modelName="groq-whisper-large-v3 + gpt-oss-120b"
+            modelName=(
+                f"groq-whisper-large-v3 + {refinement_model}"
+                if refinement_model
+                else "groq-whisper-large-v3"
+            )
         )
 
     except requests.RequestException as exc:
@@ -390,6 +418,14 @@ def analyze_recall(request: RecallAnalysisRequest):
         past_text=request.pastText, current_text=request.currentText,
         keywords=request.keywords, question_type=request.questionType,
     )
+    if scores.get("evaluationStatus", "SCORED") != "SCORED":
+        return RecallAnalysisResponse(
+            recallQuestionId=request.recallQuestionId, pastRecordId=request.pastRecordId,
+            currentRecordId=request.currentRecordId, similarityScore=None, keywordScore=None,
+            finalRecallScore=None, aiLabel=scores["evaluationStatus"], aiConfidence=None,
+            evaluationStatus=scores["evaluationStatus"],
+            evaluationReason=", ".join(scores.get("evaluationReasons") or []),
+        )
     final_score = scores["finalRecallScore"]
     label = "GOOD" if final_score >= 80 else ("PARTIAL" if final_score >= 50 else "LOW")
 
