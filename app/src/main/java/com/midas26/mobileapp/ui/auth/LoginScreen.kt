@@ -67,16 +67,16 @@ fun LoginScreen(
         }
 
         // ── 접근성 버튼 (우측 하단) ──────────────────────────────────────
-        Text(
-            text = "접근성 설정",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = androidx.compose.ui.graphics.Color(0xFF1A73E8),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(16.dp)
-                .clickable(onClick = onAccessibility)
-        )
+        // Text(
+        //     text = "접근성 설정",
+        //     fontSize = 24.sp,
+        //     fontWeight = FontWeight.SemiBold,
+        //     color = androidx.compose.ui.graphics.Color(0xFF1A73E8),
+        //     modifier = Modifier
+        //         .align(Alignment.BottomEnd)
+        //         .navigationBarsPadding()
+        //         .padding(16.dp)
+        //         .clickable(onClick = onAccessibility)
+        // )
     }
 }
