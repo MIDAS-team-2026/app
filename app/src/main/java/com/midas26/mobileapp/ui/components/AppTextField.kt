@@ -27,14 +27,11 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.midas26.mobileapp.ui.theme.AppColor
-import com.midas26.mobileapp.ui.theme.LocalHighContrast
 
 /**
- * zip의 `Widget.App.TextInput` (OutlinedBox) 스타일에 대응.
- *
- * - 코너 16dp (기존 12dp), 포커스 시 green_400 / 비포커스 시 gray_200
- * - 본문 19sp, label 18sp 로 노년층 가독성 우선
- * - leading icon 지원, password 토글 지원, 에러 텍스트 지원
+ * 앱 공통 입력 필드.
+ * 비밀번호 표시 전환, 입력 길이 제한, 오류/도움말 문구를 지원한다.
+ * visualTransformation은 일반 입력 필드에만 적용하며 기본값은 변환 없음이다.
  */
 @Composable
 fun AppOutlinedTextField(
@@ -50,33 +47,29 @@ fun AppOutlinedTextField(
     singleLine: Boolean = true,
     maxLength: Int? = null,
     helperText: String? = null,
-    errorText: String? = null
+    errorText: String? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
     val isError = errorText != null
-    val highContrast = LocalHighContrast.current
-    val unfocusedBorder = AppColor.divider
 
     OutlinedTextField(
         value = value,
-        onValueChange = { new ->
-            if (enabled && (maxLength == null || new.length <= maxLength)) onValueChange(new)
+        onValueChange = { newValue ->
+            if (enabled && (maxLength == null || newValue.length <= maxLength)) {
+                onValueChange(newValue)
+            }
         },
         enabled = enabled,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp),
+        modifier = modifier.fillMaxWidth().padding(bottom = 16.dp),
         label = {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge
-            )
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
         },
         singleLine = singleLine,
-        leadingIcon = leadingIcon?.let {
+        leadingIcon = leadingIcon?.let { icon ->
             {
                 Icon(
-                    imageVector = it,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = AppColor.textTertiary,
                     modifier = Modifier.size(28.dp)
@@ -88,26 +81,29 @@ fun AppOutlinedTextField(
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         imageVector = if (passwordVisible) Icons.Filled.VisibilityOff
-                                      else Icons.Filled.Visibility,
-                        contentDescription = null,
+                        else Icons.Filled.Visibility,
+                        contentDescription = if (passwordVisible) "비밀번호 숨기기" else "비밀번호 보기",
                         tint = AppColor.textTertiary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
             }
         } else null,
-        visualTransformation = if (isPassword && !passwordVisible)
-            PasswordVisualTransformation() else VisualTransformation.None,
+        visualTransformation = when {
+            isPassword && !passwordVisible -> PasswordVisualTransformation()
+            isPassword -> VisualTransformation.None
+            else -> visualTransformation
+        },
         keyboardOptions = KeyboardOptions(
             keyboardType = if (isPassword) KeyboardType.Password else keyboardType,
             imeAction = imeAction
         ),
         shape = RoundedCornerShape(16.dp),
         isError = isError,
-        supportingText = supportingTextSlot(errorText = errorText, helperText = helperText),
+        supportingText = supportingTextSlot(errorText, helperText),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = AppColor.greenPrimary,
-            unfocusedBorderColor = unfocusedBorder,
+            unfocusedBorderColor = AppColor.divider,
             focusedLabelColor = AppColor.greenPrimary,
             unfocusedLabelColor = AppColor.textTertiary,
             cursorColor = AppColor.greenPrimary,
@@ -118,16 +114,18 @@ fun AppOutlinedTextField(
     )
 }
 
-/**
- * supportingText 슬롯을 안전하게 반환.
- * - errorText 가 우선
- * - 없으면 helperText
- * - 둘 다 null 이면 슬롯 자체를 null 로 두어 빈 공간을 차지하지 않게 함
- */
+/** 오류 문구를 우선 표시하고, 문구가 없으면 하단 영역을 생성하지 않는다. */
 private fun supportingTextSlot(
     errorText: String?,
     helperText: String?
-): (@androidx.compose.runtime.Composable () -> Unit)? {
+): (@Composable () -> Unit)? {
     val message = errorText ?: helperText ?: return null
-    return { Text(text = message, style = MaterialTheme.typography.bodySmall) }
+    return {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (errorText != null) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
