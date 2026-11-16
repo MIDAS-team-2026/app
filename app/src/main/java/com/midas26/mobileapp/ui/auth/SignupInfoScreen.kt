@@ -36,14 +36,56 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import java.util.Calendar
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
+
+/** 숫자 원본은 그대로 두고 화면에만 구분 기호를 표시한다. */
+private class GroupedDigitsTransformation(
+    private val separator: Char,
+    private val boundaries: List<Int>
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        val result = StringBuilder()
+        val originalToDisplay = IntArray(raw.length + 1)
+        val displayToOriginal = mutableListOf(0)
+
+        for (i in raw.indices) {
+            if (i in boundaries) {
+                result.append(separator)
+                displayToOriginal.add(i)
+            }
+            originalToDisplay[i] = result.length
+            result.append(raw[i])
+            displayToOriginal.add(i + 1)
+        }
+        originalToDisplay[raw.length] = result.length
+
+        val mapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int =
+                originalToDisplay[offset.coerceIn(0, raw.length)]
+
+            override fun transformedToOriginal(offset: Int): Int =
+                displayToOriginal[offset.coerceIn(0, result.length)]
+        }
+        return TransformedText(AnnotatedString(result.toString()), mapping)
+    }
+}
+
+private val birthTransformation = GroupedDigitsTransformation('/', listOf(4, 6))
+private val phoneTransformation11 = GroupedDigitsTransformation('-', listOf(3, 7))
+private val phoneTransformation10 = GroupedDigitsTransformation('-', listOf(3, 6))
 
 @Composable
 fun SignupInfoScreen(
@@ -53,8 +95,8 @@ fun SignupInfoScreen(
     viewModel: AuthViewModel
 ) {
     var name by remember { mutableStateOf(viewModel.pendingName) }
-    var birth by remember { mutableStateOf(viewModel.pendingBirth) }
-    var phone by remember { mutableStateOf(viewModel.pendingPhone) }
+    var birth by remember { mutableStateOf(viewModel.pendingBirth.filter(Char::isDigit).take(8)) }
+    var phone by remember { mutableStateOf(viewModel.pendingPhone.filter(Char::isDigit).take(11)) }
     var password by remember { mutableStateOf(viewModel.pendingPassword) }
 
     var nameError by remember { mutableStateOf<String?>(null) }
@@ -67,18 +109,36 @@ fun SignupInfoScreen(
 
     val authState by viewModel.authState.collectAsState()
     val isLoading = authState is AuthState.Loading
+    var isCheckingSignupPhone by remember { mutableStateOf(false) }
 
     LaunchedEffect(authState) {
-        when (authState) {
+        if (!isCheckingSignupPhone) return@LaunchedEffect
+        when (val state = authState) {
             is AuthState.PhoneChecked -> {
+                isCheckingSignupPhone = false
+                val checkedPhone = viewModel.pendingPhone
+                viewModel.markCodeSent(checkedPhone)
                 viewModel.resetState()
+                onVerify(checkedPhone)
             }
             is AuthState.Error -> {
-                val msg = (authState as AuthState.Error).message
-                if (msg.contains("전화번호") || msg.contains("가입")) phoneError = msg
-                else serverError = msg
+                isCheckingSignupPhone = false
+                val msg = state.message
+                when {
+                    listOf("이미 가입", "중복", "이미 사용", "이미 등록", "already", "duplicate")
+                        .any { msg.contains(it, ignoreCase = true) } -> {
+                        phoneError = "이미 가입된 전화번호입니다."
+                        serverError = null
+                    }
+                    msg.contains("전화번호") || msg.contains("가입") -> {
+                        phoneError = msg
+                        serverError = null
+                    }
+                    else -> serverError = msg
+                }
+                viewModel.resetState()
             }
-            else -> {}
+            else -> Unit
         }
     }
 
@@ -115,14 +175,16 @@ fun SignupInfoScreen(
                 val y = birth.substring(0, 4).toInt()
                 val m = birth.substring(4, 6).toInt()
                 val d = birth.substring(6, 8).toInt()
-                val valid = y in 1900..2026
+                val today = Calendar.getInstance()
+                val valid = y in 1900..today.get(Calendar.YEAR)
                         && m in 1..12
                         && d in 1..31
-                        && birth.toLong() <= 20260609L
                         && runCatching {
-                    java.util.Calendar.getInstance().apply {
+                    Calendar.getInstance().apply {
+                        clear()
                         isLenient = false
                         set(y, m - 1, d)
+                        require(!after(today))
                         time
                     }
                 }.isSuccess
@@ -249,12 +311,10 @@ fun SignupInfoScreen(
             AppOutlinedTextField(
                 value = name,
                 onValueChange = { input ->
-                    val maxLen = if (input.any { it in '가'..'힣' || it in '㄰'..'㆏' }) 7 else 15
-                    if (input.length <= maxLen) {
-                        name = input
-                        nameError = null
-                        serverError = null
-                    }
+                    // 한글 조합 중 입력값을 거부하지 않도록 그대로 반영
+                    name = input
+                    nameError = null
+                    serverError = null
                 },
                 label = stringResource(R.string.hint_name),
                 leadingIcon = Icons.Filled.Person,
@@ -266,7 +326,7 @@ fun SignupInfoScreen(
             AppOutlinedTextField(
                 value = birth,
                 onValueChange = { value ->
-                    birth = value.filter { it.isDigit() }
+                    birth = value.filter(Char::isDigit).take(8)
                     birthError = null
                 },
                 label = stringResource(R.string.hint_birth),
@@ -274,13 +334,14 @@ fun SignupInfoScreen(
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Next,
                 maxLength = 8,
+                visualTransformation = birthTransformation,
                 errorText = birthError
             )
 
             AppOutlinedTextField(
                 value = phone,
                 onValueChange = {
-                    phone = it.filter { c -> c.isDigit() }
+                    phone = it.filter(Char::isDigit).take(11)
                     phoneError = null
                     serverError = null
                 },
@@ -289,6 +350,7 @@ fun SignupInfoScreen(
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Next,
                 maxLength = 11,
+                visualTransformation = if (phone.length == 10) phoneTransformation10 else phoneTransformation11,
                 errorText = phoneError
             )
 
@@ -343,15 +405,19 @@ fun SignupInfoScreen(
                 AppPrimaryButton(
                     text = stringResource(R.string.btn_complete),
                     onClick = {
-                        if (validate()) {
+                        if (validate() && !isCheckingSignupPhone) {
+                            val normalizedPhone = phone.trim()
                             viewModel.savePendingSignupData(
-                                phone.trim(),
+                                normalizedPhone,
                                 password,
                                 name.trim(),
                                 role,
                                 birth.trim()
                             )
-                            onVerify(phone.trim())
+                            phoneError = null
+                            serverError = null
+                            isCheckingSignupPhone = true
+                            viewModel.checkPhoneAndSendCode(normalizedPhone)
                         }
                     }
                 )
