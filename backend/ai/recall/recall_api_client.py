@@ -514,8 +514,8 @@ def combine_text_score(
     textScore는 우리 인지/회상 파트 전체 점수다.
 
     인지/회상 내부 비율은 기존 고정 질문 : 자연 회상 = 3 : 4를 유지한다.
-    최종 합성은 음성 33%, 인지/회상 67%이므로 전체 환산 비중은
-    고정 질문 약 28.71%, 자연 회상 약 38.29%다 (두 점수 모두 있을 때).
+    최종 합성은 음성 50%, 인지/회상 50%이므로 전체 환산 비중은
+    고정 질문 약 21.43%, 자연 회상 약 28.57%다 (두 점수 모두 있을 때).
 
     textScore 자체는 0~100 점수로 저장한다.
     따라서 내부 비율은:
@@ -548,8 +548,8 @@ def calculate_final_risk_from_text_score(
     text_risk_score = clamp_score(100.0 - text_score)
 
     final_risk_score = (
-        speech_risk_score * 0.33
-        + text_risk_score * 0.67
+        speech_risk_score * 0.5
+        + text_risk_score * 0.5
     )
 
     final_risk_score = clamp_score(final_risk_score)

@@ -4,6 +4,10 @@
 
 ## 1. 구성
 
+`dialogue_response_experiment.py`는 이름과 달리 `llm_reply` 엔진의 실행 필수
+모듈이다. `voice_reply_handler.py`가 직접 불러오므로 테스트·촬영 자료를
+제외할 때 이 파일을 제외하면 서버가 시작되지 않는다.
+
 ```text
 backend/ai/
  ├─ prototype/
@@ -33,13 +37,13 @@ backend/ai/
 - `speech_risk_score`: 높을수록 음성 기반 위험이 큼
 - `recall_score`: 높을수록 회상 상태가 양호함
 
-민정님 커밋 `4a79883`의 비율은 음성 33%, 회상/텍스트 67%다.
+최종 합성 비율은 음성 50%, 회상/텍스트 50%다.
 회상 전용 계산 함수는 `100 - recall_score`를 사용한다.
 실제 세션 집계 경로는 고정 인지 질문과 자연 회상을 합친 `textScore`를 사용한다.
 
 ```text
 textScore = fixedScore * (3/7) + recallScore * (4/7)
-finalRiskScore = speechRiskScore * 0.33 + (100 - textScore) * 0.67
+finalRiskScore = speechRiskScore * 0.5 + (100 - textScore) * 0.5
 ```
 
 두 텍스트 구성 점수가 모두 있을 때의 공식이다. 하나만 있으면 해당 점수를
