@@ -4760,12 +4760,9 @@ def process_voice_reply(
             return
 
         # 3. 충분히 축적되고 한 턴 이상 지난 memoryPoint가 있으면 회상 질문 생성
-        updated_records = records_through_current(_fetch_session_records(session_id), record_id)
-
-        if not updated_records:
-            updated_records = session_records
-
-        current_record = _get_record_by_id(updated_records, record_id) or current_record
+        # No writes occur on this path before candidate selection. Reuse the
+        # turn-bounded snapshot instead of paying for a second HTTP read.
+        updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
         recall_candidate_context = _get_structured_recall_ready_context(
