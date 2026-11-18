@@ -41,6 +41,7 @@ def map_to_record_analysis_dto(result):
         "totalPauseDuration": result.get("total_pause_duration"),
         "avgPauseDuration": result.get("avg_pause_duration"),
         "maxPauseDuration": result.get("max_pause_duration"),
+        "pauseRatio": result.get("pause_ratio"),
         "rmsMean": result.get("rms_mean"),
         "rmsStd": result.get("rms_std"),
         "zcrMean": result.get("zcr_mean"),
@@ -93,6 +94,7 @@ def map_to_record_analysis_dto(result):
         "voicedSegmentsPerSec": result.get("voiced_segments_per_sec"),
         "meanVoicedSegmentLength": result.get("mean_voiced_segment_length"),
         "meanUnvoicedSegmentLength": result.get("mean_unvoiced_segment_length"),
+        "voiceActivityRatio": result.get("voice_activity_ratio"),
         "voiceBreakCount": result.get("voice_break_count"),
         "voiceBreakRatio": result.get("voice_break_ratio"),
     }
