@@ -203,6 +203,7 @@ Content-Type: application/json
     "totalPauseDuration": 0.0,
     "avgPauseDuration": 0.0,
     "maxPauseDuration": 0.0,
+    "pauseRatio": 0.0,
     "rmsMean": 0.05,
     "rmsStd": 0.01,
     "zcrMean": 0.1,
@@ -221,7 +222,9 @@ Content-Type: application/json
     "pronunciationStability": null,
     "responseLatency": null,
     "repetitionCount": 0,
-    "fillerCount": 0
+    "fillerCount": 0,
+    "voiceActivityRatio": 0.72,
+    "speechAbnormalityScore": 4.35
   },
   "textAnalysis": {
     "wordCount": 5,

@@ -34,6 +34,9 @@ public class SpeechAnalysisResult {
     @Column(name = "max_pause_duration", nullable = true)
     private Float maxPauseDuration;
 
+    @Column(name = "pause_ratio")
+    private Float pauseRatio;
+
     @Column(name = "rms_mean", nullable = false)
     private Float rmsMean;
 
@@ -130,6 +133,9 @@ public class SpeechAnalysisResult {
     @Column(name = "mean_unvoiced_segment_length")
     private Float meanUnvoicedSegmentLength;
 
+    @Column(name = "voice_activity_ratio")
+    private Float voiceActivityRatio;
+
     @Column(name = "voice_break_count")
     private Integer voiceBreakCount;
 
@@ -148,9 +154,9 @@ public class SpeechAnalysisResult {
     @Column(name = "speech_abnormality_level", length = 20)
     private String speechAbnormalityLevel;
 
-    /** Python speech_abnormality_scoring: 위험도 반영용 발화 이상 점수 (0, 7, 15) */
+    /** Python user_turn_analysis: 위험도 반영용 연속형 발화 이상 점수 (0~15) */
     @Column(name = "speech_abnormality_score")
-    private Integer speechAbnormalityScore;
+    private Float speechAbnormalityScore;
 
     @Column(name = "analyzed_at", nullable = false, updatable = false)
     private LocalDateTime analyzedAt;
