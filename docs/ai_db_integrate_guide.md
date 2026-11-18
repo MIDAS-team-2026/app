@@ -274,8 +274,8 @@ POST /api/ai/analysis/risk
   "speechScore": 70.0,
   "textScore": 75.0,
   "recallScore": 80.0,
-  "finalRiskScore": 39.85,
-  "riskLevel": "low"
+  "finalRiskScore": 47.5,
+  "riskLevel": "MEDIUM"
 }
 ```
 
@@ -283,7 +283,7 @@ POST /api/ai/analysis/risk
 
 ```
 textRiskScore = 100 - textScore
-finalRiskScore = speechScore×0.33 + textRiskScore×0.67
+finalRiskScore = speechScore×0.50 + textRiskScore×0.50
 ```
 
 - `speechScore`: **높을수록 위험**
