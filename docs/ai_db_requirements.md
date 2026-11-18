@@ -252,6 +252,12 @@ AI가 사용자에게 제시하는 회상 질문 정보를 저장하는 테이�
 - 설명: 가장 긴 침묵 시간입니다.
 - 단위: seconds
 
+### pause_ratio
+- 타입: FLOAT
+- Null 허용: Yes
+- 설명: 전체 음성 길이 중 내부 침묵 구간이 차지하는 비율입니다.
+- 범위: 0~1
+
 ### rms_mean
 - 타입: FLOAT
 - Null 허용: No
@@ -339,6 +345,18 @@ AI가 사용자에게 제시하는 회상 질문 정보를 저장하는 테이�
 - 타입: INT
 - Null 허용: Yes
 - 설명: “음”, “어”, “그”, “저기” 같은 filler 표현의 개수입니다.
+
+### voice_activity_ratio
+- 타입: FLOAT
+- Null 허용: Yes
+- 설명: 전체 음성 길이 중 실제 발성 구간이 차지하는 비율입니다.
+- 범위: 0~1
+
+### speech_abnormality_score
+- 타입: FLOAT
+- Null 허용: Yes
+- 설명: 음향 모델의 건강 점수를 위험 방향으로 변환한 연속형 발화 이상 점수입니다.
+- 범위: 0~15
 
 ### analyzed_at
 - 타입: DATETIME
