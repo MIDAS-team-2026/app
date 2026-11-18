@@ -8,6 +8,8 @@ from typing import Dict, List, Optional
 import requests
 
 from recall.recall_score_calculator import (
+    COGNITIVE_RISK_WEIGHT,
+    SPEECH_RISK_WEIGHT,
     calculate_final_recall_score,
 )
 
@@ -494,8 +496,8 @@ def calculate_final_risk_from_text_score(
     text_risk_score = clamp_score(100.0 - text_score)
 
     final_risk_score = (
-        speech_risk_score * 0.33
-        + text_risk_score * 0.67
+        speech_risk_score * SPEECH_RISK_WEIGHT
+        + text_risk_score * COGNITIVE_RISK_WEIGHT
     )
 
     final_risk_score = clamp_score(final_risk_score)

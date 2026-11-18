@@ -38,11 +38,11 @@ backend/ai/
 
 ```text
 final_risk_score =
-(0.33 × speech_risk_score) +
-(0.67 × recall_risk_score)
+(0.50 × speech_risk_score) +
+(0.50 × recall_risk_score)
 ```
 
-회상 위험도 67%, 음성 위험도 33%를 반영한다.
+회상 위험도와 음성 위험도를 각각 50%씩 동일하게 반영한다.
 
 서비스 운영용 위험 구간은 다음과 같다.
 

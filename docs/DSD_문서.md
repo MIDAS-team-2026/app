@@ -682,11 +682,11 @@ POST /api/recall/analyze
 recall_risk_score = 100 - recall_score
 
 final_risk_score =
-(0.67 × recall_risk_score) +
-(0.33 × speech_risk_score)
+(0.50 × recall_risk_score) +
+(0.50 × speech_risk_score)
 ```
 
-회상 일치도는 사용자의 기억 유지 여부를 직접적으로 반영하므로 회상 위험도에 67%의 가중치를 부여한다. 음성 위험도에는 녹음 환경에 따른 오탐 영향을 제한하기 위해 33%의 가중치를 부여한다.
+회상과 음성에서 관찰되는 위험 신호를 균형 있게 반영하기 위해 두 위험도에 각각 50%의 가중치를 부여한다.
 
 ---
 

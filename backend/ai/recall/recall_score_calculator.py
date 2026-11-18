@@ -7,6 +7,12 @@ from sentence_transformers import SentenceTransformer, util
 embedding_model = SentenceTransformer("jhgan/ko-sroberta-multitask")
 
 
+# 최종 위험도는 음성과 인지·회상 위험도를 동일하게 반영한다.
+# recall_api_client.py도 이 상수를 import해 운영 경로 간 가중치가 어긋나지 않게 한다.
+SPEECH_RISK_WEIGHT = 0.5
+COGNITIVE_RISK_WEIGHT = 0.5
+
+
 KEYWORD_STOPWORDS = {
     "오늘",
     "어제",
@@ -597,8 +603,8 @@ def calculate_final_risk_score(
     recall_risk_score = convert_recall_score_to_risk_score(recall_score)
 
     final_risk_score = (
-        speech_risk_score * 0.33
-        + recall_risk_score * 0.67
+        speech_risk_score * SPEECH_RISK_WEIGHT
+        + recall_risk_score * COGNITIVE_RISK_WEIGHT
     )
 
     final_risk_score = clamp_score(final_risk_score)
