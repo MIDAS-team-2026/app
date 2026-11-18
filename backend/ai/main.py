@@ -5,6 +5,7 @@ from pathlib import Path
 import requests
 import os
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,18 @@ def calculate_final_risk_score(*args, **kwargs):
     return calculate(*args, **kwargs)
 
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
+SPRING_REQUEST_TIMEOUT_SECONDS = float(
+    os.getenv("SPRING_REQUEST_TIMEOUT_SECONDS", "10")
+)
+SPRING_MAX_ATTEMPTS = max(
+    1,
+    int(os.getenv("SPRING_MAX_ATTEMPTS", "3")),
+)
+SPRING_RETRY_BACKOFF_SECONDS = max(
+    0.0,
+    float(os.getenv("SPRING_RETRY_BACKOFF_SECONDS", "0.5")),
+)
+SPRING_RETRYABLE_STATUS_CODES = {408, 429}
 
 def map_to_record_analysis_dto(result):
     """
@@ -179,6 +192,10 @@ def run_record_mode(args):
     logger.info("speech_abnormality_score=%s dysarthria_similarity_score=%s",
                 result.get("speech_abnormality_score"), result.get("dysarthria_similarity_score"))
 
+    if not result.get("audio_analysis_available", False):
+        error_message = result.get("audio_analysis_error") or "알 수 없는 오류"
+        raise RuntimeError(f"오디오 분석 실패: {error_message}")
+
     # Java DTO 구조에 맞게 매핑
     record_analysis_dto = map_to_record_analysis_dto(result)
 
@@ -206,46 +223,87 @@ def run_record_mode(args):
     return response
 
 def send_analysis_to_spring(result_dict):
-    if not result_dict or result_dict.get("success") is False:
+    if not result_dict:
         return
 
-    try:
-        if "recordAnalysis" in result_dict and result_dict["recordAnalysis"]:
-            record_url = f"{SPRING_BASE_URL}/api/ai/analysis/record"
+    record_analysis = result_dict.get("recordAnalysis")
+    if record_analysis:
+        print("===== RECORD PAYLOAD =====")
+        print(json.dumps(record_analysis, indent=2, ensure_ascii=False))
+        _post_to_spring_with_retry(
+            url=f"{SPRING_BASE_URL}/api/ai/analysis/record",
+            payload=record_analysis,
+            payload_name="recordAnalysis",
+        )
 
-            print("===== RECORD PAYLOAD =====")
-            print(json.dumps(result_dict["recordAnalysis"], indent=2, ensure_ascii=False))
+    final_risk_result = result_dict.get("finalRiskResult")
+    if final_risk_result:
+        print("===== RISK PAYLOAD =====")
+        print(json.dumps(final_risk_result, indent=2, ensure_ascii=False))
+        _post_to_spring_with_retry(
+            url=f"{SPRING_BASE_URL}/api/ai/analysis/risk",
+            payload=final_risk_result,
+            payload_name="finalRiskResult",
+        )
 
-            res_record = requests.post(
-                record_url,
-                json=result_dict["recordAnalysis"],
-                timeout=10
+
+def _post_to_spring_with_retry(url, payload, payload_name):
+    last_error = None
+
+    for attempt in range(1, SPRING_MAX_ATTEMPTS + 1):
+        try:
+            response = requests.post(
+                url,
+                json=payload,
+                timeout=SPRING_REQUEST_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            logger.info(
+                "Python -> Spring 전송 성공 payload=%s status=%s attempt=%s",
+                payload_name,
+                response.status_code,
+                attempt,
+            )
+            return response
+        except requests.HTTPError as exc:
+            last_error = exc
+            status_code = (
+                exc.response.status_code
+                if exc.response is not None
+                else None
+            )
+            retryable = (
+                status_code in SPRING_RETRYABLE_STATUS_CODES
+                or (status_code is not None and status_code >= 500)
             )
 
-            print("RECORD STATUS =", res_record.status_code)
-            print("RECORD RESPONSE =", res_record.text)
+            if not retryable:
+                logger.error(
+                    "Python -> Spring 전송 실패 payload=%s status=%s: 재시도하지 않음",
+                    payload_name,
+                    status_code,
+                )
+                raise
+        except (requests.Timeout, requests.ConnectionError) as exc:
+            last_error = exc
 
-            res_record.raise_for_status()
-
-        if "finalRiskResult" in result_dict and result_dict["finalRiskResult"]:
-            risk_url = f"{SPRING_BASE_URL}/api/ai/analysis/risk"
-
-            print("===== RISK PAYLOAD =====")
-            print(json.dumps(result_dict["finalRiskResult"], indent=2, ensure_ascii=False))
-
-            res_risk = requests.post(
-                risk_url,
-                json=result_dict["finalRiskResult"],
-                timeout=10
+        if attempt >= SPRING_MAX_ATTEMPTS:
+            logger.error(
+                "Python -> Spring 전송 최종 실패 payload=%s attempts=%s",
+                payload_name,
+                attempt,
             )
+            raise last_error
 
-            print("RISK STATUS =", res_risk.status_code)
-            print("RISK RESPONSE =", res_risk.text)
-
-            res_risk.raise_for_status()
-
-    except Exception as e:
-        print(f"> [Python -> Spring] 분석 결과 전송 실패: {e}")
+        delay_seconds = SPRING_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1))
+        logger.warning(
+            "Python -> Spring 전송 재시도 payload=%s attempt=%s/%s delay=%.2fs",
+            payload_name,
+            attempt + 1,
+            SPRING_MAX_ATTEMPTS,
+            delay_seconds,
+        )
+        time.sleep(delay_seconds)
 
 def run_full_dummy_mode():
     """

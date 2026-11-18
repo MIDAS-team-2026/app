@@ -50,7 +50,7 @@ public class AiAnalysisService {
 
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
-        AudioRecord record = audioRecordRepository.findById(dto.getRecordId())
+        AudioRecord record = audioRecordRepository.findByIdForUpdate(dto.getRecordId())
                 .orElseThrow(() -> new IllegalArgumentException("녹음 기록을 찾을 수 없습니다."));
 
         if (dto.getTranscriptText() != null) {
@@ -59,7 +59,9 @@ public class AiAnalysisService {
 
         if (dto.getSpeechAnalysis() != null) {
             RecordAnalysisDTO.SpeechAnalysisData speechDto = dto.getSpeechAnalysis();
-            SpeechAnalysisResult speechResult = new SpeechAnalysisResult();
+            SpeechAnalysisResult speechResult = speechAnalysisResultRepository
+                    .findByAudioRecord_Id(record.getId())
+                    .orElseGet(SpeechAnalysisResult::new);
 
             speechResult.setAudioRecord(record);
             speechResult.setPauseCount(speechDto.getPauseCount());
@@ -131,7 +133,9 @@ public class AiAnalysisService {
 
         if (dto.getTextAnalysis() != null) {
             RecordAnalysisDTO.TextAnalysisData textDto = dto.getTextAnalysis();
-            TextAnalysisResult textResult = new TextAnalysisResult();
+            TextAnalysisResult textResult = textAnalysisResultRepository
+                    .findByAudioRecord_Id(record.getId())
+                    .orElseGet(TextAnalysisResult::new);
 
             textResult.setAudioRecord(record);
             textResult.setWordCount(textDto.getWordCount());
