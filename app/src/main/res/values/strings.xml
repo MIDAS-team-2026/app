@@ -70,8 +70,6 @@
     <string name="permission_location_desc">보호자 위치 공유</string>
     <string name="permission_notification">알림</string>
     <string name="permission_notification_desc">점검 알림 수신</string>
-    <string name="permission_storage">저장소</string>
-    <string name="permission_storage_desc">분석 결과 저장</string>
     <string name="permission_required">필수</string>
     <string name="permission_optional">선택</string>
     <string name="btn_grant_and_start">권한 허용하고 시작하기</string>
