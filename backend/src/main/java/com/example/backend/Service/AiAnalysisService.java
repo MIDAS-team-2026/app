@@ -19,6 +19,7 @@ import com.example.backend.Model.Entity.user.User;
 import com.example.backend.Model.Repository.AiAnalysisRepository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
@@ -49,7 +50,10 @@ public class AiAnalysisService {
     private final LinguisticMarkerRepository linguisticMarkerRepository;
 
     private final NotificationService notificationService;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    @Value("${ai.python.url:http://localhost:8000}")
+    private String pythonBaseUrl;
 
     @Transactional
     public void saveRecordAnalysis(RecordAnalysisDTO dto) {
@@ -532,20 +536,21 @@ public class AiAnalysisService {
         ChatSession session = chatSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
-        String pythonServerUrl = "http://localhost:8000/api/ai/batch-analysis";
+        // 다른 호출들과 같은 설정(ai.python.url)을 쓴다. (주소를 코드에 고정해 두면 설정을 바꿔도 여기만 반영되지 않음)
+        String pythonServerUrl = pythonBaseUrl + "/api/ai/batch-analysis";
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("sessionId", sessionId);
         requestBody.put("userId", session.getUser().getId());
 
         try {
-            System.out.println(">> [Spring] 파이썬 AI 서버로 배치 분석 요청 시도... (세션 ID: " + sessionId + ")");
+            log.info("배치 분석 요청 sessionId={}", sessionId);
 
             restTemplate.postForObject(pythonServerUrl, requestBody, String.class);
 
-            System.out.println(">> [Spring] 파이썬 통신 완료 (요청 전송 성공)");
+            log.info("배치 분석 요청 완료 sessionId={}", sessionId);
         } catch (Exception e) {
-            System.out.println(">> [Spring] 통신 실패: " + e.getMessage());
+            log.error("배치 분석 요청 실패 sessionId={} : {}", sessionId, e.getMessage(), e);
         }
     }
 }

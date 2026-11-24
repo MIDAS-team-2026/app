@@ -18,7 +18,7 @@ public class AiProcessTriggerService {
 
     @Value("${ai.python.url:http://localhost:8000}")
     private String pythonBaseUrl;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final AudioRecordRepository audioRecordRepository;
     private final S3Service s3Service;
 
