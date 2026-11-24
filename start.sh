@@ -6,6 +6,10 @@
 
 set -u
 
+# start.bat 처럼 로그인 셸이 아닌 Git Bash 로 실행하면 PATH 에 /usr/bin 이 없어
+# dirname, uname 을 찾지 못한다. Windows 명령(find 등)을 가리지 않도록 맨 뒤에 붙인다.
+PATH="$PATH:/usr/bin"
+
 # 스크립트가 놓인 위치를 프로젝트 루트로 잡는다.
 # (경로를 직접 적어 두지 않으므로 팀원 누구의 PC에서든 그대로 동작한다)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
