@@ -4,6 +4,10 @@
 
 ## 1. 구성
 
+`dialogue_response_experiment.py`는 이름과 달리 `llm_reply` 엔진의 실행 필수
+모듈이다. `voice_reply_handler.py`가 직접 불러오므로 테스트·촬영 자료를
+제외할 때 이 파일을 제외하면 서버가 시작되지 않는다.
+
 ```text
 backend/ai/
  ├─ prototype/
@@ -33,16 +37,26 @@ backend/ai/
 - `speech_risk_score`: 높을수록 음성 기반 위험이 큼
 - `recall_score`: 높을수록 회상 상태가 양호함
 
-회상 점수는 `recall_risk_score = 100 - recall_score`로 위험도 방향을
-맞춘 뒤 다음 비율로 `final_risk_score`를 계산한다.
+최종 합성 비율은 음성 50%, 회상/텍스트 50%다.
+회상 전용 계산 함수는 `100 - recall_score`를 사용한다.
+실제 세션 집계 경로는 고정 인지 질문과 자연 회상을 합친 `textScore`를 사용한다.
 
 ```text
-final_risk_score =
-(0.50 × speech_risk_score) +
-(0.50 × recall_risk_score)
+textScore = fixedScore * (3/7) + recallScore * (4/7)
+finalRiskScore = speechRiskScore * 0.5 + (100 - textScore) * 0.5
 ```
 
-회상 위험도와 음성 위험도를 각각 50%씩 동일하게 반영한다.
+두 텍스트 구성 점수가 모두 있을 때의 공식이다. 하나만 있으면 해당 점수를
+사용하고 PARTIAL로 표시한다. 음성 근거가 없으면 종합 점수는 보류한다.
+이 가중치는 팀 설계값이며 임상 정확도나 검증된 최적 비율을 의미하지 않는다.
+
+개인 정보 질문의 기준 답변이 `HOMETOWN` 같은 항목명뿐이면 채점하지 않는다.
+이 경우 `no_fixed_evaluation`과 `personal_reference_not_registered`를 남기며,
+회상 점수만 있는 세션을 완전 평가로 승격하지 않는다.
+구조화된 단일 회상 대상(음식·장소·사람·물건·매체)은 정확한 대상 답변과
+원래 발언의 행동이 일치하면 문장 길이 차이로 감점하지 않는다.
+부정·추측·다른 대상 또는 행동이 포함된 경우에는 이 만점 규칙을 적용하지 않는다.
+이 규칙은 `verified_target_answer`로 추적하며 기존 저장 점수는 재계산하지 않는다.
 
 서비스 운영용 위험 구간은 다음과 같다.
 
@@ -164,7 +178,28 @@ python conversation_recall_generator.py
 - 앱에는 API 키를 포함하지 않는다.
 - GPT Gateway 호출은 서버 또는 Python 모듈에서만 수행한다.
 
+### 음성 분석 재사용과 지연 관측
+
+같은 녹음의 S3 서명·만료 값만 바뀌면 `TurnAnalysisCache`의 분석 결과를 재사용한다.
+호스트·객체 경로·버전·발언·녹음 시각이 바뀌면 다시 분석한다. 실제 다운로드에는
+최신 서명 URL을 그대로 사용한다. 현재 업로드는 UUID 객체 키를 사용하므로,
+같은 키의 파일을 덮어쓰는 기능을 도입할 때에는 버전 식별자도 전달해야 한다.
+`audio_analysis_cache` 로그로 재사용 여부를, `voice_stage`의 `audio_download`,
+`whisper`, `stt_refinement`로 음성 처리 지연을 구분한다. 이 로그에는 URL이나 발언을 넣지 않는다.
+
 ## 7. memoryPoint 후보 엔진 계약
+
+음성 대화의 중복 판정은 정보 유형뿐 아니라 방금 답변에서 새로 나온 대상도 본다.
+`followup_expansion_terms`에 있는 대상을 명시한 활동·매체·물건의 열린 후속 질문은
+기존 사건 턴 제한 안에서 허용한다. 부정·거절·정정으로 취소한 내용은 대상에 넣지 않는다.
+주제를 바꿨더라도 최근 대화의 같은 사건에서 답한 장소·사람·시간은 다시 묻지 않는다.
+명시적으로 다른 날짜나 시간대를 묻는 질문은 같은 사건으로 단정하지 않는다.
+
+회상 질문 생성의 중복 이력은 현재 세션에 연결된 질문·원본 발언만 사용한다.
+다른 날의 질문 문장이 비슷하다는 이유로 오늘의 새 기억을 제외하지 않는다.
+자유대화의 `session_answered_events`는 최근 12턴 밖의 식사·읽기 정보도 유지한다.
+식사 시간대가 불분명할 때는 새 식사로 가정해 재질문하지 않고 필요한 경우에만 확인한다.
+명시적인 재택·외출 부정은 시간 범위와 함께 유지하고 이후 외출 발언으로 갱신한다.
 
 `memory_candidate_service.py`는 LLM 호출 전에 대화 원문을 사건과 기억
 단서로 구조화한다. 원문을 합치거나 새 사실을 만들지 않는다.

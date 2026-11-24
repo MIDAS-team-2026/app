@@ -2,6 +2,7 @@ import json
 import os
 import re
 from typing import Any, List
+from recall.dialogue_act import is_acknowledgement
 
 try:
     from openai import OpenAI
@@ -11,6 +12,10 @@ except ImportError:
 
 YNU_BASE_URL = "https://factchat-cloud.mindlogic.ai/v1/gateway"
 GPT_MODEL = "claude-sonnet-5"
+USE_LLM_FOLLOWUP_GENERATION = (
+    os.getenv("USE_LLM_FOLLOWUP_GENERATION", "false").lower()
+    in {"1", "true", "yes", "on"}
+)
 
 _client: Any = None
 
@@ -741,6 +746,9 @@ def is_safe_followup_question(question: str) -> bool:
 def is_weak_free_talk_answer(text: str) -> bool:
     text = clean_text(text)
 
+    if is_acknowledgement(text):
+        return False
+
     if not text:
         return True
 
@@ -748,6 +756,9 @@ def is_weak_free_talk_answer(text: str) -> bool:
         "응",
         "네",
         "아니",
+        "맞아",
+        "그래",
+        "그렇지",
         "몰라",
         "없어",
         "글쎄",
@@ -1050,6 +1061,14 @@ def generate_safe_followup_question(
     is_weak_answer = is_weak_free_talk_answer(
         conversation_history[-1] if conversation_history else ""
     )
+
+    if not USE_LLM_FOLLOWUP_GENERATION:
+        return {
+            "nextQuestion": fallback_question,
+            "shouldChangeTopic": is_weak_answer,
+            "reason": "engine_fallback",
+        }
+
     rejection_note = ""
 
     for _attempt in range(2):

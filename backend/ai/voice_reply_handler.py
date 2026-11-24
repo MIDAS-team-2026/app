@@ -12,6 +12,7 @@
 
 import hashlib
 import logging
+from time import perf_counter
 import os
 import re
 import requests
@@ -27,7 +28,9 @@ from recall.free_talk_question_generator import (
 from recall.conversation_policy import (
     ConversationAction,
     ConversationDecision,
+    ConversationReply,
     RecallTimingAction,
+    MAX_CONSECUTIVE_TOPIC_TURNS,
     decide_conversation_action,
     decide_recall_timing,
 )
@@ -38,19 +41,41 @@ from recall.conversation_recall_generator import (
     select_recall_memory_candidates,
 )
 from recall.memory_candidate_service import build_memory_candidate_selection
+from recall.episode_context import active_episode_records, episode_identity, episode_segments, ordered_records, records_through_current
+from recall.followup_intent import FollowupIntentState, build_followup_intent_state, render_event_followups, infer_followup_target
+from recall.dialogue_act import conversation_control, is_acknowledgement, is_clarification_request, is_repeat_reminder, is_greeting
+from recall.dialogue_act import classify_recall_response, RecallResponseIntent
+from recall.event_continuity import answers_event_detail
+from recall.event_modality import EventFrame, EventMode, NON_EXPERIENCED, resolve_event_frames, is_current_state
+from recall.uncertain_reply import short_reference, declines_detail, resolve_short_reference
+from recall.recall_scheduler import select_pending_recall, turn_position, memory_wait_turns, memory_wait_seconds, scheduled_recall_turn, recall_is_due, session_recall_history
+from recall.recall_context import clarify_recall_question
+from recall.llm_dialogue_prototype import propose_dialogue
+from recall.dialogue_response_experiment import propose_reply_only, validate_local_voice_reply
+from recall.voice_fallback import fallback_candidates
+from recall.stage_timing import timed_stage
+from recall.record_execution import serialize_record, serialize_session
+from recall.recall_presentation import presented_question_matches
 from recall.memory_event import (
     MemoryAnswerType,
     infer_answer_type,
     should_continue_memory_event,
 )
 from recall.memory_evidence_extractor import (
+    CONTEXT_ONLY_PLACES,
+    extract_action_object,
     extract_memory_clues,
+    extract_predicate_forms,
     is_correction_utterance,
 )
 from recall.recall_api_client import analyze_session_recall
 
 logger = logging.getLogger(__name__)
 SPRING_BASE_URL = os.getenv("SPRING_BASE_URL", "http://localhost:8080")
+
+
+class DialogueStateUnavailable(RuntimeError):
+    """Required persisted dialogue state could not be read reliably."""
 
 
 @dataclass(frozen=True)
@@ -64,6 +89,12 @@ class ConversationTurnState:
     should_change_topic: bool
     is_memory_candidate: bool
     needs_memory_detail: bool
+    has_real_content: bool
+    has_anchorable_event: bool
+    has_sufficient_detail: bool = False
+    is_unanswered: bool = False
+    event_frame: EventFrame = EventFrame()
+    followup_intent: FollowupIntentState | None = None
 
 
 @dataclass(frozen=True)
@@ -71,6 +102,8 @@ class RecallCandidateContext:
     conversation_history: tuple[str, ...] = ()
     source_record_ids: tuple[tuple[str, int], ...] = ()
     memory_candidates: tuple[dict, ...] = ()
+    prior_wait_turns: int = 0
+    prior_wait_seconds: float | None = None
 
     def find_source_record_id(self, source_text: str) -> int | None:
         normalized_source = _normalize_text(source_text)
@@ -155,7 +188,7 @@ SAFE_OPENING_QUESTIONS = [
     "최근에 손에 자주 잡는 물건이 있으세요?",
     "요즘 날씨를 보면 떠오르는 일이 있으세요?",
     "예전에 자주 하시던 일 중에 요즘 생각나는 게 있으세요?",
-    "최근에 시장이나 마트 이야기가 떠오른 적 있으세요?",
+    "최근에 시장이나 마트에서 장을 보신 적이 있으세요?",
     "집 안에서 가장 오래 머무는 자리가 어디세요?",
     "요즘 하루 중 기다려지는 시간이 있으세요?",
 ]
@@ -165,10 +198,10 @@ SAFE_OPENING_QUESTIONS = [
 # 고정 질문 답변 내용(성함/배우자/고향 등)과 무관하게, 방금 답변에
 # 자연스럽게 반응하면서 자유대화로 전환만 시키는 범용 문장만 담는다.
 FIXED_TO_FREE_TALK_OPENERS = [
-    "좋습니다! 오늘은 어떤 이야기를 나눠볼까요?",
-    "좋아요, 그럼 오늘 하루는 뭘 하면서 지내셨는지 이야기해주시겠어요?",
-    "네, 알겠습니다. 이제 편하게 오늘 이야기를 나눠볼까요?",
-    "좋습니다. 오늘 있었던 일 중에 편하게 나누고 싶은 이야기가 있으세요?",
+    "오늘 식사는 하셨어요?",
+    "오늘 집에서는 무엇을 하셨어요?",
+    "오늘 보신 방송이 있으세요?",
+    "오늘 누구와 이야기 나누셨어요?",
 ]
 
 
@@ -197,6 +230,12 @@ AFTER_SHORT_RECALL_OPENING_QUESTIONS = [
     "그렇군요. 그럼 오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
     "알겠습니다. 이번에는 오늘 보신 것 중에 기억나는 게 있으세요?",
     "그러셨군요. 오늘 드신 것 중에 생각나는 음식이 있으세요?",
+]
+
+LOW_BURDEN_TOPIC_CHANGE_QUESTIONS = [
+    "오늘 집에서 하신 일 중에 하나 말씀해주실래요?",
+    "오늘 보신 방송이나 들은 소리가 있으세요?",
+    "오늘 손에 잡았던 물건이나 하신 일이 있으세요?",
 ]
 
 REPEATED_LOW_INFO_QUESTIONS = {
@@ -231,6 +270,14 @@ SAFE_STAGE_FALLBACK_QUESTIONS = {
         "나중에 다시 이야기한다면 어떤 말로 떠올리면 좋을까요?",
     ],
 }
+
+
+NO_EVENT_FALLBACK_QUESTIONS = [
+    "그럼 오늘은 어떻게 시간을 보내고 계세요?",
+    "오늘 다른 이야기도 편하게 들려주시겠어요?",
+    "지금 주변에서 보이는 것 중에 이야기해볼 만한 게 있으세요?",
+    "오늘 집에서 하신 일 중에 하나만 말씀해주실래요?",
+]
 
 TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
     "LOW_INFO": {
@@ -406,9 +453,21 @@ TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS = {
             "그때 가장 먼저 기억나는 장면이 있으세요?",
         ],
         "ANCHOR": [
-            "오늘 하신 일 중 나중에 기억할 만한 장면이 있으세요?",
-            "그 일을 떠올리면 제일 먼저 생각나는 게 있으세요?",
-            "다시 이야기한다면 어떤 말로 떠올리면 좋을까요?",
+            "그 일은 주로 어디에서 하셨어요?",
+            "그때는 주로 누구와 함께하셨어요?",
+            "그 일을 하실 때 가장 기억나는 장면이 있으세요?",
+        ],
+    },
+    "GAME": {
+        "DEEPEN": [
+            "어떤 게임을 하셨어요?",
+            "게임하실 때 제일 기억나는 장면이 있으세요?",
+            "그 게임은 혼자 하셨어요, 아니면 누군가와 같이 하셨어요?",
+        ],
+        "ANCHOR": [
+            "오늘 하신 게임에서 가장 기억나는 장면이 있으세요?",
+            "나중에 다시 떠올리면 그 게임의 어떤 부분이 먼저 생각날까요?",
+            "게임하실 때 손으로 하신 동작 중 기억나는 게 있으세요?",
         ],
     },
     "REST": {
@@ -511,6 +570,7 @@ RECALL_TRANSITION_ACKNOWLEDGEMENTS = [
 ]
 
 
+@timed_stage("session_read")
 def _fetch_session_records(session_id: int) -> list[dict]:
     for attempt in range(2):
         try:
@@ -519,7 +579,10 @@ def _fetch_session_records(session_id: int) -> list[dict]:
                 timeout=10,
             )
             resp.raise_for_status()
-            return resp.json()
+            records = resp.json()
+            if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
+                raise ValueError("invalid_session_records_response")
+            return records
         except Exception as e:
             if attempt == 0:
                 logger.warning(
@@ -531,14 +594,30 @@ def _fetch_session_records(session_id: int) -> list[dict]:
 
             logger.error("세션 레코드 조회 실패: sessionId=%s, error=%s", session_id, e)
 
-    return []
+    raise DialogueStateUnavailable("session_records_unavailable")
 
 
-def _save_ai_reply(record_id: int, reply_text: str):
+@timed_stage("reply_save")
+def _save_ai_reply(
+    record_id: int,
+    reply_text: str,
+    episode_id: str | None = None,
+    conversation_topic: str | None = None,
+    conversation_stage: str | None = None,
+    presented_recall_question_id: int | None = None,
+):
     payload = {
         "recordId": record_id,
         "replyText": reply_text,
     }
+    if episode_id:
+        payload["episodeId"] = episode_id
+    if conversation_topic:
+        payload["conversationTopic"] = conversation_topic
+    if conversation_stage:
+        payload["conversationStage"] = conversation_stage
+    if presented_recall_question_id is not None:
+        payload["presentedRecallQuestionId"] = presented_recall_question_id
 
     for attempt in range(2):
         try:
@@ -561,6 +640,7 @@ def _save_ai_reply(record_id: int, reply_text: str):
             raise
 
 
+@timed_stage("recall_link")
 def _link_recall_question(
     record_id: int,
     recall_question_id: int,
@@ -630,6 +710,7 @@ def _create_recall_question(
     return resp.json()
 
 
+@timed_stage("recall_questions_read")
 def _fetch_recall_questions(user_id: int) -> list[dict]:
     for attempt in range(2):
         try:
@@ -638,7 +719,10 @@ def _fetch_recall_questions(user_id: int) -> list[dict]:
                 timeout=10,
             )
             resp.raise_for_status()
-            return resp.json()
+            questions = resp.json()
+            if not isinstance(questions, list) or any(not isinstance(question, dict) for question in questions):
+                raise ValueError("invalid_recall_question_response")
+            return questions
         except Exception as e:
             if attempt == 0:
                 logger.warning(
@@ -650,7 +734,20 @@ def _fetch_recall_questions(user_id: int) -> list[dict]:
 
             logger.error("회상 질문 조회 실패: userId=%s error=%s", user_id, e)
 
-    return []
+    raise DialogueStateUnavailable("recall_questions_unavailable")
+
+
+def _get_used_recall_clue_ids(questions: list[dict] | None) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(
+            str(question.get("clueId") or "").strip()
+            for question in questions or []
+            if (
+                str(question.get("questionType") or "").upper() == "RECALL"
+                and str(question.get("clueId") or "").strip()
+            )
+        )
+    )
 
 
 def _find_or_create_fixed_question(user_id: int, question_data: dict) -> dict | None:
@@ -706,6 +803,7 @@ def _link_fixed_question_answer(
     return True
 
 
+@timed_stage("orientation_status_read")
 def _get_fixed_question_status(user_id: int) -> dict:
     """
     {"doneToday": bool, "onboardingDone": bool} 반환.
@@ -719,6 +817,8 @@ def _get_fixed_question_status(user_id: int) -> dict:
             )
             resp.raise_for_status()
             data = resp.json().get("data") or {}
+            if any(type(data.get(field)) is not bool for field in ("doneToday", "onboardingDone")):
+                raise ValueError("invalid_orientation_status_response")
             return {
                 "doneToday": bool(data.get("doneToday")),
                 "onboardingDone": bool(data.get("onboardingDone")),
@@ -734,7 +834,7 @@ def _get_fixed_question_status(user_id: int) -> dict:
 
             logger.error("고정질문 상태 조회 실패: userId=%s error=%s", user_id, e)
 
-    return {"doneToday": False, "onboardingDone": False}
+    raise DialogueStateUnavailable("orientation_status_unavailable")
 
 
 def _mark_fixed_questions_done_today(user_id: int, onboarding: bool = False) -> bool:
@@ -796,25 +896,21 @@ def _extract_recall_candidate_records(session_records: list[dict]) -> list[dict]
     형태의 순환 구조가 생길 수 있다.
     """
     candidates = []
-    sorted_records = sorted(
-        session_records,
-        key=lambda record: int(record.get("recordId") or 0),
-    )
+    sorted_records = ordered_records(session_records)
 
-    boundary_record_id = 0
+    boundary_position = -1
     fixed_count = 0
 
-    for record in sorted_records:
+    for position, record in enumerate(sorted_records):
         role = str(record.get("answerRole") or "").upper()
-        record_id = int(record.get("recordId") or 0)
 
         if role == "FIXED":
             fixed_count += 1
-            boundary_record_id = max(boundary_record_id, record_id)
+            boundary_position = position
             continue
 
         if role in {"INITIAL", "RECALL"}:
-            boundary_record_id = max(boundary_record_id, record_id)
+            boundary_position = position
 
     # 고정 질문이 0개인 세션은 오늘 고정 질문을 이미 마친 뒤 다시 시작한
     # 자유대화 세션이다. 온보딩 이후에는 하루 1개만 노출되므로 1개는 항상
@@ -823,15 +919,20 @@ def _extract_recall_candidate_records(session_records: list[dict]) -> list[dict]
     if 1 < fixed_count < len(FIXED_QUESTIONS):
         return []
 
-    for record in sorted_records:
+    for position, record in enumerate(sorted_records):
         role = str(record.get("answerRole") or "").upper()
-        record_id = int(record.get("recordId") or 0)
         text = str(record.get("transcriptText") or "").strip()
 
-        if record_id <= boundary_record_id:
+        if position <= boundary_position:
             continue
 
         if not text:
+            continue
+
+        if is_repeat_reminder(text) or short_reference(text) or declines_detail(text):
+            continue
+
+        if record.get("conversationStage") in {"PAUSED", "RECALL_SKIPPED", "RECALL_CLARIFY", "TOPIC_SKIPPED", "CLARIFY"}:
             continue
 
         if role in {"FIXED", "INITIAL", "RECALL"}:
@@ -857,6 +958,7 @@ def _normalize_memory_event_topic(topic: str | None) -> str:
         "SCENERY": "PLACE",
         "REST": "ACTIVITY",
         "ROUTINE": "ACTIVITY",
+        "GAME": "ACTIVITY",
         "SHOPPING": "OBJECT",
     }
 
@@ -878,14 +980,197 @@ def _fallback_answer_type_for_topic(topic: str) -> MemoryAnswerType:
     return topic_map.get(topic, MemoryAnswerType.UNKNOWN)
 
 
+EXPECTED_EPISODE_DETAIL_TYPES_BY_TOPIC = {
+    "ACTIVITY": ("ACTIVITY", "TIME", "PLACE", "PERSON"),
+    "HEALTH": ("TIME", "PLACE", "PERSON"),
+    "MEAL": ("FOOD", "TIME", "PLACE", "PERSON"),
+    "MEDIA": ("MEDIA", "TIME", "PLACE", "PERSON"),
+    "PLACE": ("PLACE", "TIME", "PERSON"),
+    "PERSON": ("PERSON", "TIME", "PLACE"),
+    "OBJECT": ("OBJECT", "TIME", "PLACE", "PERSON"),
+    "REST": ("TIME", "PLACE"),
+}
+
+GENERIC_EPISODE_DETAIL_VALUES = {
+    "PLACE": set(CONTEXT_ONLY_PLACES),
+    "ACTIVITY": {"게임", "오락", "일", "활동"},
+    "MEDIA": {"방송", "프로그램", "노래", "영상", "티비", "텔레비전"},
+    "FOOD": {"음식", "밥", "간식"},
+    "OBJECT": {"물건"},
+}
+
+MISSING_DETAIL_PRIORITIZED_TOPICS = {
+    "FOOD",
+    "HEALTH",
+    "ACTIVITY",
+    "GAME",
+    "MEDIA",
+    "PERSON",
+    "PLACE",
+    "OBJECT",
+    "REST",
+}
+
+
+EPISODE_DETAIL_QUESTION_CANDIDATES_BY_TOPIC = {
+    "HEALTH": {
+        "TIME": ["병원에는 언제쯤 다녀오셨어요?", "약은 언제쯤 드셨어요?"],
+        "PLACE": ["어느 병원에 다녀오셨어요?"],
+        "PERSON": ["병원에는 누구와 함께 다녀오셨어요?"],
+    },
+    "MEAL": {
+        "FOOD": ["무엇을 드셨어요?"],
+        "TIME": ["그 음식은 언제쯤 드셨어요?"],
+        "PLACE": ["그 음식은 어디에서 드셨어요?"],
+        "PERSON": ["그때 누구와 같이 드셨어요?"],
+    },
+    "MEDIA": {
+        "MEDIA": ["어떤 방송이나 프로그램을 보셨어요?", "어떤 노래를 들으셨어요?"],
+        "TIME": ["티비나 방송은 언제쯤 보셨어요?"],
+        "PLACE": ["그때는 어디에서 보고 계셨어요?"],
+        "PERSON": ["그걸 보실 때 같이 계신 분이 있으셨어요?"],
+    },
+    "PLACE": {
+        "PLACE": ["어디에 다녀오셨어요?"],
+        "TIME": ["그곳에는 언제쯤 다녀오셨어요?"],
+        "PERSON": ["그곳에는 누구와 함께 다녀오셨어요?"],
+    },
+    "PERSON": {
+        "PERSON": ["누구와 이야기하셨어요?"],
+        "TIME": ["그분과는 언제쯤 이야기하셨어요?"],
+        "PLACE": ["그분과는 어디에서 이야기하셨어요?"],
+    },
+    "ACTIVITY": {
+        "ACTIVITY": ["무엇을 하셨어요?"],
+        "TIME": ["그 일은 언제쯤 하셨어요?"],
+        "PLACE": ["그 일은 어디에서 하셨어요?"],
+        "PERSON": ["그 일은 누구와 함께하셨어요?"],
+    },
+    "GAME": {
+        "ACTIVITY": ["어떤 게임을 하셨어요?"],
+        "TIME": ["그 게임은 언제쯤 하셨어요?"],
+        "PLACE": ["그 게임은 어디에서 하셨어요?"],
+        "PERSON": ["그 게임은 누구와 함께하셨어요?"],
+    },
+    "OBJECT": {
+        "OBJECT": ["어떤 물건을 사용하셨어요?"],
+        "TIME": ["그 물건은 언제 사용하셨어요?"],
+        "PLACE": ["그 물건은 어디에 두셨어요?"],
+        "PERSON": ["그 물건은 누구와 같이 사용하셨어요?"],
+    },
+    "REST": {
+        "TIME": ["언제쯤 쉬고 계셨어요?"],
+        "PLACE": ["어디에서 쉬고 계셨어요?"],
+    },
+}
+
+
+def _merge_memory_clues(*clue_groups: tuple[dict[str, str], ...]) -> tuple[dict[str, str], ...]:
+    merged = []
+
+    for clues in clue_groups:
+        for clue in clues:
+            normalized = {
+                "answerType": str(clue.get("answerType") or "").strip().upper(),
+                "answerValue": " ".join(str(clue.get("answerValue") or "").split()),
+            }
+
+            if normalized["answerType"] and normalized["answerValue"] and normalized not in merged:
+                merged.append(normalized)
+
+    return tuple(merged)
+
+
+def _get_missing_episode_answer_types(
+    topic: str | None,
+    cycle_texts: list[str],
+    latest_text: str,
+) -> tuple[str, ...]:
+    normalized_topic = _normalize_memory_event_topic(topic)
+    expected = EXPECTED_EPISODE_DETAIL_TYPES_BY_TOPIC.get(normalized_topic, ())
+
+    if not expected:
+        return ()
+
+    state = build_followup_intent_state(
+        None, _build_generation_history(cycle_texts, latest_text),
+        _fallback_answer_type_for_topic(normalized_topic), GENERIC_EPISODE_DETAIL_VALUES,
+    )
+    return tuple(answer_type for answer_type in expected if answer_type not in state.known_types)
+
+
+def _get_episode_detail_question_candidates(
+    topic: str | None,
+    missing_answer_types: tuple[str, ...],
+    latest_text: str,
+    cycle_texts: list[str],
+) -> list[str]:
+    raw_topic = str(topic or "").strip().upper()
+    normalized_topic = _normalize_memory_event_topic(topic)
+    topic_questions = (
+        EPISODE_DETAIL_QUESTION_CANDIDATES_BY_TOPIC.get(raw_topic)
+        or EPISODE_DETAIL_QUESTION_CANDIDATES_BY_TOPIC.get(normalized_topic, {})
+    )
+    candidates = []
+
+    for answer_type in missing_answer_types:
+        candidates.extend(topic_questions.get(answer_type, []))
+
+    if not candidates:
+        return []
+
+    context = " ".join([latest_text, *cycle_texts])
+
+    if normalized_topic == "HEALTH":
+        if not _has_medicine_reference(context):
+            candidates = [
+                question
+                for question in candidates
+                if "약" not in question
+            ]
+
+        if not _has_confirmed_reference([latest_text, *cycle_texts], "병원"):
+            candidates = [
+                question
+                for question in candidates
+                if "병원" not in question
+            ]
+
+    if _contains_any(context, ("집에 있었", "집에서", "집에만", "안 나갔", "나가지 않았")):
+        candidates = [
+            question
+            for question in candidates
+            if "다녀오" not in question and "그곳에는" not in question
+        ]
+
+    if _contains_any(context, ("혼자",)):
+        candidates = [
+            question
+            for question in candidates
+            if "누구와 함께" not in question and "같이 계신 분" not in question
+        ]
+
+    if _contains_any(
+        context,
+        ("아침", "점심", "저녁", "오전", "오후", "새벽", "밤에", "낮에"),
+    ) or re.search(r"\d+\s*시", context):
+        candidates = [
+            question
+            for question in candidates
+            if "언제" not in question
+        ]
+
+    return candidates
+
+
 _MEMORY_FOLLOWUP_REFERENCE_CUES = (
     "그때",
     "그곳",
     "같이",
     "함께",
-    "다녀오",
     "그 음식",
     "그 방송",
+    "그 일",
     "그 물건",
     "그 선물",
     "무슨 선물",
@@ -907,6 +1192,10 @@ _MEMORY_EVENT_REFERENCE_TOPICS = (
     ("그 방송", "MEDIA"),
     ("그 물건", "OBJECT"),
     ("그 선물", "OBJECT"),
+)
+
+_MEMORY_EVENT_SEQUENCE_PATTERN = re.compile(
+    r"(?:고\s+나서|(?:한|은|는|난)\s*뒤|그\s*뒤|그\s*다음|그\s*후|이후(?:에는)?|그리고)"
 )
 
 
@@ -944,9 +1233,27 @@ def _is_memory_topic_transition(question: str) -> bool:
     return any(cue in normalized for cue in _MEMORY_TOPIC_TRANSITION_CUES)
 
 
+def _extract_sequential_event_clues(text: str) -> tuple[dict, ...]:
+    clauses = [
+        clause.strip(" ,.!?")
+        for clause in _MEMORY_EVENT_SEQUENCE_PATTERN.split(str(text or ""))
+        if clause.strip(" ,.!?")
+    ]
+
+    if len(clauses) < 2:
+        return ()
+
+    final_clues = extract_memory_clues(
+        clauses[-1],
+        MemoryAnswerType.UNKNOWN,
+    )
+    return tuple(final_clues)
+
+
 def _build_memory_evidence_payloads(
     session_records: list[dict],
 ) -> list[dict]:
+    event_frames = resolve_event_frames(session_records)
     candidate_records = _extract_recall_candidate_records(session_records)
     candidate_ids = {
         int(record.get("recordId") or 0)
@@ -960,12 +1267,29 @@ def _build_memory_evidence_payloads(
     payloads = []
     last_event_topic = None
     last_event_clue_values: set[str] = set()
+    segment_by_record = {
+        int(row.get("recordId") or 0): str(segment[0].get("recordId"))
+        for segment in episode_segments(sorted_records)
+        for row in segment
+    }
+    previous_segment = None
 
     for index, record in enumerate(sorted_records):
         record_id = int(record.get("recordId") or 0)
 
         if record_id not in candidate_ids:
             continue
+
+        frame = event_frames.get(record_id, EventFrame())
+        if not frame.allows_past_evidence:
+            continue
+
+        segment_id = segment_by_record.get(record_id, "")
+        if segment_id != previous_segment:
+            cycle_texts = []
+            last_event_topic = None
+            last_event_clue_values = set()
+        previous_segment = segment_id
 
         text = str(record.get("transcriptText") or "").strip()
         previous_question = (
@@ -981,6 +1305,21 @@ def _build_memory_evidence_payloads(
                 previous_question,
             )
         )
+        general_clues = extract_memory_clues(text)
+        if detected_topic == "UNGROUPED" and extract_action_object(text):
+            detected_topic = "OBJECT"
+        elif detected_topic in {"UNGROUPED", "PLACE"} and any(
+            clue["answerType"] == "ACTIVITY" for clue in general_clues
+        ):
+            detected_topic = "ACTIVITY"
+        sequential_event_clues = _extract_sequential_event_clues(text)
+        sequential_event_topic = (
+            _normalize_memory_event_topic(sequential_event_clues[-1]["answerType"])
+            if sequential_event_clues
+            else None
+        )
+        if sequential_event_topic not in {None, "UNGROUPED"}:
+            detected_topic = sequential_event_topic
         question_topics = {
             _normalize_memory_event_topic(_detect_topic_in_text(previous_question)),
             _normalize_memory_event_topic(_detect_topic_from_question(previous_question)),
@@ -1011,6 +1350,46 @@ def _build_memory_evidence_payloads(
         )
         question_actions = extract_memory_action_concepts(previous_question)
         answer_actions = extract_memory_action_concepts(text)
+        has_topic_opening_scope = _contains_any(
+            previous_question,
+            ("오늘", "요즘", "최근", "평소", "이번에는"),
+        )
+        expected_topic_answer_type = _fallback_answer_type_for_topic(
+            question_context_topic
+        )
+        question_starts_new_topic = bool(
+            last_event_topic not in {None, "UNGROUPED"}
+            and question_context_topic not in {None, "UNGROUPED"}
+            and question_context_topic != last_event_topic
+            and (
+                question_answer_type == expected_topic_answer_type
+                or (
+                    question_answer_type == MemoryAnswerType.UNKNOWN
+                    and has_topic_opening_scope
+                )
+            )
+            and referenced_event_topic is None
+            and (
+                (
+                    not _is_referential_memory_followup(previous_question)
+                    and not references_previous_clue
+                )
+                or has_topic_opening_scope
+            )
+        )
+        answers_previous_action = bool(
+            last_event_topic
+            and not question_starts_new_topic
+            and referenced_event_topic in {None, last_event_topic}
+            and not has_topic_opening_scope
+            and question_answer_type in {
+                MemoryAnswerType.TIME, MemoryAnswerType.PLACE, MemoryAnswerType.PERSON,
+            }
+            and question_actions.intersection(answer_actions)
+        )
+        if answers_previous_action:
+            detected_topic = last_event_topic
+            question_topics.add(last_event_topic)
         continues_previous_event = should_continue_memory_event(
             last_event_topic=last_event_topic,
             detected_topic=detected_topic,
@@ -1021,6 +1400,7 @@ def _build_memory_evidence_payloads(
                 (
                     _is_referential_memory_followup(previous_question)
                     or references_previous_clue
+                    or answers_previous_action
                 )
                 and referenced_event_topic in {None, last_event_topic}
             ),
@@ -1030,13 +1410,24 @@ def _build_memory_evidence_payloads(
                 and question_actions.isdisjoint(answer_actions)
             ),
             has_confirmed_clue=bool(question_clues),
-            is_topic_transition=_is_memory_topic_transition(previous_question),
+            is_topic_transition=(
+                _is_memory_topic_transition(previous_question)
+                or question_starts_new_topic
+                or (
+                    sequential_event_topic not in {None, "UNGROUPED"}
+                    and sequential_event_topic != last_event_topic
+                )
+            ),
         )
+        if (last_event_topic and referenced_event_topic in {None, last_event_topic}
+                and answers_event_detail(text, previous_question, cycle_texts[:-1])):
+            continues_previous_event = True
         event_topic = (
             last_event_topic
             if continues_previous_event
             else (
-                referenced_event_topic
+                sequential_event_topic
+                or referenced_event_topic
                 or (
                     question_context_topic
                     if (
@@ -1049,7 +1440,9 @@ def _build_memory_evidence_payloads(
         )
 
         event_answer_type = _fallback_answer_type_for_topic(event_topic)
-        if (
+        if sequential_event_topic not in {None, "UNGROUPED"}:
+            answer_type = event_answer_type
+        elif (
             question_answer_type != MemoryAnswerType.UNKNOWN
             and (
                 continues_previous_event
@@ -1066,7 +1459,11 @@ def _build_memory_evidence_payloads(
         else:
             answer_type = event_answer_type
 
-        clues = extract_memory_clues(text, answer_type)
+        clues = (
+            list(sequential_event_clues)
+            if sequential_event_clues
+            else extract_memory_clues(text, answer_type)
+        )
         answer_value = next(
             (
                 clue["answerValue"]
@@ -1080,6 +1477,7 @@ def _build_memory_evidence_payloads(
         payloads.append(
             {
                 "sourceRecordId": record_id,
+                "episodeId": segment_id,
                 "turnOrder": int(record.get("turnOrder") or 0) or None,
                 "sourceText": text,
                 "topic": event_topic,
@@ -1105,51 +1503,125 @@ def _build_memory_evidence_payloads(
     return payloads
 
 
+def _is_episodic_recall_text(text: str) -> bool:
+    evaluation = score_recall_memory_candidate(text)
+    episodic_reasons = {
+        "has_past_tense",
+        "has_past_action",
+        "has_general_past_action",
+    }
+    return bool(
+        evaluation["isValid"]
+        and episodic_reasons.intersection(evaluation.get("reasons") or ())
+    )
+
+
+@timed_stage("memory_selection")
 def _get_structured_recall_ready_context(
     session_records: list[dict],
     previous_question: str = "",
+    used_clue_ids: tuple[str, ...] = (),
 ) -> RecallCandidateContext:
     payloads = _build_memory_evidence_payloads(session_records)
 
-    if len(payloads) < 2:
+    records = ordered_records(session_records)
+    if not payloads or not records:
         return RecallCandidateContext()
 
-    matured_payloads = payloads[:-1]
-    selection = build_memory_candidate_selection(
-        matured_payloads,
-        max_candidates=3,
-    )
-    latest_text = payloads[-1]["sourceText"]
-    latest_evaluation = score_recall_memory_candidate(latest_text)
+    latest_record_id = int(records[-1].get("recordId") or 0)
+    latest_payload = next((item for item in payloads if item["sourceRecordId"] == latest_record_id), {})
+    latest_text = str(records[-1].get("transcriptText") or "")
+    prior_payloads = [item for item in payloads if item["sourceRecordId"] != latest_record_id]
     transcripts = [payload["sourceText"] for payload in payloads]
     latest_topic = _detect_conversation_topic(
         latest_text,
         transcripts,
         previous_question,
     )
+    active_topic = latest_topic
+
+    if active_topic in {None, "LOW_INFO", "NEGATIVE"}:
+        active_topic = _detect_topic_from_question(previous_question)
+
+    normalized_active_topic = _normalize_memory_event_topic(active_topic)
+    matured_payloads = [
+        payload
+        for payload in prior_payloads
+        if (
+            normalized_active_topic == "UNGROUPED"
+            or _normalize_memory_event_topic(payload.get("topic"))
+            != normalized_active_topic
+        )
+    ]
+    if any(row.get("episodeId") for row in session_records):
+        active = active_episode_records(records)
+        active_id = str(active[0].get("recordId")) if active else None
+        active_size = len(active)
+        matured_payloads = [
+            item for item in prior_payloads
+            if item.get("episodeId") != active_id or active_size >= MAX_CONSECUTIVE_TOPIC_TURNS
+        ]
+    selection = build_memory_candidate_selection(
+        matured_payloads,
+        used_clue_ids=used_clue_ids,
+        max_candidates=3,
+    )
+    episodic_record_ids = {
+        int(payload.get("sourceRecordId") or 0)
+        for payload in matured_payloads
+        if _is_episodic_recall_text(payload.get("sourceText") or "")
+    }
+    eligible_candidates = tuple(
+        candidate
+        for candidate in selection.candidates
+        if episodic_record_ids.intersection(candidate.source_record_ids)
+    )
+    wait_turns = max(
+        (memory_wait_turns(records, candidate.source_record_ids)
+         for candidate in eligible_candidates), default=0,
+    )
+    candidate_wait_seconds = [memory_wait_seconds(records, candidate.source_record_ids)
+                              for candidate in eligible_candidates]
+    oldest_wait_seconds = max((value for value in candidate_wait_seconds if value is not None), default=None)
     timing = decide_recall_timing(
-        matured_candidate_count=len(selection.candidates),
-        latest_is_memory_candidate=bool(latest_evaluation["isValid"]),
+        matured_candidate_count=len(eligible_candidates),
+        memory_wait_turns=wait_turns,
+        memory_wait_seconds=oldest_wait_seconds,
+        latest_is_memory_candidate=_is_episodic_recall_text(latest_text),
         latest_has_followup_context=(
             latest_topic is not None
             and latest_topic not in {"LOW_INFO", "NEGATIVE"}
         ),
         latest_is_low_info=_is_low_info_response(latest_text),
         latest_is_negative=_is_negative_response(latest_text),
+        latest_continues_event=bool(
+            latest_payload.get("continuesPreviousEvent")
+        ),
     )
 
+    logger.info(
+        "recall_timing action=%s reason=%s eligible_count=%s memory_wait_turns=%s memory_wait_seconds=%s",
+        timing.action.value, timing.reason, len(eligible_candidates), wait_turns, oldest_wait_seconds,
+    )
     if timing.action != RecallTimingAction.ASK_RECALL:
         return RecallCandidateContext()
 
     selected_clues = tuple(
-        (candidate, candidate.select_recall_clue())
-        for candidate in selection.candidates
+        (candidate, candidate.select_recall_clue(used_clue_ids))
+        for candidate in eligible_candidates
     )
     serialized_by_event_id = {
         candidate["eventId"]: candidate
         for candidate in selection.to_dict()["candidates"]
     }
     return RecallCandidateContext(
+        prior_wait_seconds=(min(candidate_wait_seconds)
+                            if candidate_wait_seconds and all(value is not None for value in candidate_wait_seconds)
+                            else None),
+        prior_wait_turns=min(
+            (memory_wait_turns(records, candidate.source_record_ids)
+             for candidate in eligible_candidates), default=0,
+        ),
         conversation_history=tuple(
             selected_clue.source_text
             for _candidate, selected_clue in selected_clues
@@ -1161,6 +1633,8 @@ def _get_structured_recall_ready_context(
         memory_candidates=tuple(
             {
                 **serialized_by_event_id[candidate.event_id],
+                "episodeId": next((row.get("episodeId") for row in session_records
+                                   if row.get("recordId") == selected_clue.source_record_id), None),
                 "eventId": candidate.event_id,
                 "sourceRecordId": selected_clue.source_record_id,
                 "sourceText": selected_clue.source_text,
@@ -1264,29 +1738,14 @@ def _was_recall_question_presented(
     recall_question_id: int,
     question_text: str,
 ) -> bool:
-    normalized_question = _normalize_question_text(question_text)
-
-    if not normalized_question:
-        return False
-
-    source_record_ids = [
-        int(record.get("recordId") or 0)
-        for record in session_records
-        if (
-            str(record.get("answerRole") or "").upper() == "INITIAL"
-            and int(record.get("recallQuestionId") or 0) == int(recall_question_id)
-        )
-    ]
-    boundary_record_id = min(source_record_ids) if source_record_ids else 0
-
-    return any(
-        int(record.get("recordId") or 0) >= boundary_record_id
-        and int(record.get("recordId") or 0) != int(current_record_id)
-        and _normalize_question_text(record.get("aiReplyText") or "").endswith(
-            normalized_question
-        )
-        for record in session_records
+    records = ordered_records(session_records)
+    current_index = next(
+        (i for i, row in enumerate(records) if int(row.get("recordId") or 0) == int(current_record_id)),
+        0,
     )
+    if current_index <= 0:
+        return False
+    return presented_question_matches(records[current_index - 1], recall_question_id, question_text)
 
 
 def _count_completed_recall_answers(session_records: list[dict] | None) -> int:
@@ -1620,10 +2079,13 @@ def _get_confirmed_text_after_negated_action(text: str) -> str:
 
 
 def _is_low_info_response(text: str) -> bool:
-    text = _get_final_correction_segment(text)
+    text = _normalize_text(_get_final_correction_segment(text))
 
     if _contains_any(text, QUALITATIVE_ABSENCE_PHRASES):
         return False
+
+    if text in {"아니"}:
+        return True
 
     return _contains_any(
         text,
@@ -1643,9 +2105,16 @@ def _is_low_info_response(text: str) -> bool:
     )
 
 
+OBSERVED_EMOTION_PATTERN = re.compile(
+    r"(?:슬퍼|슬픈|힘들어|힘든|불안해|불안한|외로워|외로운|무서워|무서운|"
+    r"피곤해|피곤한|아파|아픈|속상해|속상한|우울해|우울한|불편해|불편한|"
+    r"화나|화난)\s*보(?:였|인다|여|였어|였다|였어요|였습니다|이네요)"
+)
+
+
 def _is_negative_response(text: str) -> bool:
     text = _get_final_correction_segment(text)
-    negative_evidence_text = text
+    negative_evidence_text = OBSERVED_EMOTION_PATTERN.sub("", text)
 
     for phrase in NEGATED_NEGATIVE_PHRASES:
         negative_evidence_text = negative_evidence_text.replace(phrase, "")
@@ -2085,6 +2554,8 @@ def _has_everyday_object_action(text: str) -> bool:
 
 
 def _detect_topic_in_text(text: str) -> str | None:
+    if is_acknowledgement(text):
+        return None
     text = _get_final_correction_segment(text)
     confirmed_text = _get_confirmed_text_after_negated_action(text)
 
@@ -2113,6 +2584,19 @@ def _detect_topic_in_text(text: str) -> str | None:
     has_media_consumption = (
         has_explicit_media
         and _contains_any(text, ("봤", "보았", "시청", "들었", "들어"))
+    ) or "읽" in extract_predicate_forms(text)
+    has_game_activity = _contains_any(
+        text,
+        (
+            "게임",
+            "오락",
+            "퍼즐",
+            "맞고",
+            "고스톱",
+            "화투",
+            "바둑",
+            "장기",
+        ),
     )
 
     if _is_low_info_response(health_text) and _is_negative_response(health_text):
@@ -2261,6 +2745,9 @@ def _detect_topic_in_text(text: str) -> str | None:
     if _has_everyday_object_action(text):
         return "OBJECT"
 
+    if has_game_activity:
+        return "GAME"
+
     if _contains_any(
         text,
         (
@@ -2285,6 +2772,8 @@ def _detect_topic_in_text(text: str) -> str | None:
             "빨래",
             "설거지",
             "요리",
+            "게임",
+            "오락",
             "씻",
             "목욕",
             "정리",
@@ -2425,10 +2914,14 @@ def _detect_topic_from_question(question: str) -> str | None:
         ("REST", ("쉬", "낮잠", "휴식")),
         ("ROUTINE", ("기다려지는 시간", "기다리는 시간")),
         ("SCENERY", ("동네", "풍경", "창밖에서 본", "자주 보이는")),
+        ("GAME", ("게임",)),
         ("ACTIVITY", ("하신 일", "하시던 일", "운동", "산책", "청소")),
         ("WEATHER", ("날씨", "더웠", "추웠", "바람", "햇빛")),
         ("PLACE", ("어디", "그곳", "장소", "다녀오신 곳")),
-        ("PERSON", ("누구", "사람", "그분", "통화", "연락")),
+        (
+            "PERSON",
+            ("누구", "사람", "그분", "보고 싶은 분", "통화", "연락"),
+        ),
     )
 
     for topic, cues in topic_cues:
@@ -2454,6 +2947,76 @@ def _detect_conversation_topic(
 
     previous_context_topic = _detect_recent_context_topic(previous_cycle_texts)
     question_topic = _detect_topic_from_question(previous_question)
+    question_answer_type = infer_answer_type(previous_question)
+
+    if (previous_context_topic and _detect_memory_event_reference_topic(previous_question)
+            in {None, _normalize_memory_event_topic(previous_context_topic)}
+            and answers_event_detail(latest_text, previous_question, previous_cycle_texts)):
+        return previous_context_topic
+
+    question_actions = extract_memory_action_concepts(previous_question) or extract_predicate_forms(previous_question)
+    answer_actions = extract_memory_action_concepts(latest_text) or extract_predicate_forms(latest_text)
+    if (
+        latest_topic not in {None, "LOW_INFO", "NEGATIVE"}
+        and question_actions and answer_actions
+        and question_actions.isdisjoint(answer_actions)
+        and _is_episodic_recall_text(latest_text)
+        and not is_acknowledgement(latest_text)
+        and not _is_negated_action_response(latest_text)
+        and not _is_future_response(latest_text)
+        and not _is_wish_response(latest_text)
+    ):
+        return latest_topic
+
+    if (
+        question_topic == "HEALTH"
+        and latest_topic in {None, "PLACE", "PERSON"}
+        and not _contains_any(
+            latest_text,
+            ("텔레비전", "티비", "방송", "프로그램", "노래", "음식", "밥", "피자"),
+        )
+    ):
+        return "HEALTH"
+
+    if (
+        previous_context_topic not in {None, "LOW_INFO", "NEGATIVE"}
+        and (
+            question_topic not in {None, "LOW_INFO", "NEGATIVE"}
+            or question_answer_type
+            in {
+                MemoryAnswerType.PERSON,
+                MemoryAnswerType.PLACE,
+                MemoryAnswerType.TIME,
+            }
+        )
+        and (
+            question_topic == previous_context_topic
+            or _is_referential_memory_followup(previous_question)
+        )
+        and latest_topic in {None, "PLACE", "PERSON"}
+        and not _contains_any(
+            latest_text,
+            (
+                "텔레비전",
+                "티비",
+                "방송",
+                "프로그램",
+                "노래",
+                "가수",
+                "드라마",
+                "뉴스",
+                "음식",
+                "밥",
+                "국",
+                "찌개",
+                "피자",
+                "커피",
+                "우유",
+                "주스",
+            ),
+        )
+    ):
+        return previous_context_topic
 
     if latest_topic is None and question_topic is not None:
         return question_topic
@@ -2559,8 +3122,11 @@ def _get_topic_aware_fallback_candidates(
     latest_text: str,
     cycle_texts: list[str],
     previous_question: str = "",
+    resolved_topic: str | None = None,
+    known_answer_types: tuple[str, ...] = (),
+    missing_answer_types: tuple[str, ...] = (),
 ) -> list[str]:
-    topic = _detect_conversation_topic(
+    topic = resolved_topic or _detect_conversation_topic(
         latest_text,
         cycle_texts,
         previous_question,
@@ -2569,7 +3135,13 @@ def _get_topic_aware_fallback_candidates(
     if topic is None:
         return []
 
-    if _is_wish_response(latest_text) and topic in WISH_TOPIC_QUESTIONS:
+    if (
+        _is_wish_response(latest_text)
+        or (
+            not extract_memory_action_concepts(latest_text)
+            and _is_wish_response(previous_question)
+        )
+    ) and topic in WISH_TOPIC_QUESTIONS:
         if topic == "FOOD" and _contains_any(
             latest_text,
             ("마시고 싶", "커피", "우유", "주스", "차를", "차 마"),
@@ -2619,8 +3191,59 @@ def _get_topic_aware_fallback_candidates(
 
     candidates = TOPIC_AWARE_STAGE_FALLBACK_QUESTIONS.get(topic, {}).get(stage, [])
 
+    missing_set = {
+        str(answer_type or "").strip().upper()
+        for answer_type in missing_answer_types
+        if str(answer_type or "").strip()
+    }
+
+    if (
+        missing_set
+        and candidates
+        and topic in MISSING_DETAIL_PRIORITIZED_TOPICS
+    ):
+        preferred_candidates = _get_episode_detail_question_candidates(
+            topic,
+            tuple(
+                str(answer_type or "").strip().upper()
+                for answer_type in missing_answer_types
+                if str(answer_type or "").strip().upper() in missing_set
+            ),
+            latest_text,
+            cycle_texts,
+        )
+
+        if not preferred_candidates:
+            preferred_candidates = []
+
+            for question in candidates:
+                question_type = _detect_topic_from_question(question)
+                inferred_answer_type = infer_answer_type(question).value
+
+                if (
+                    inferred_answer_type in missing_set
+                    or _normalize_memory_event_topic(question_type) in missing_set
+                ):
+                    preferred_candidates.append(question)
+
+        if preferred_candidates:
+            candidates = preferred_candidates
+
     if topic == "LOW_INFO" and _count_recent_low_info_responses(cycle_texts) >= 2:
         candidates = REPEATED_LOW_INFO_QUESTIONS.get(stage, candidates)
+
+    if topic == "ROUTINE" and extract_memory_clues(
+        latest_text,
+        MemoryAnswerType.ACTIVITY,
+    ):
+        candidates = [
+            question
+            for question in candidates
+            if (
+                "무엇을 하세요" not in question
+                and "하는 일이 무엇" not in question
+            )
+        ]
 
     if topic == "FOOD":
         has_appetite_expression = _contains_any(
@@ -2968,6 +3591,25 @@ def _get_topic_aware_fallback_candidates(
     return candidates
 
 
+def _get_stage_fallback_candidates(
+    stage: str,
+    latest_text: str,
+    cycle_texts: list[str],
+    has_anchorable_event: bool = True,
+) -> list[str]:
+    is_low_info = _is_low_info_response(latest_text)
+
+    if is_low_info and _count_recent_low_info_responses(
+        _build_generation_history(cycle_texts, latest_text),
+    ) >= 2:
+        return REPEATED_LOW_INFO_QUESTIONS.get(stage, SAFE_STAGE_FALLBACK_QUESTIONS[stage])
+
+    if not has_anchorable_event and not is_low_info:
+        return NO_EVENT_FALLBACK_QUESTIONS
+
+    return SAFE_STAGE_FALLBACK_QUESTIONS[stage]
+
+
 def _get_topic_openers() -> list[str]:
     return SAFE_OPENING_QUESTIONS
 
@@ -2996,7 +3638,7 @@ def _get_fixed_to_free_talk_opener(session_records: list[dict] | None) -> str:
 
 def _get_topic_change_openers(current_topic: str | None) -> list[str]:
     topic_markers = {
-        "PERSON": ("보고 싶은 사람",),
+        "PERSON": ("보고 싶은 사람", "보고 싶은 분"),
         "FOOD": ("드신 것", "음식"),
         "PLACE": ("다녀오신 곳", "동네", "집 안"),
         "HOME": ("집에서는", "집 안", "머무는 자리"),
@@ -3007,6 +3649,7 @@ def _get_topic_change_openers(current_topic: str | None) -> list[str]:
         "ROUTINE": ("기다려지는 시간", "하루 중"),
         "SCENERY": ("풍경", "동네", "창밖"),
         "ACTIVITY": ("하시던 일",),
+        "GAME": ("게임",),
     }
     markers = topic_markers.get(current_topic, ())
 
@@ -3020,6 +3663,92 @@ def _get_topic_change_openers(current_topic: str | None) -> list[str]:
     ]
 
 
+_DENIED_CONVERSATION_INTENTS = {
+    "OUTING": {
+        "questionCues": ("나가", "바깥", "집 밖", "다녀오신 곳"),
+        "answerCues": (
+            "안 나갔",
+            "나가지 않았",
+            "외출 안",
+            "외출하지 않았",
+            "밖에 안",
+            "바깥에도 안",
+            "집에만 있었",
+            "집에 있었",
+            "다녀온 곳이 없",
+            "간 곳이 없",
+            "나간 곳이 없",
+        ),
+    },
+}
+
+
+def _get_denied_conversation_intents(
+    session_records: list[dict] | None,
+) -> set[str]:
+    records = sorted(
+        [record for record in session_records or [] if record.get("recordId")],
+        key=lambda record: int(
+            record.get("turnOrder") or record.get("recordId") or 0
+        ),
+    )
+    denied = set()
+
+    for index in range(1, len(records)):
+        question = _normalize_text(records[index - 1].get("aiReplyText") or "")
+        answer = _normalize_text(records[index].get("transcriptText") or "")
+
+        for intent, patterns in _DENIED_CONVERSATION_INTENTS.items():
+            if (
+                _contains_any(question, patterns["questionCues"])
+                and _contains_any(answer, patterns["answerCues"])
+            ):
+                denied.add(intent)
+
+    return denied
+
+
+def _latest_answer_denies_conversation_intent(
+    session_records: list[dict] | None,
+) -> bool:
+    records = sorted(
+        list(session_records or []),
+        key=lambda record: int(
+            record.get("turnOrder") or record.get("recordId") or 0
+        ),
+    )
+    if len(records) < 2:
+        return False
+
+    question = _normalize_text(records[-2].get("aiReplyText") or "")
+    answer = _normalize_text(records[-1].get("transcriptText") or "")
+
+    return any(
+        _contains_any(question, patterns["questionCues"])
+        and _contains_any(answer, patterns["answerCues"])
+        for patterns in _DENIED_CONVERSATION_INTENTS.values()
+    )
+
+
+def _get_recent_conversation_topics(
+    session_records: list[dict] | None,
+) -> tuple[str, ...]:
+    recent_topics = []
+
+    for record in (session_records or [])[-8:]:
+        detected_topics = (
+            _detect_topic_in_text(record.get("transcriptText") or ""),
+            _detect_topic_from_question(record.get("aiReplyText") or ""),
+        )
+
+        for topic in detected_topics:
+            normalized = _normalize_memory_event_topic(topic)
+            if normalized != "UNGROUPED":
+                recent_topics.append(normalized)
+
+    return tuple(recent_topics)
+
+
 def _get_contextual_topic_openers(
     current_topic: str | None,
     session_records: list[dict] | None,
@@ -3027,6 +3756,16 @@ def _get_contextual_topic_openers(
     candidates: list[str] | None = None,
 ) -> list[str]:
     candidates = list(candidates or _get_topic_change_openers(current_topic))
+    denied_intents = _get_denied_conversation_intents(session_records)
+
+    for intent in denied_intents:
+        question_cues = _DENIED_CONVERSATION_INTENTS[intent]["questionCues"]
+        candidates = [
+            question
+            for question in candidates
+            if not _contains_any(question, question_cues)
+        ]
+
     recent_topics = []
     context_parts = []
 
@@ -3157,6 +3896,35 @@ def _get_latest_record(session_records: list[dict] | None) -> dict | None:
     )
 
 
+def _build_episode_metadata(
+    session_id: int,
+    record_id: int,
+    session_records: list[dict] | None,
+    latest_text: str,
+    stage: str,
+    resolved_topic: str | None = None,
+) -> dict:
+    records = sorted(
+        [record for record in session_records or [] if record.get("recordId")],
+        key=lambda record: int(record.get("turnOrder") or record.get("recordId") or 0),
+    )
+    cycle_texts = _get_cycle_transcripts(records)
+    topic = resolved_topic or _detect_conversation_topic(
+        latest_text,
+        cycle_texts,
+        _get_question_answered_by_latest_record(records),
+    )
+    normalized_topic = topic if topic not in {None, "LOW_INFO"} else "UNGROUPED"
+    normalized_stage = str(stage or "OPEN").upper()
+    episode_id = episode_identity(records, session_id, record_id, normalized_topic)
+
+    return {
+        "episodeId": episode_id,
+        "conversationTopic": normalized_topic,
+        "conversationStage": normalized_stage,
+    }
+
+
 def _get_question_answered_by_latest_record(
     session_records: list[dict] | None,
 ) -> str:
@@ -3240,7 +4008,12 @@ def _analyze_conversation_turn(
     session_records: list[dict] | None,
     latest_text: str,
 ) -> ConversationTurnState:
-    cycle_texts = _get_cycle_transcripts(session_records)
+    episode_records = active_episode_records(session_records)
+    cycle_texts = [
+        str(row.get("transcriptText") or "").strip()
+        for row in episode_records
+        if str(row.get("transcriptText") or "").strip()
+    ]
     confirmed_text = _get_confirmed_text_after_negated_action(latest_text)
     analyzed_text = confirmed_text or latest_text
     conversation_history = list(cycle_texts)
@@ -3258,6 +4031,33 @@ def _analyze_conversation_turn(
         previous_question,
     )
     memory_evaluation = score_recall_memory_candidate(analyzed_text)
+    frame_records = [dict(row) for row in episode_records]
+    if frame_records and frame_records[-1].get("transcriptText") == latest_text:
+        frame_records[-1]["transcriptText"] = analyzed_text
+    else:
+        frame_records.append({"recordId": -1, "transcriptText": analyzed_text,
+                              "turnOrder": max((int(row.get("turnOrder") or row.get("recordId") or 0) for row in frame_records), default=0) + 1})
+    event_frame = resolve_event_frames(frame_records).get(int(frame_records[-1].get("recordId") or 0), EventFrame())
+    if event_frame.mode in NON_EXPERIENCED and event_frame.source_text != analyzed_text:
+        topic = _detect_conversation_topic(event_frame.source_text, [event_frame.source_text], "") or topic
+    has_real_content = "too_short_or_meaningless" not in memory_evaluation["reasons"]
+    has_anchorable_event = not (
+        set(memory_evaluation["reasons"])
+        & {
+            "too_short_or_meaningless",
+            "forbidden_fixed_question_content",
+            "incomplete_or_negated_action",
+            "future_or_wish_expression",
+            "uncertain_memory",
+            "state_without_action",
+        }
+    )
+    has_anchorable_event = has_anchorable_event and event_frame.allows_past_evidence
+    intent_state = build_followup_intent_state(
+        session_records, _build_generation_history(conversation_history, analyzed_text),
+        _fallback_answer_type_for_topic(_normalize_memory_event_topic(topic)),
+        GENERIC_EPISODE_DETAIL_VALUES,
+    )
     should_change_topic = (
         _is_negated_action_response(latest_text)
         and not confirmed_text
@@ -3269,6 +4069,8 @@ def _analyze_conversation_turn(
     )
 
     return ConversationTurnState(
+        event_frame=event_frame,
+        followup_intent=intent_state,
         latest_text=analyzed_text,
         conversation_history=tuple(conversation_history),
         previous_question=previous_question,
@@ -3277,23 +4079,36 @@ def _analyze_conversation_turn(
             conversation_history,
             topic,
             previous_question,
-        ),
+        ) if not any(row.get("episodeId") for row in episode_records) else len(episode_records),
         after_recall_answer=_is_after_recall_answer(session_records),
         should_change_topic=should_change_topic,
-        is_memory_candidate=bool(memory_evaluation["isValid"]),
+        is_memory_candidate=bool(memory_evaluation["isValid"]) and event_frame.allows_past_evidence,
         needs_memory_detail=(
-            topic is not None
+            has_real_content
+            and has_anchorable_event
+            and topic is not None
             and topic != "PERSON"
             and not memory_evaluation["isValid"]
             and not _is_low_info_response(analyzed_text)
             and not _is_negative_response(analyzed_text)
         ),
+        has_real_content=has_real_content,
+        has_anchorable_event=has_anchorable_event,
+        has_sufficient_detail=(
+            event_frame.allows_past_evidence
+            and (has_anchorable_event or event_frame.mode == EventMode.EXPERIENCED)
+            and intent_state.has_sufficient_detail
+        ),
+        is_unanswered=_is_low_info_response(analyzed_text),
     )
 
 
 def _decide_next_conversation_action(
     state: ConversationTurnState,
     candidate_count: int,
+    *,
+    available_answer_types: tuple[str, ...] | None = None,
+    repeated_unanswered: bool = False,
 ) -> ConversationDecision:
     return decide_conversation_action(
         candidate_count=candidate_count,
@@ -3302,7 +4117,210 @@ def _decide_next_conversation_action(
         needs_memory_detail=state.needs_memory_detail,
         has_followup_context=state.topic is not None,
         consecutive_topic_turns=state.consecutive_topic_turns,
+        has_sufficient_detail=state.has_sufficient_detail,
+        is_unanswered=state.is_unanswered,
+        available_answer_types=available_answer_types,
+        repeated_unanswered=repeated_unanswered,
     )
+
+
+@timed_stage("reply_plan")
+def _plan_next_normal_reply(
+    candidate_count: int,
+    session_records: list[dict] | None = None,
+    latest_text: str = "",
+) -> ConversationReply:
+    engine = os.getenv("MIDAS_DIALOGUE_ENGINE", "legacy").lower()
+    if is_greeting(latest_text) or engine not in {"llm", "llm_reply"}:
+        return _plan_legacy_normal_reply(candidate_count, session_records, latest_text)
+
+    # Fixed questions and recall linkage run in process_voice_reply first.
+    # Evidence proposals are deliberately not passed to scoring or persistence.
+    records = ordered_records(session_records)
+    if engine == "llm_reply":
+        result = propose_reply_only(records, require_continuation=True,
+                                    allow_recall_transition=bool(records and records[-1].get("answerRole") == "RECALL"))
+    else:
+        generate = propose_reply_only if engine == "llm_reply" else propose_dialogue
+        result = generate(records)
+    logger.info("dialogue_engine=%s status=%s reason=%s elapsed_ms=%s",
+                engine, result.status, result.reason, result.elapsed_ms)
+    if result.status == "PROPOSED" and result.proposal is not None:
+        proposal = result.proposal
+        stage = {"FOLLOW_UP": "DEEPEN", "CHANGE_TOPIC": "OPEN",
+                 "ACKNOWLEDGE": "DEEPEN", "CLARIFY": "CLARIFY"}[proposal.action]
+        return ConversationReply(proposal.reply.strip(), stage, None, "llm_" + proposal.action.lower())
+    fallback = _plan_legacy_normal_reply(candidate_count, session_records, latest_text,
+                                         allow_llm_rewrite=False)
+    if engine == "llm_reply" and not conversation_control(latest_text):
+        candidates = fallback_candidates(records, fallback.text, fallback.stage, (
+            (FIXED_TO_FREE_TALK_OPENERS[0], "FOOD"),
+            (FIXED_TO_FREE_TALK_OPENERS[2], "MEDIA"),
+            (FIXED_TO_FREE_TALK_OPENERS[3], "PERSON"),
+            *((text, infer_followup_target(text)) for text in _get_topic_openers()),
+        ))
+        for text, action, target in candidates:
+            if action == "CHANGE_TOPIC":
+                text = _with_topic_change_acknowledgement(text, records)
+            checked = validate_local_voice_reply(records, text, action, target)
+            if checked.status == "PROPOSED":
+                return ConversationReply(text, "DEEPEN" if action == "FOLLOW_UP" else "OPEN", None,
+                                         "voice_continuation_fallback")
+        return ConversationReply("지금 나누고 싶은 이야기가 있으세요?", "OPEN", None,
+                                 "no_grounded_question")
+    return fallback
+
+
+def _plan_legacy_normal_reply(
+    candidate_count: int,
+    session_records: list[dict] | None = None,
+    latest_text: str = "",
+    *, allow_llm_rewrite: bool = True,
+) -> ConversationReply:
+    if is_greeting(latest_text):
+        return ConversationReply(
+            text="안녕하세요. " + _get_fixed_to_free_talk_opener(session_records),
+            stage="OPEN", topic=None, reason="greeting",
+        )
+    state = _analyze_conversation_turn(session_records, latest_text)
+    if not state.after_recall_answer and short_reference(latest_text):
+        reference = resolve_short_reference(
+            session_records or [], latest_text,
+            _fallback_answer_type_for_topic(_normalize_memory_event_topic(state.topic)),
+        )
+        if reference.clarified_before:
+            return ConversationReply("괜찮아요. 이 이야기는 여기까지 해도 돼요.", "OPEN", state.topic, "clarification_exhausted")
+        if reference.source_text:
+            topic = _detect_conversation_topic(reference.source_text, [reference.source_text], "")
+            return ConversationReply("아, 그 이야기였군요.", "CLARIFY", topic, "grounded_reference")
+        return ConversationReply("어떤 것을 말씀하시는지 조금만 더 알려주시겠어요?", "CLARIFY", state.topic, "clarify_reference_once")
+    if not state.after_recall_answer and state.event_frame.mode == EventMode.STATE and is_current_state(state.event_frame.source_text):
+        return ConversationReply("그렇군요. 지금은 편하게 이야기 나눠요.", "OPEN", state.topic, "respond_to_current_state")
+    previous_questions = _get_recent_ai_reply_list(session_records)
+    used_questions = _get_recent_ai_replies(session_records)
+    history = list(state.conversation_history)
+    intent_state = state.followup_intent or build_followup_intent_state(
+        session_records, _build_generation_history(history, state.latest_text),
+        _fallback_answer_type_for_topic(_normalize_memory_event_topic(state.topic)),
+        GENERIC_EPISODE_DETAIL_VALUES,
+    )
+    completed_event = state.has_anchorable_event or state.event_frame.mode == EventMode.EXPERIENCED
+    expected_types = EXPECTED_EPISODE_DETAIL_TYPES_BY_TOPIC.get(
+        _normalize_memory_event_topic(state.topic), (),
+    )
+    if state.event_frame.mode == EventMode.WISH:
+        primary_type = _fallback_answer_type_for_topic(_normalize_memory_event_topic(state.topic)).value
+        expected_types = tuple(dict.fromkeys(slot for slot in (primary_type, "REASON", "PERSON") if slot != "UNKNOWN"))
+    if state.event_frame.mode in {EventMode.WISH, EventMode.PLAN} and extract_memory_action_concepts(state.event_frame.source_text):
+        # A declared intended action is already known even when it is ineligible
+        # for past-event memory extraction.
+        expected_types = tuple(slot for slot in expected_types if slot != "ACTIVITY")
+    missing_types = tuple(
+        slot for slot in expected_types
+        if slot not in intent_state.known_types and slot not in intent_state.attempted_types
+    )
+    recent = ordered_records(session_records)[-2:]
+    repeated_unanswered = (
+        state.is_unanswered and len(recent) == 2
+        and all(not row.get("answerRole") and _is_low_info_response(str(row.get("transcriptText") or ""))
+                for row in recent)
+    )
+    decision = _decide_next_conversation_action(
+        state, candidate_count,
+        available_answer_types=missing_types if completed_event or state.event_frame.mode in {EventMode.WISH, EventMode.PLAN} else None,
+        repeated_unanswered=repeated_unanswered,
+    )
+    stage = decision.stage
+    reason = decision.reason
+    question = None
+
+    if decision.action == ConversationAction.ACKNOWLEDGE:
+        return ConversationReply(
+            text="알겠어요. 잠시 쉬어 가도 괜찮아요.",
+            stage=decision.stage, topic=state.topic, reason=decision.reason,
+        )
+
+    if not state.after_recall_answer and declines_detail(latest_text):
+        return ConversationReply("괜찮아요. 바로 떠오르지 않으면 넘어가도 돼요.", "OPEN", state.topic, "respect_uncertain_answer")
+
+    if is_repeat_reminder(state.latest_text):
+        candidates = _get_contextual_topic_openers(state.topic, session_records, state.latest_text)
+        question = _pick_non_repeated_question(candidates, used_questions, previous_questions, 0)
+        return ConversationReply(
+            text="같은 내용을 다시 여쭤봐서 미안해요. " + (question or "잠시 쉬어도 괜찮아요."),
+            stage="OPEN", topic=state.topic, reason="repair_repeated_question",
+        )
+
+    if decision.action == ConversationAction.FOLLOW_UP:
+        if completed_event:
+            target_types = (decision.target_answer_type,) if decision.target_answer_type else ()
+            content_questions = _get_episode_detail_question_candidates(
+                state.topic, target_types, state.latest_text, history,
+            )
+            candidates = render_event_followups(target_types, content_questions)
+        else:
+            # Wishes, plans and states must not be phrased as completed events.
+            candidates = _get_topic_aware_fallback_candidates(
+                stage, state.event_frame.source_text if state.event_frame.mode in NON_EXPERIENCED else state.latest_text,
+                history, state.previous_question,
+                resolved_topic=state.topic, missing_answer_types=missing_types,
+            )
+            if decision.target_answer_type:
+                candidates = [candidate for candidate in candidates
+                              if infer_followup_target(candidate) == decision.target_answer_type]
+                if not candidates and decision.target_answer_type == "REASON":
+                    candidates = ["어떤 점 때문에 그렇게 하고 싶으세요?"]
+        if state.topic is None:
+            candidates = _get_stage_fallback_candidates(
+                stage, state.latest_text, history, state.has_anchorable_event,
+            )
+        question = _pick_non_repeated_question(
+            [candidate for candidate in candidates if intent_state.allows(candidate)],
+            used_questions, previous_questions, start_index=0,
+        )
+        if question is None:
+            reason = "grounded_followups_exhausted"
+
+    if question is None:
+        stage = "OPEN"
+        preferred = (
+            _get_after_recall_opening_candidates(state.latest_text)
+            if state.after_recall_answer else LOW_BURDEN_TOPIC_CHANGE_QUESTIONS
+        )
+        candidates = _get_contextual_topic_openers(
+            state.topic, session_records, state.latest_text, preferred,
+        )
+        alternatives = _get_contextual_topic_openers(
+            state.topic, session_records, state.latest_text,
+        )
+        candidates = list(dict.fromkeys([*candidates, *alternatives]))
+        question = _pick_non_repeated_question(
+            candidates, used_questions, previous_questions, start_index=0,
+        )
+        if question is None:
+            return ConversationReply(
+                text="잠시 쉬셔도 괜찮아요.", stage="OPEN", topic=state.topic,
+                reason="no_suitable_question",
+            )
+
+    generated = generate_safe_followup_question(
+        conversation_history=_build_generation_history(history, state.latest_text),
+        stage=stage, fallback_question=question, previous_questions=previous_questions,
+    ) if allow_llm_rewrite else {"nextQuestion": question, "shouldChangeTopic": False}
+    # The renderer may phrase a decision, but cannot change the conversation state.
+    reply = (
+        question if generated.get("shouldChangeTopic")
+        else str(generated.get("nextQuestion") or question)
+    )
+    if stage != "OPEN" and intent_state and not intent_state.preserves_target(question, reply):
+        reply = question
+    if stage == "OPEN":
+        reply = (
+            _with_recall_transition_acknowledgement(reply, session_records)
+            if state.after_recall_answer
+            else _with_topic_change_acknowledgement(reply, session_records)
+        )
+    return ConversationReply(text=reply, stage=stage, topic=state.topic, reason=reason)
 
 
 def _get_next_normal_question(
@@ -3310,214 +4328,37 @@ def _get_next_normal_question(
     session_records: list[dict] | None = None,
     latest_text: str = "",
 ) -> str:
-    cycle_index = _count_completed_recall_answers(session_records)
-    question_index = cycle_index + candidate_count
-    used_questions = _get_recent_ai_replies(session_records)
-    previous_questions = _get_recent_ai_reply_list(session_records)
-    state = _analyze_conversation_turn(session_records, latest_text)
-    followup_latest_text = state.latest_text
-    followup_cycle_texts = list(state.conversation_history)
-    previous_question = state.previous_question
-    followup_topic = state.topic
-    after_recall_answer = state.after_recall_answer
-    decision = _decide_next_conversation_action(state, candidate_count)
+    return _plan_next_normal_reply(candidate_count, session_records, latest_text).text
 
-    if decision.action in {
-        ConversationAction.OPEN_TOPIC,
-        ConversationAction.RESUME_AFTER_RECALL,
-    }:
-        latest_record = _get_latest_record(session_records)
-        latest_transcript = str(
-            (latest_record or {}).get("transcriptText") or latest_text or ""
-        )
-        opening_candidates = (
-            _get_after_recall_opening_candidates(latest_transcript)
-            if after_recall_answer
-            else _get_contextual_topic_openers(
-                state.topic,
-                session_records,
-                state.latest_text,
-            )
-        )
-        if after_recall_answer:
-            opening_candidates = _get_contextual_topic_openers(
-                state.topic,
-                session_records,
-                state.latest_text,
-                opening_candidates,
-            )
-        opener_question = _pick_non_repeated_question(
-            candidates=opening_candidates,
-            used_questions=used_questions,
-            previous_questions=previous_questions,
-            start_index=0,
-        )
 
-        if opener_question:
-            generated_opener = generate_safe_followup_question(
-                conversation_history=_build_generation_history(
-                    followup_cycle_texts,
-                    followup_latest_text,
-                ),
-                stage="OPEN",
-                fallback_question=opener_question,
-                previous_questions=previous_questions,
-            )["nextQuestion"]
-
-            if after_recall_answer:
-                return _with_recall_transition_acknowledgement(
-                    generated_opener,
-                    session_records,
-                )
-
-            return generated_opener
-
-    if decision.action == ConversationAction.CHANGE_TOPIC:
-        topic_change_openers = _get_contextual_topic_openers(
-            followup_topic,
-            session_records,
-            followup_latest_text,
-        )
-        opener_question = _pick_non_repeated_question(
-            candidates=topic_change_openers,
-            used_questions=used_questions,
-            previous_questions=previous_questions,
-            start_index=0,
-        )
-
-        if opener_question:
-            generated_opener = generate_safe_followup_question(
-                conversation_history=_build_generation_history(
-                    followup_cycle_texts,
-                    followup_latest_text,
-                ),
-                stage="OPEN",
-                fallback_question=opener_question,
-                previous_questions=previous_questions,
-            )["nextQuestion"]
-
-            return _with_topic_change_acknowledgement(
-                generated_opener,
-                session_records,
-            )
-
-    stage = decision.stage
-    topic_aware_candidates = _get_topic_aware_fallback_candidates(
-        stage,
-        followup_latest_text,
-        followup_cycle_texts,
-        previous_question,
+def _save_next_conversation_reply(
+    record_id: int,
+    session_id: int,
+    candidate_count: int,
+    session_records: list[dict] | None,
+    latest_text: str,
+) -> str:
+    plan = _plan_next_normal_reply(
+        candidate_count,
+        session_records,
+        latest_text=latest_text,
     )
-    if followup_topic is not None and not topic_aware_candidates:
-        topic_change_openers = _get_contextual_topic_openers(
-            followup_topic,
-            session_records,
-            followup_latest_text,
-        )
-        opener_question = _pick_non_repeated_question(
-            candidates=topic_change_openers,
-            used_questions=used_questions,
-            previous_questions=previous_questions,
-            start_index=0,
-        )
-
-        if opener_question:
-            generated_opener = generate_safe_followup_question(
-                conversation_history=_build_generation_history(
-                    followup_cycle_texts,
-                    followup_latest_text,
-                ),
-                stage="OPEN",
-                fallback_question=opener_question,
-                previous_questions=previous_questions,
-            )["nextQuestion"]
-
-            return _with_topic_change_acknowledgement(
-                generated_opener,
-                session_records,
-            )
-
-    if (
-        _is_low_info_response(followup_latest_text)
-        and _count_recent_low_info_responses(
-            _build_generation_history(followup_cycle_texts, followup_latest_text),
-        )
-        >= 2
-    ):
-        topic_aware_candidates = REPEATED_LOW_INFO_QUESTIONS.get(
-            stage,
-            topic_aware_candidates,
-        )
-
-    fallback_candidates = topic_aware_candidates or SAFE_STAGE_FALLBACK_QUESTIONS[stage]
-    fallback_question = _pick_non_repeated_question(
-        candidates=fallback_candidates,
-        used_questions=used_questions,
-        previous_questions=previous_questions,
-        start_index=question_index,
+    metadata = _build_episode_metadata(
+        session_id=session_id,
+        record_id=record_id,
+        session_records=session_records,
+        latest_text=latest_text,
+        stage=plan.stage,
+        resolved_topic=plan.topic,
     )
-
-    if fallback_question:
-        generated_question = generate_safe_followup_question(
-            conversation_history=_build_generation_history(
-                followup_cycle_texts,
-                followup_latest_text,
-            ),
-            stage=stage,
-            fallback_question=fallback_question,
-            previous_questions=previous_questions,
-        )
-
-        if generated_question.get("shouldChangeTopic"):
-            topic_change_openers = _get_contextual_topic_openers(
-                followup_topic,
-                session_records,
-                followup_latest_text,
-            )
-            opener_question = _pick_non_repeated_question(
-                candidates=topic_change_openers,
-                used_questions=used_questions,
-                previous_questions=previous_questions,
-                start_index=0,
-            )
-
-            if opener_question:
-                generated_opener = generate_safe_followup_question(
-                    conversation_history=_build_generation_history(
-                        followup_cycle_texts,
-                        followup_latest_text,
-                    ),
-                    stage="OPEN",
-                    fallback_question=opener_question,
-                    previous_questions=previous_questions,
-                )["nextQuestion"]
-
-                return _with_topic_change_acknowledgement(
-                    generated_opener,
-                    session_records,
-                )
-
-        return generated_question["nextQuestion"]
-
-    opener_question = _pick_non_repeated_question(
-        candidates=_get_contextual_topic_openers(
-            followup_topic,
-            session_records,
-            followup_latest_text,
-        ),
-        used_questions=used_questions,
-        previous_questions=previous_questions,
-        start_index=0,
+    _save_ai_reply(
+        record_id=record_id,
+        reply_text=plan.text,
+        episode_id=metadata["episodeId"],
+        conversation_topic=metadata["conversationTopic"],
+        conversation_stage=metadata["conversationStage"],
     )
-
-    if opener_question:
-        return opener_question
-
-    return _pick_least_recent_question(
-        candidates=_get_topic_openers(),
-        previous_questions=previous_questions,
-        start_index=question_index,
-    )
+    return plan.text
 
 
 def _get_current_transcript(
@@ -3526,7 +4367,7 @@ def _get_current_transcript(
     fallback_text: str = "",
 ) -> str:
     for record in session_records:
-        if record.get("recordId") == current_record_id:
+        if int(record.get("recordId") or 0) == int(current_record_id):
             return record.get("transcriptText") or fallback_text
 
     return fallback_text
@@ -3537,7 +4378,7 @@ def _get_record_by_id(
     record_id: int,
 ) -> dict | None:
     for record in session_records:
-        if record.get("recordId") == record_id:
+        if int(record.get("recordId") or 0) == int(record_id):
             return record
 
     return None
@@ -3581,43 +4422,13 @@ def _with_current_answer_role(
 def _find_pending_recall_question_id(
     session_records: list[dict],
     current_record_id: int,
+    recall_questions: list[dict] | None = None,
 ) -> int | None:
-    """
-    아직 답변되지 않은 회상 질문을 찾는다.
-    INITIAL은 회상 질문의 기준 답변이고,
-    같은 recallQuestionId를 가진 RECALL이 아직 없으면 현재 답변을 RECALL로 연결한다.
-    """
-    initial_question_ids = []
-    recalled_question_ids = set()
-
-    sorted_records = sorted(
-        session_records,
-        key=lambda record: int(record.get("recordId") or 0),
-    )
-
-    for record in sorted_records:
-        role = str(record.get("answerRole") or "").upper()
-        question_id = record.get("recallQuestionId")
-        record_id = record.get("recordId")
-
-        if question_id is None:
-            continue
-
-        question_id = int(question_id)
-
-        if role == "RECALL":
-            recalled_question_ids.add(question_id)
-
-        if role == "INITIAL" and record_id != current_record_id:
-            initial_question_ids.append(question_id)
-
-    for question_id in reversed(initial_question_ids):
-        if question_id not in recalled_question_ids:
-            return question_id
-
-    return None
+    return select_pending_recall(session_records, current_record_id, recall_questions)
 
 
+@serialize_session
+@serialize_record
 def process_voice_reply(
     record_id: int,
     session_id: int,
@@ -3626,10 +4437,11 @@ def process_voice_reply(
     speech_risk_score: float = 0.0,
     run_realtime_analysis: bool = False,
 ):
+    started_at = perf_counter()
     logger.info("AI 답변 및 매핑 시작: recordId=%s sessionId=%s", record_id, session_id)
 
     try:
-        session_records = _fetch_session_records(session_id)
+        session_records = records_through_current(_fetch_session_records(session_id), record_id)
 
         if not session_records:
             logger.error(
@@ -3653,13 +4465,44 @@ def process_voice_reply(
             (current_record or {}).get("answerRole") or ""
         ).upper()
 
+        current_text = _get_current_transcript(session_records, record_id, transcript_text)
+        control = conversation_control(current_text)
+        if control == "PAUSE":
+            _save_ai_reply(record_id=record_id, reply_text="네, 잠시 쉬어요. 이야기해 주셔서 고마워요.",
+                           conversation_stage="PAUSED")
+            return
+
+        if current_answer_role == "RECALL":
+            if current_record.get("recallQuestionId") is None:
+                raise DialogueStateUnavailable("linked_recall_question_missing")
+            # The answer link committed before a failed reply write. Resume only
+            # the continuation, without selecting another question or grading twice.
+            _save_next_conversation_reply(
+                record_id=record_id,
+                session_id=session_id,
+                candidate_count=0,
+                session_records=session_records,
+                latest_text=current_text,
+            )
+            return
+
         if current_answer_role == "INITIAL":
             current_question_id = (current_record or {}).get("recallQuestionId")
-            question_text = (
-                _find_recall_question_text(user_id, int(current_question_id))
-                if current_question_id is not None
-                else ""
-            )
+            if current_question_id is None:
+                raise DialogueStateUnavailable("initial_recall_question_missing")
+            matching = [q for q in _fetch_recall_questions(user_id)
+                        if str(q.get("questionId")) == str(current_question_id)]
+            if len(matching) != 1:
+                raise DialogueStateUnavailable("initial_recall_question_unavailable")
+            question = matching[0]
+            question_text = str(question.get("questionText") or "").strip()
+
+            if not recall_is_due(question, turn_position(session_records, record_id)):
+                _save_next_conversation_reply(
+                    record_id=record_id, session_id=session_id, candidate_count=0,
+                    session_records=session_records, latest_text=current_text,
+                )
+                return
 
             if not question_text:
                 logger.error(
@@ -3669,7 +4512,8 @@ def process_voice_reply(
                 )
                 return
 
-            _save_ai_reply(record_id=record_id, reply_text=question_text)
+            _save_ai_reply(record_id=record_id, reply_text=question_text,
+                           presented_recall_question_id=int(current_question_id))
             logger.info(
                 "INITIAL 연결 후 누락된 회상 질문 저장 복구: recordId=%s questionId=%s",
                 record_id,
@@ -3695,10 +4539,11 @@ def process_voice_reply(
 
             # 온보딩 중 5번째까지 다 왔거나, 온보딩 이후 하루 1문항을 이미 답한 경우 —
             # 자유대화로 넘어간다.
-            _mark_fixed_questions_done_today(
+            if not _mark_fixed_questions_done_today(
                 user_id,
                 onboarding=not fixed_status["onboardingDone"],
-            )
+            ):
+                return
             _save_ai_reply(
                 record_id=record_id,
                 reply_text=_get_fixed_to_free_talk_opener(session_records),
@@ -3707,16 +4552,36 @@ def process_voice_reply(
             return
 
         # 1. 직전 회상 질문에 대한 답변이면 RECALL로 연결하고 자유대화로 복귀한다.
+        recall_questions = _fetch_recall_questions(user_id)
         pending_recall_question_id = _find_pending_recall_question_id(
             session_records=session_records,
             current_record_id=record_id,
+            recall_questions=recall_questions,
         )
 
-        if pending_recall_question_id is not None:
-            pending_question_text = _find_recall_question_text(
-                user_id,
-                pending_recall_question_id,
+        if control == "SKIP":
+            pending_question = next((question for question in recall_questions
+                                     if str(question.get("questionId")) == str(pending_recall_question_id)), {})
+            skipped_presented_recall = pending_recall_question_id is not None and _was_recall_question_presented(
+                session_records=session_records,
+                current_record_id=record_id,
+                recall_question_id=pending_recall_question_id,
+                question_text=str(pending_question.get("questionText") or ""),
             )
+            _save_ai_reply(
+                record_id=record_id,
+                reply_text="네, 다른 이야기로 넘어갈게요. " + _get_fixed_to_free_talk_opener(session_records),
+                conversation_stage="RECALL_SKIPPED" if skipped_presented_recall else "TOPIC_SKIPPED",
+            )
+            return
+
+        if pending_recall_question_id is not None:
+            question_meta = next((question for question in recall_questions
+                                  if str(question.get("questionId")) == str(pending_recall_question_id)),
+                                 {"questionId": pending_recall_question_id})
+            pending_question_text = str(question_meta.get("questionText") or "").strip()
+            if not pending_question_text:
+                pending_question_text = _find_recall_question_text(user_id, pending_recall_question_id)
 
             if not pending_question_text:
                 logger.error(
@@ -3735,12 +4600,42 @@ def process_voice_reply(
                 _save_ai_reply(
                     record_id=record_id,
                     reply_text=pending_question_text,
+                    presented_recall_question_id=pending_recall_question_id,
                 )
                 logger.warning(
                     "표시되지 않은 회상 질문을 먼저 복구하고 현재 답변의 RECALL 연결은 보류: "
                     "recordId=%s questionId=%s",
                     record_id,
                     pending_recall_question_id,
+                )
+                return
+
+            current_text = _get_current_transcript(session_records, record_id, transcript_text)
+            response_intent = classify_recall_response(current_text)
+            if response_intent == RecallResponseIntent.DISPUTE:
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text="제가 앞선 말씀을 잘못 연결했을 수 있겠네요. 이 질문은 넘어갈게요. "
+                               + _get_fixed_to_free_talk_opener(session_records),
+                    conversation_stage="RECALL_SKIPPED",
+                )
+                return
+            if response_intent == RecallResponseIntent.CLARIFY:
+                previous = ordered_records(session_records)
+                current_index = next((i for i, row in enumerate(previous) if row.get("recordId") == record_id), 0)
+                if current_index and previous[current_index - 1].get("conversationStage") == "RECALL_CLARIFY":
+                    _save_ai_reply(
+                        record_id=record_id,
+                        reply_text="제가 질문을 분명하게 드리지 못했네요. 다른 이야기로 넘어갈게요. "
+                                   + _get_fixed_to_free_talk_opener(session_records),
+                        conversation_stage="RECALL_SKIPPED",
+                    )
+                    return
+                _save_ai_reply(
+                    record_id=record_id,
+                    reply_text=clarify_recall_question(question_meta, pending_question_text, session_records),
+                    conversation_stage="RECALL_CLARIFY",
+                    presented_recall_question_id=pending_recall_question_id,
                 )
                 return
 
@@ -3782,16 +4677,15 @@ def process_voice_reply(
                 recall_question_id=pending_recall_question_id,
             )
 
-            _save_ai_reply(
+            _save_next_conversation_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(
-                    0,
+                session_id=session_id,
+                candidate_count=0,
+                session_records=records_after_recall,
+                latest_text=_get_current_transcript(
                     records_after_recall,
-                    latest_text=_get_current_transcript(
-                        records_after_recall,
-                        record_id,
-                        transcript_text,
-                    ),
+                    record_id,
+                    transcript_text,
                 ),
             )
             return
@@ -3820,7 +4714,8 @@ def process_voice_reply(
                 "온보딩 이후 하루 1회 고정 질문 완료: index=%s. 자유대화 단계로 전환.",
                 daily_index,
             )
-            _mark_fixed_questions_done_today(user_id, onboarding=False)
+            if not _mark_fixed_questions_done_today(user_id, onboarding=False):
+                return
 
             _save_ai_reply(
                 record_id=record_id,
@@ -3851,7 +4746,8 @@ def process_voice_reply(
                     return
 
                 logger.info("초기 고정 질문 5개(온보딩) 완료. 자유대화 단계로 전환.")
-                _mark_fixed_questions_done_today(user_id, onboarding=True)
+                if not _mark_fixed_questions_done_today(user_id, onboarding=True):
+                    return
 
                 _save_ai_reply(
                     record_id=record_id,
@@ -3859,11 +4755,16 @@ def process_voice_reply(
                 )
                 return
 
-        # 3. 충분히 축적되고 한 턴 이상 지난 memoryPoint가 있으면 회상 질문 생성
-        updated_records = _fetch_session_records(session_id)
+        # Unresolved references need repair first. Low-information/current-state
+        # answers are not new evidence, but must not starve an older memory.
+        if is_repeat_reminder(current_text) or short_reference(current_text):
+            _save_next_conversation_reply(record_id, session_id, 0, session_records, current_text)
+            return
 
-        if not updated_records:
-            updated_records = session_records
+        # 3. 충분히 축적되고 한 턴 이상 지난 memoryPoint가 있으면 회상 질문 생성
+        # No writes occur on this path before candidate selection. Reuse the
+        # turn-bounded snapshot instead of paying for a second HTTP read.
+        updated_records = session_records
 
         transcripts = _extract_recall_candidate_transcripts(updated_records)
         recall_candidate_context = _get_structured_recall_ready_context(
@@ -3872,21 +4773,30 @@ def process_voice_reply(
                 updated_records
             ),
         )
+        if recall_candidate_context.memory_candidates:
+            used_clue_ids = _get_used_recall_clue_ids(recall_questions)
+            if used_clue_ids:
+                recall_candidate_context = _get_structured_recall_ready_context(
+                    updated_records,
+                    previous_question=_get_question_answered_by_latest_record(
+                        updated_records
+                    ),
+                    used_clue_ids=used_clue_ids,
+                )
         recall_ready_history = list(
             recall_candidate_context.conversation_history
         )
 
         if not recall_ready_history:
-            _save_ai_reply(
+            _save_next_conversation_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(
-                    len(transcripts),
+                session_id=session_id,
+                candidate_count=len(transcripts),
+                session_records=updated_records,
+                latest_text=_get_current_transcript(
                     updated_records,
-                    latest_text=_get_current_transcript(
-                        updated_records,
-                        record_id,
-                        transcript_text,
-                    ),
+                    record_id,
+                    transcript_text,
                 ),
             )
             logger.info(
@@ -3896,13 +4806,35 @@ def process_voice_reply(
             )
             return
 
+        current_turn_order = turn_position(updated_records, record_id)
+        ask_after_turn = scheduled_recall_turn(
+            current_turn_order, prior_wait_turns=recall_candidate_context.prior_wait_turns,
+            prior_wait_seconds=recall_candidate_context.prior_wait_seconds,
+        )
+        latest_conversation_text = _get_current_transcript(
+            updated_records,
+            record_id,
+            transcript_text,
+        )
+        recall_episode_metadata = _build_episode_metadata(
+            session_id=session_id,
+            record_id=record_id,
+            session_records=updated_records,
+            latest_text=latest_conversation_text,
+            stage="READY_FOR_RECALL",
+        )
+
         try:
             result = generate_and_save_recall_question(
                 user_id=user_id,
                 conversation_history=recall_ready_history,
+                **session_recall_history(updated_records, recall_questions),
                 memory_candidates=list(
                     recall_candidate_context.memory_candidates
                 ),
+                episode_id=recall_episode_metadata["episodeId"],
+                recall_status="PENDING_RECALL",
+                ask_after_turn=ask_after_turn,
                 base_url=SPRING_BASE_URL,
             )
         except Exception as e:
@@ -3917,16 +4849,15 @@ def process_voice_reply(
         source_text = result.get("sourceText", "")
 
         if result.get("status") != "CREATED" or not reply_text:
-            _save_ai_reply(
+            _save_next_conversation_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(
-                    len(transcripts),
+                session_id=session_id,
+                candidate_count=len(transcripts),
+                session_records=updated_records,
+                latest_text=_get_current_transcript(
                     updated_records,
-                    latest_text=_get_current_transcript(
-                        updated_records,
-                        record_id,
-                        transcript_text,
-                    ),
+                    record_id,
+                    transcript_text,
                 ),
             )
             logger.info("회상 질문 생성 실패 또는 SKIPPED. 일반 질문으로 대체: %s", result.get("reason"))
@@ -3951,16 +4882,15 @@ def process_voice_reply(
                     "일반 질문으로 복귀: candidate=%s",
                     result_candidate,
                 )
-                _save_ai_reply(
+                _save_next_conversation_reply(
                     record_id=record_id,
-                    reply_text=_get_next_normal_question(
-                        len(transcripts),
+                    session_id=session_id,
+                    candidate_count=len(transcripts),
+                    session_records=updated_records,
+                    latest_text=_get_current_transcript(
                         updated_records,
-                        latest_text=_get_current_transcript(
-                            updated_records,
-                            record_id,
-                            transcript_text,
-                        ),
+                        record_id,
+                        transcript_text,
                     ),
                 )
                 return
@@ -3985,16 +4915,15 @@ def process_voice_reply(
                 recall_question_id,
                 source_text,
             )
-            _save_ai_reply(
+            _save_next_conversation_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(
-                    len(transcripts),
+                session_id=session_id,
+                candidate_count=len(transcripts),
+                session_records=updated_records,
+                latest_text=_get_current_transcript(
                     updated_records,
-                    latest_text=_get_current_transcript(
-                        updated_records,
-                        record_id,
-                        transcript_text,
-                    ),
+                    record_id,
+                    transcript_text,
                 ),
             )
             return
@@ -4012,32 +4941,44 @@ def process_voice_reply(
                 recall_question_id,
                 source_record_id,
             )
-            _save_ai_reply(
+            _save_next_conversation_reply(
                 record_id=record_id,
-                reply_text=_get_next_normal_question(
-                    len(transcripts),
+                session_id=session_id,
+                candidate_count=len(transcripts),
+                session_records=updated_records,
+                latest_text=_get_current_transcript(
                     updated_records,
-                    latest_text=_get_current_transcript(
-                        updated_records,
-                        record_id,
-                        transcript_text,
-                    ),
+                    record_id,
+                    transcript_text,
                 ),
             )
             return
 
-        _save_ai_reply(
+        if ask_after_turn <= current_turn_order:
+            _save_ai_reply(record_id=record_id, reply_text=reply_text,
+                           presented_recall_question_id=recall_question_id)
+            logger.info("recall_presented reason=elapsed_memory_budget questionId=%s recordId=%s",
+                        recall_question_id, record_id)
+            return
+
+        _save_next_conversation_reply(
             record_id=record_id,
-            reply_text=_with_recall_question_acknowledgement(
-                reply_text,
+            session_id=session_id,
+            candidate_count=len(transcripts),
+            session_records=updated_records,
+            latest_text=_get_current_transcript(
                 updated_records,
+                record_id,
+                transcript_text,
             ),
         )
 
         logger.info(
-            "자연 회상 질문 저장 및 INITIAL 연결 완료: questionId=%s sourceRecordId=%s",
+            "자연 회상 질문 저장 및 INITIAL 연결 완료. 질문은 지연 노출 대기: "
+            "questionId=%s sourceRecordId=%s askAfterTurn=%s",
             recall_question_id,
             source_record_id,
+            ask_after_turn,
         )
 
     except Exception as e:
@@ -4045,3 +4986,6 @@ def process_voice_reply(
             "process_voice_reply 파이프라인 처리 중 치명적 예외 발생: %s",
             str(e),
         )
+    finally:
+        logger.info("dialogue_processing_ms=%.1f recordId=%s sessionId=%s",
+                    (perf_counter() - started_at) * 1000, record_id, session_id)

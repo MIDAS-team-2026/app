@@ -70,9 +70,9 @@ class AiAnalysisServiceTest {
         dto.setTextAnalysis(text);
 
         when(audioRecordRepository.findByIdForUpdate(recordId)).thenReturn(Optional.of(record));
-        when(speechAnalysisResultRepository.findByAudioRecord_Id(recordId))
+        when(speechAnalysisResultRepository.findFirstByAudioRecord_IdOrderByIdDesc(recordId))
                 .thenReturn(Optional.of(existingSpeech));
-        when(textAnalysisResultRepository.findByAudioRecord_Id(recordId))
+        when(textAnalysisResultRepository.findFirstByAudioRecord_IdOrderByIdDesc(recordId))
                 .thenReturn(Optional.of(existingText));
 
         aiAnalysisService.saveRecordAnalysis(dto);

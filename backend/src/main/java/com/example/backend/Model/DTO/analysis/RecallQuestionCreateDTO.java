@@ -11,4 +11,11 @@ public class RecallQuestionCreateDTO {
     private String questionType;
     private String category;
     private String expectedAnswer;
+    private String eventId;
+    private String clueId;
+    private Long sourceRecordId;
+    private String answerType;
+    private String episodeId;
+    private String recallStatus;
+    private Integer askAfterTurn;
 }

@@ -8,5 +8,6 @@ import java.util.Optional;
 
 @Repository
 public interface TextAnalysisResultRepository extends JpaRepository<TextAnalysisResult, Long> {
+    java.util.Optional<TextAnalysisResult> findFirstByAudioRecord_IdOrderByIdDesc(Long recordId);
     Optional<TextAnalysisResult> findByAudioRecord_Id(Long recordId);
 }

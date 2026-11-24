@@ -29,6 +29,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -60,7 +63,7 @@ public class AiAnalysisService {
         if (dto.getSpeechAnalysis() != null) {
             RecordAnalysisDTO.SpeechAnalysisData speechDto = dto.getSpeechAnalysis();
             SpeechAnalysisResult speechResult = speechAnalysisResultRepository
-                    .findByAudioRecord_Id(record.getId())
+                    .findFirstByAudioRecord_IdOrderByIdDesc(dto.getRecordId())
                     .orElseGet(SpeechAnalysisResult::new);
 
             speechResult.setAudioRecord(record);
@@ -134,7 +137,7 @@ public class AiAnalysisService {
         if (dto.getTextAnalysis() != null) {
             RecordAnalysisDTO.TextAnalysisData textDto = dto.getTextAnalysis();
             TextAnalysisResult textResult = textAnalysisResultRepository
-                    .findByAudioRecord_Id(record.getId())
+                    .findFirstByAudioRecord_IdOrderByIdDesc(dto.getRecordId())
                     .orElseGet(TextAnalysisResult::new);
 
             textResult.setAudioRecord(record);
@@ -155,24 +158,34 @@ public class AiAnalysisService {
 
     @Transactional
     public void saveRecallResult(RecallAnalysisDTO dto) {
-        RecallAnalysisResult result = new RecallAnalysisResult();
+        String status = evaluationStatus(dto.getEvaluationStatus(), false);
+        boolean withheld = isWithheld(status);
+        if ("SCORED".equals(status)) requireScore(dto.getFinalRecallScore());
+        AudioRecord current = audioRecordRepository.findByIdForUpdate(dto.getCurrentRecordId())
+                .orElseThrow(() -> new IllegalArgumentException("Current recording not found"));
+        RecallAnalysisResult result = recallAnalysisRepository
+                .findFirstByCurrentRecord_IdAndRecallQuestion_IdOrderByIdDesc(
+                        dto.getCurrentRecordId(), dto.getRecallQuestionId())
+                .orElseGet(RecallAnalysisResult::new);
 
         result.setRecallQuestion(recallQuestionRepository.findById(dto.getRecallQuestionId())
                 .orElseThrow(() -> new IllegalArgumentException("질문을 찾을 수 없습니다: " + dto.getRecallQuestionId())));
 
+        result.setPastRecord(null);
         if (dto.getPastRecordId() != null && dto.getPastRecordId() > 0) {
             audioRecordRepository.findById(dto.getPastRecordId())
                     .ifPresent(result::setPastRecord);
         }
 
-        result.setCurrentRecord(audioRecordRepository.findById(dto.getCurrentRecordId())
-                .orElseThrow(() -> new IllegalArgumentException("현재 녹음 기록을 찾을 수 없습니다: " + dto.getCurrentRecordId())));
+        result.setCurrentRecord(current);
 
-        result.setSimilarityScore(dto.getSimilarityScore());
-        result.setKeywordScore(dto.getKeywordScore());
-        result.setFinalRecallScore(dto.getFinalRecallScore());
-        result.setAiLabel(dto.getAiLabel());
-        result.setAiConfidence(dto.getAiConfidence());
+        result.setEvaluationStatus(status);
+        result.setEvaluationReason(evaluationReason(dto.getEvaluationReason()));
+        result.setSimilarityScore(withheld ? null : dto.getSimilarityScore());
+        result.setKeywordScore(withheld ? null : dto.getKeywordScore());
+        result.setFinalRecallScore(withheld ? null : dto.getFinalRecallScore());
+        result.setAiLabel(withheld ? status : dto.getAiLabel());
+        result.setAiConfidence(withheld ? null : dto.getAiConfidence());
 
         recallAnalysisRepository.save(result);
         log.info("회상 분석 결과 저장 완료 recallQuestionId={} currentRecordId={}",
@@ -181,21 +194,39 @@ public class AiAnalysisService {
 
     @Transactional
     public void saveFinalRiskResult(RiskAnalysisDTO dto) {
-        ChatSession session = chatSessionRepository.findById(dto.getSessionId())
+        String status = evaluationStatus(dto.getEvaluationStatus(), true);
+        boolean withheld = isWithheld(status);
+        if ("SCORED".equals(status) || "PARTIAL".equals(status)) {
+            requireScore(dto.getFinalRiskScore());
+            requireScore(dto.getTextScore());
+        }
+        if (dto.getEvaluatedRecallCount() != null && dto.getEvaluatedRecallCount() < 0
+                || dto.getTotalRecallCount() != null && dto.getTotalRecallCount() < 0
+                || dto.getEvaluatedRecallCount() != null && dto.getTotalRecallCount() != null
+                   && dto.getEvaluatedRecallCount() > dto.getTotalRecallCount()) {
+            throw new IllegalArgumentException("Invalid recall evidence counts");
+        }
+        ChatSession session = chatSessionRepository.findByIdForUpdate(dto.getSessionId())
                 .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
 
         RiskAnalysisResult result = riskAnalysisRepository.findByChatSession_Id(dto.getSessionId())
                 .orElseGet(RiskAnalysisResult::new);
+        boolean previouslyHigh = !isWithheld(result.getEvaluationStatus())
+                && result.getFinalRiskScore() != null && result.getFinalRiskScore() >= 60.0;
         result.setChatSession(session);
+        result.setEvaluationStatus(status);
+        result.setEvaluationReason(evaluationReason(dto.getEvaluationReason()));
+        result.setEvaluatedRecallCount(dto.getEvaluatedRecallCount());
+        result.setTotalRecallCount(dto.getTotalRecallCount());
         result.setSpeechScore(dto.getSpeechScore());
-        result.setTextScore(dto.getTextScore());
-        result.setRecallScore(dto.getRecallScore());
-        result.setFinalRiskScore(dto.getFinalRiskScore());
-        result.setRiskLevel(dto.getRiskLevel());
+        result.setTextScore(withheld ? null : dto.getTextScore());
+        result.setRecallScore(withheld ? null : dto.getRecallScore());
+        result.setFinalRiskScore(withheld ? null : dto.getFinalRiskScore());
+        result.setRiskLevel(withheld ? null : dto.getRiskLevel());
 
         riskAnalysisRepository.save(result);
 
-        if (dto.getFinalRiskScore() >= 60.0) {
+        if (!previouslyHigh && !withheld && result.getFinalRiskScore() != null && result.getFinalRiskScore() >= 60.0) {
             User patient = session.getUser();
             String title = "인지 건강 위험 알림";
             String content = String.format("[%s] 님의 오늘 분석 점수가 %.1f점으로 '위험' 단계입니다. 상세 리포트를 확인해주세요.",
@@ -261,6 +292,7 @@ public class AiAnalysisService {
             LocalDateTime end   = start.plusDays(1);
             List<RiskAnalysisResult> dayResults = riskAnalysisRepository
                     .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+            dayResults = validDailyResults(dayResults);
             if (dayResults.isEmpty()) break;
             streak++;
             date = date.minusDays(1);
@@ -271,8 +303,8 @@ public class AiAnalysisService {
     private boolean hasResultOn(Integer userId, LocalDate date) {
         LocalDateTime start = date.atStartOfDay();
         LocalDateTime end = start.plusDays(1);
-        return !riskAnalysisRepository
-                .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end)
+        return !validDailyResults(riskAnalysisRepository
+                .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end))
                 .isEmpty();
     }
 
@@ -288,14 +320,15 @@ public class AiAnalysisService {
 
             List<RiskAnalysisResult> dayResults = riskAnalysisRepository
                     .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+            dayResults = validDailyResults(dayResults);
 
             if (dayResults.isEmpty()) {
                 result.add(new DailyScoreDTO(date, null, null, null, null, null, 0));
             } else {
                 float avgRisk   = avg(dayResults, r -> r.getFinalRiskScore());
-                float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
-                float avgText   = avg(dayResults, r -> r.getTextScore());
-                float avgRecall = avg(dayResults, r -> r.getRecallScore());
+                Float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
+                Float avgText   = avg(dayResults, r -> r.getTextScore());
+                Float avgRecall = avg(dayResults, r -> r.getRecallScore());
                 result.add(new DailyScoreDTO(
                         date, avgRisk, resolveRiskLevel(avgRisk),
                         avgSpeech, avgText, avgRecall, dayResults.size()));
@@ -311,14 +344,15 @@ public class AiAnalysisService {
 
         List<RiskAnalysisResult> dayResults = riskAnalysisRepository
                 .findByChatSession_User_IdAndAnalyzedAtBetween(userId, start, end);
+        dayResults = validDailyResults(dayResults);
 
         if (dayResults.isEmpty())
             throw new IllegalArgumentException("해당 날짜의 분석 결과가 없습니다.");
 
         float avgRisk   = avg(dayResults, r -> r.getFinalRiskScore());
-        float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
-        float avgText   = avg(dayResults, r -> r.getTextScore());
-        float avgRecall = avg(dayResults, r -> r.getRecallScore());
+        Float avgSpeech = avg(dayResults, r -> r.getSpeechScore());
+        Float avgText   = avg(dayResults, r -> r.getTextScore());
+        Float avgRecall = avg(dayResults, r -> r.getRecallScore());
         return new DailyScoreDTO(
                 date, avgRisk, resolveRiskLevel(avgRisk),
                 avgSpeech, avgText, avgRecall, dayResults.size());
@@ -331,14 +365,15 @@ public class AiAnalysisService {
 
         List<RiskAnalysisResult> todayResults = riskAnalysisRepository
                 .findByChatSession_User_IdAndAnalyzedAtBetween(userId, startOfDay, endOfDay);
+        todayResults = validDailyResults(todayResults);
 
         if (todayResults.isEmpty())
             throw new IllegalArgumentException("오늘 분석 결과가 없습니다.");
 
         float avgRisk    = avg(todayResults, r -> r.getFinalRiskScore());
-        float avgSpeech  = avg(todayResults, r -> r.getSpeechScore());
-        float avgText    = avg(todayResults, r -> r.getTextScore());
-        float avgRecall  = avg(todayResults, r -> r.getRecallScore());
+        Float avgSpeech  = avg(todayResults, r -> r.getSpeechScore());
+        Float avgText    = avg(todayResults, r -> r.getTextScore());
+        Float avgRecall  = avg(todayResults, r -> r.getRecallScore());
         String riskLevel = resolveRiskLevel(avgRisk);
 
         return SessionAnalysisSummaryResponseDTO.builder()
@@ -352,12 +387,77 @@ public class AiAnalysisService {
                 .build();
     }
 
-    private float avg(List<RiskAnalysisResult> list,
+    private List<RiskAnalysisResult> validDailyResults(List<RiskAnalysisResult> results) {
+        return results.stream()
+                .filter(this::isValidDailyResult)
+                .collect(Collectors.toList());
+    }
+
+    private boolean isValidDailyResult(RiskAnalysisResult result) {
+        if (result == null || result.getChatSession() == null) {
+            return false;
+        }
+
+        if (result.getChatSession().getEndedAt() == null) {
+            return false;
+        }
+
+        Float finalRiskScore = result.getFinalRiskScore();
+
+        if (finalRiskScore == null || !Float.isFinite(finalRiskScore)) {
+            return false;
+        }
+
+        if (result.getEvaluationStatus() != null) {
+            return Set.of("SCORED", "PARTIAL").contains(result.getEvaluationStatus());
+        }
+
+        boolean allScoresZero =
+                isZero(finalRiskScore)
+                        && isZero(result.getSpeechScore())
+                        && isZero(result.getTextScore())
+                        && isZero(result.getRecallScore());
+
+        return !allScoresZero;
+    }
+
+    private boolean isZero(Float score) {
+        return score != null && Math.abs(score) < 0.0001f;
+    }
+
+    private Float avg(List<RiskAnalysisResult> list,
                       java.util.function.Function<RiskAnalysisResult, Float> getter) {
-        return (float) list.stream()
-                .mapToDouble(r -> getter.apply(r) != null ? getter.apply(r) : 0f)
-                .average()
-                .orElse(0.0);
+        java.util.OptionalDouble value = list.stream().map(getter)
+                .filter(Objects::nonNull).filter(Float::isFinite)
+                .mapToDouble(Float::doubleValue).average();
+        return value.isPresent() ? (float) value.getAsDouble() : null;
+    }
+
+    private String evaluationStatus(String value, boolean allowPartial) {
+        if (value == null || value.isBlank()) return null;
+        String status = value.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("SCORED", "REVIEW_REQUIRED", "NOT_EVALUABLE").contains(status)
+                && !(allowPartial && "PARTIAL".equals(status))) {
+            throw new IllegalArgumentException("Unknown evaluation status");
+        }
+        return status;
+    }
+
+    private boolean isWithheld(String status) {
+        return "REVIEW_REQUIRED".equals(status) || "NOT_EVALUABLE".equals(status);
+    }
+
+    private String evaluationReason(String value) {
+        if (value != null && value.length() > 500) {
+            throw new IllegalArgumentException("Evaluation reason exceeds 500 characters");
+        }
+        return value;
+    }
+
+    private void requireScore(Float value) {
+        if (value == null || !Float.isFinite(value) || value < 0 || value > 100) {
+            throw new IllegalArgumentException("Scored evaluations require a finite score between 0 and 100");
+        }
     }
 
     private String resolveRiskLevel(float score) {

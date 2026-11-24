@@ -6,4 +6,6 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface RecallAnalysisRepository extends JpaRepository<RecallAnalysisResult, Long> {
+    java.util.Optional<RecallAnalysisResult> findFirstByCurrentRecord_IdAndRecallQuestion_IdOrderByIdDesc(
+            Long recordId, Long questionId);
 }

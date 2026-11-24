@@ -11,4 +11,8 @@ import lombok.Setter;
 public class AiReplyRequestDTO {
     private Long recordId;
     private String replyText;
+    private String episodeId;
+    private String conversationTopic;
+    private String conversationStage;
+    private Long presentedRecallQuestionId;
 }

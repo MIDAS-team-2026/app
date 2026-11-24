@@ -166,7 +166,7 @@ def compact_speech_result(result):
     return flat
 
 
-def run_record_mode(args):
+def run_record_mode(args, *, analysis_result=None, strict_delivery=False):
     """
     record 1개 음성/STT 분석 모드.
     Java 백엔드가 실제 recordId, sessionId, STT 결과, durationSec를 넘길 때 사용한다.
@@ -178,7 +178,7 @@ def run_record_mode(args):
     if args.audio_path:
         logger.info("audio_path exists=%s path=%s", os.path.exists(args.audio_path), args.audio_path)
 
-    result = analyze_user_turn(
+    result = analysis_result if analysis_result is not None else analyze_user_turn(
         record_id=args.record_id,
         session_id=args.session_id,
         audio_path=args.audio_path,
@@ -218,33 +218,34 @@ def run_record_mode(args):
     }
 
     # 🔥 추가: 분석 완료 직후 Spring으로 결과를 자동 전송
-    send_analysis_to_spring(response)
+    send_analysis_to_spring(response, strict=strict_delivery)
 
     return response
 
-def send_analysis_to_spring(result_dict):
-    if not result_dict:
+def send_analysis_to_spring(result_dict, *, strict=True):
+    if not result_dict or result_dict.get("success") is False:
         return
 
-    record_analysis = result_dict.get("recordAnalysis")
-    if record_analysis:
-        print("===== RECORD PAYLOAD =====")
-        print(json.dumps(record_analysis, indent=2, ensure_ascii=False))
-        _post_to_spring_with_retry(
-            url=f"{SPRING_BASE_URL}/api/ai/analysis/record",
-            payload=record_analysis,
-            payload_name="recordAnalysis",
-        )
+    try:
+        record_analysis = result_dict.get("recordAnalysis")
+        if record_analysis:
+            _post_to_spring_with_retry(
+                url=f"{SPRING_BASE_URL}/api/ai/analysis/record",
+                payload=record_analysis,
+                payload_name="recordAnalysis",
+            )
 
-    final_risk_result = result_dict.get("finalRiskResult")
-    if final_risk_result:
-        print("===== RISK PAYLOAD =====")
-        print(json.dumps(final_risk_result, indent=2, ensure_ascii=False))
-        _post_to_spring_with_retry(
-            url=f"{SPRING_BASE_URL}/api/ai/analysis/risk",
-            payload=final_risk_result,
-            payload_name="finalRiskResult",
-        )
+        final_risk_result = result_dict.get("finalRiskResult")
+        if final_risk_result:
+            _post_to_spring_with_retry(
+                url=f"{SPRING_BASE_URL}/api/ai/analysis/risk",
+                payload=final_risk_result,
+                payload_name="finalRiskResult",
+            )
+    except requests.RequestException:
+        if strict:
+            raise
+        logger.error("Spring analysis delivery failed after retry handling")
 
 
 def _post_to_spring_with_retry(url, payload, payload_name):

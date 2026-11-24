@@ -17,6 +17,42 @@ class MemoryAnswerType(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+GENERIC_RECALL_VALUES_BY_TYPE = {
+    MemoryAnswerType.ACTIVITY: {
+        "게임",
+        "오락",
+        "일",
+        "활동",
+        "운동",
+    },
+    MemoryAnswerType.FOOD: {
+        "밥",
+        "음식",
+        "간식",
+        "물",
+    },
+    MemoryAnswerType.PLACE: {
+        "집",
+        "집에",
+        "집에서",
+        "방",
+        "곳",
+        "장소",
+    },
+    MemoryAnswerType.MEDIA: {
+        "방송",
+        "프로그램",
+        "노래",
+        "영상",
+        "티비",
+        "텔레비전",
+    },
+    MemoryAnswerType.OBJECT: {
+        "물건",
+    },
+}
+
+
 def parse_answer_type(value) -> MemoryAnswerType:
     if isinstance(value, MemoryAnswerType):
         return value
@@ -37,7 +73,10 @@ PERSON_QUESTION_CUES = (
     "분이 계",
 )
 PLACE_QUESTION_CUES = ("어디", "어느 곳", "어떤 곳", "장소")
-TIME_QUESTION_CUES = ("언제", "몇 시", "몇시", "시간대")
+TIME_QUESTION_CUES = (
+    "언제", "몇 시", "몇시", "시간대", "얼마나 오래", "얼마나 하",
+    "얼마 동안", "얼마나 걸", "몇 시간", "몇 분 동안",
+)
 FOOD_QUESTION_CUES = (
     "무엇을 드",
     "뭘 드",
@@ -50,6 +89,10 @@ FOOD_QUESTION_CUES = (
     "무슨 걸 드",
 )
 MEDIA_QUESTION_CUES = (
+    "어떤 책",
+    "무슨 책",
+    "무엇을 읽",
+    "뭘 읽",
     "무슨 방송",
     "어떤 방송",
     "무슨 프로그램",
@@ -69,6 +112,8 @@ ACTIVITY_QUESTION_CUES = (
     "뭘 하",
     "어떤 일을",
     "어떤 활동",
+    "어떤 게임",
+    "무슨 게임",
 )
 OBJECT_QUESTION_CUES = (
     "어떤 물건",
@@ -115,6 +160,23 @@ def infer_topic(
         return answer_type.value
 
     return str(action or "GENERAL").upper()
+
+
+def is_meaningful_recall_value(
+    answer_type: MemoryAnswerType | str,
+    answer_value: str,
+) -> bool:
+    parsed_type = parse_answer_type(answer_type)
+    normalized_value = " ".join(str(answer_value or "").split())
+
+    if parsed_type == MemoryAnswerType.UNKNOWN or not normalized_value:
+        return False
+
+    generic_values = GENERIC_RECALL_VALUES_BY_TYPE.get(parsed_type, set())
+    return normalized_value.casefold() not in {
+        value.casefold()
+        for value in generic_values
+    }
 
 
 def should_continue_memory_event(
@@ -309,6 +371,7 @@ class MemoryEvidence:
     is_correction: bool = False
     quality_score: int = 0
     continues_previous_event: bool = False
+    episode_id: str = ""
 
     @classmethod
     def create(
@@ -324,6 +387,7 @@ class MemoryEvidence:
         is_correction: bool = False,
         quality_score: int = 0,
         continues_previous_event: bool = False,
+        episode_id: str = "",
     ) -> "MemoryEvidence":
         record_id = int(source_record_id)
         cleaned_text = " ".join(str(text or "").split())
@@ -377,6 +441,7 @@ class MemoryEvidence:
             is_correction=bool(is_correction),
             quality_score=max(0, min(int(quality_score or 0), 100)),
             continues_previous_event=bool(continues_previous_event),
+            episode_id=str(episode_id or ""),
         )
 
     @classmethod
@@ -405,6 +470,7 @@ class MemoryEvidence:
             is_correction=payload.get("isCorrection", False),
             quality_score=payload.get("qualityScore") or 0,
             continues_previous_event=payload.get("continuesPreviousEvent", False),
+            episode_id=payload.get("episodeId") or "",
         )
 
 
@@ -440,17 +506,69 @@ class MemoryCandidateDraft:
         return {key: tuple(items) for key, items in values.items()}
 
     @property
+    def meaningful_answer_values(self) -> dict[str, tuple[str, ...]]:
+        return {
+            answer_type: tuple(
+                value
+                for value in values
+                if is_meaningful_recall_value(answer_type, value)
+            )
+            for answer_type, values in self.answer_values.items()
+            if any(
+                is_meaningful_recall_value(answer_type, value)
+                for value in values
+            )
+        }
+
+    @property
     def quality_score(self) -> int:
         if not self.evidence:
             return 0
 
         best_score = max(item.quality_score for item in self.evidence)
-        detail_bonus = min(15, max(0, len(self.answer_values) - 1) * 5)
-        return min(100, best_score + detail_bonus)
+        return min(100, best_score + self.detail_bonus)
+
+    @property
+    def detail_bonus(self) -> int:
+        return min(20, max(0, len(self.meaningful_answer_values) - 1) * 5)
 
     @property
     def detail_count(self) -> int:
-        return sum(len(values) for values in self.answer_values.values())
+        return sum(len(values) for values in self.meaningful_answer_values.values())
+
+    @property
+    def detail_types(self) -> tuple[str, ...]:
+        return tuple(sorted(self.meaningful_answer_values))
+
+    @property
+    def missing_detail_types(self) -> tuple[str, ...]:
+        expected_by_topic = {
+            "ACTIVITY": ("ACTIVITY", "TIME", "PLACE", "PERSON"),
+            "MEAL": ("FOOD", "TIME", "PLACE", "PERSON"),
+            "MEDIA": ("MEDIA", "TIME", "PLACE", "PERSON"),
+            "PLACE": ("PLACE", "TIME", "PERSON"),
+            "PERSON": ("PERSON", "TIME", "PLACE"),
+            "OBJECT": ("OBJECT", "TIME", "PLACE", "PERSON"),
+        }
+        expected = expected_by_topic.get(self.topic, ())
+        present = set(self.meaningful_answer_values)
+        return tuple(answer_type for answer_type in expected if answer_type not in present)
+
+    @property
+    def episode_score(self) -> int:
+        if not self.evidence:
+            return 0
+
+        base = max(item.quality_score for item in self.evidence)
+        multi_turn_bonus = min(15, max(0, len(self.evidence) - 1) * 5)
+        return min(100, base + self.detail_bonus + multi_turn_bonus)
+
+    @property
+    def is_recall_ready(self) -> bool:
+        if self.topic in {"", "GENERAL", "UNKNOWN", "UNGROUPED"}:
+            return False
+
+        return self.episode_score >= 45 and self.detail_count >= 1
 
     @property
     def first_source_record_id(self) -> int:
@@ -491,7 +609,7 @@ class MemoryCandidateDraft:
 
     @property
     def recall_clues(self) -> tuple[MemoryRecallClue, ...]:
-        active_values = self.answer_values
+        active_values = self.meaningful_answer_values
         candidates = []
         seen = set()
 
@@ -555,13 +673,16 @@ class MemoryCandidateDraft:
         if not self.evidence or self.topic in {"", "GENERAL", "UNKNOWN"}:
             return False
 
+        previous = self.evidence[-1]
+        if (previous.episode_id or item.episode_id) and previous.episode_id != item.episode_id:
+            return False
+
         if item.topic != self.topic:
             return False
 
         if not item.continues_previous_event and not item.is_correction:
             return False
 
-        previous = self.evidence[-1]
         previous_position = previous.turn_order or previous.source_record_id
         current_position = item.turn_order or item.source_record_id
         record_gap = current_position - previous_position
@@ -653,6 +774,13 @@ def _is_duplicate_candidate(
 
     shared_clues = current_clues & selected_clues
     smaller_clue_count = min(len(current_clues), len(selected_clues))
+
+    if (
+        current_clues == selected_clues
+        and abs(current.first_position - selected.first_position) <= 4
+    ):
+        return True
+
     return (
         len(shared_clues) >= 2
         and len(shared_clues) == smaller_clue_count
@@ -685,6 +813,7 @@ def select_memory_candidate_drafts(
         for draft in drafts
         if (
             draft.topic not in {"", "GENERAL", "UNKNOWN"}
+            and draft.is_recall_ready
             and draft.quality_score >= min_quality_score
             and (
                 not require_confirmed_value
@@ -706,6 +835,7 @@ def select_memory_candidate_drafts(
     ]
     eligible.sort(
         key=lambda draft: (
+            draft.episode_score,
             draft.quality_score,
             draft.detail_count,
             len(draft.evidence),

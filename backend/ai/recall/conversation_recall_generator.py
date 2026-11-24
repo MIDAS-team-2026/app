@@ -11,6 +11,7 @@ from openai import OpenAI
 from recall.memory_candidate_service import validate_recall_candidate_contract
 from recall.memory_event import MemoryAnswerType, MemoryEvent, infer_answer_type
 from recall.recall_score_calculator import calculate_similarity_score
+from recall.recall_context import recall_context_prefix
 
 MEMORY_POINT_SEMANTIC_SIMILARITY_THRESHOLD = 70.0
 
@@ -855,7 +856,9 @@ def _keyword_occurs_in_text(answer_keyword: str, text: str) -> bool:
             if len(combined) >= len(target):
                 break
 
-    return False
+    # Activity nouns may be joined to inflected verbs (e.g. noun + ha-).
+    # Match full morphemes rather than accepting arbitrary substrings.
+    return _word_occurs_as_token(answer_keyword, text)
 
 
 def _memory_hint_occurs(hint: str, text: str) -> bool:
@@ -944,6 +947,22 @@ def _memory_signature(text: str) -> tuple[set[str], set[str]]:
 def extract_memory_action_concepts(text: str) -> set[str]:
     actions, _concrete = _memory_signature(text)
     return actions
+
+
+def extract_recall_question_action_concepts(question: str) -> set[str]:
+    """Extract the recalled event action without treating an intro as evidence."""
+    question_units = [
+        unit.strip()
+        for unit in re.split(r"[,.!?]+\s*", clean_text(question))
+        if unit.strip()
+    ]
+
+    for unit in reversed(question_units):
+        actions = extract_memory_action_concepts(unit)
+        if actions:
+            return actions
+
+    return set()
 
 
 def is_similar_memory_point(memory_point: str, previous_memory_point: str) -> bool:
@@ -1135,6 +1154,11 @@ def is_answer_keyword_compatible_with_question(
     asks_person = answer_type == MemoryAnswerType.PERSON
 
     if asks_person:
+        from recall.memory_evidence_extractor import extract_memory_clues
+        if any(clue["answerType"] == "PERSON"
+               and clean_text(clue["answerValue"]) == answer_keyword
+               for clue in extract_memory_clues(source_text)):
+            return True
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PERSON_MEMORY_HINTS):
             return True
 
@@ -1145,15 +1169,20 @@ def is_answer_keyword_compatible_with_question(
         escaped_keyword = re.escape(answer_keyword)
         has_person_relation = bool(
             re.search(
-                rf"{escaped_keyword}(?:이|가|은|는)?(?:와|과|랑|하고|에게|한테)",
+                rf"(?<![가-힣A-Za-z0-9]){escaped_keyword}(?:이|가|은|는)?(?:와|과|랑|하고|에게|한테)",
                 source_text,
             )
         )
-        return has_person_relation and bool(source_actions & {"MEET", "CONTACT"})
+        return has_person_relation and bool(source_actions)
 
     asks_place = answer_type == MemoryAnswerType.PLACE
 
     if asks_place:
+        from recall.memory_evidence_extractor import extract_memory_clues
+        if any(clue["answerType"] == "PLACE"
+               and clean_text(clue["answerValue"]) == answer_keyword
+               for clue in extract_memory_clues(source_text)):
+            return True
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PLACE_MEMORY_HINTS):
             return True
 
@@ -1280,7 +1309,12 @@ def evaluate_memory_candidate(text: str) -> Dict[str, object]:
         score += 15
         reasons.append("specific_length")
 
-    if GENERAL_PAST_ACTION_PATTERN.search(text):
+    tokens = _tokenize_cached(text)
+    morphological_past_action = (
+        any(token.tag == "EP" and token.form in {"었", "았", "였"} for token in tokens)
+        and any(token.tag.startswith("VV") or token.tag == "XSV" for token in tokens)
+    )
+    if GENERAL_PAST_ACTION_PATTERN.search(text) or morphological_past_action:
         score += 20
         reasons.append("has_past_tense")
 
@@ -1352,6 +1386,22 @@ def score_recall_memory_candidate(text: str) -> Dict[str, object]:
     text = clean_text(_get_final_correction_segment(text))
     text = _get_confirmed_action_after_negation(text) or text
     evaluation = evaluate_memory_candidate(text)
+
+    if text.endswith("?"):
+        return {
+            **evaluation,
+            "isValid": False,
+            "recallScore": 0,
+            "reasons": [*evaluation.get("reasons", []), "interrogative_utterance"],
+        }
+
+    if re.search(r"(?:감사합니다|감사해요|고맙습니다|고마워요)[.!]*$", text):
+        return {
+            **evaluation,
+            "isValid": False,
+            "recallScore": 0,
+            "reasons": [*evaluation.get("reasons", []), "social_utterance"],
+        }
 
     hard_failure_reasons = {
         "too_short_or_meaningless",
@@ -1653,6 +1703,7 @@ def normalize_structured_memory_candidates(
             "answerValue": answer_value,
         }
         for context_field in (
+            "episodeId",
             "topic",
             "sourceRecordIds",
             "evidence",
@@ -1660,6 +1711,10 @@ def normalize_structured_memory_candidates(
             "recallClues",
             "answerValues",
             "qualityScore",
+            "episodeScore",
+            "detailTypes",
+            "missingDetailTypes",
+            "isRecallReady",
         ):
             if context_field in candidate:
                 normalized_candidate[context_field] = candidate[context_field]
@@ -1691,6 +1746,17 @@ def build_structured_memory_candidates_text(
 
         if candidate.get("topic") and isinstance(evidence, list):
             lines.append(f"eventTopic: {candidate['topic']}")
+            if candidate.get("episodeScore") is not None:
+                lines.append(f"episodeScore: {candidate['episodeScore']}")
+            if candidate.get("detailTypes"):
+                lines.append(
+                    "detailTypes: " + ", ".join(candidate["detailTypes"])
+                )
+            if candidate.get("missingDetailTypes"):
+                lines.append(
+                    "missingDetailTypes: "
+                    + ", ".join(candidate["missingDetailTypes"])
+                )
             lines.append("eventEvidence:")
             lines.extend(
                 f"- [{item['sourceRecordId']}] {item['sourceText']}"
@@ -1700,6 +1766,188 @@ def build_structured_memory_candidates_text(
         blocks.append("\n".join(lines))
 
     return "\n\n".join(blocks)
+
+
+def select_structured_recall_target(
+    memory_candidates: List[Dict],
+) -> Optional[Dict]:
+    """Select the single engine-ranked clue that the LLM may verbalize."""
+    return memory_candidates[0] if memory_candidates else None
+
+
+def build_engine_recall_question(candidate: Dict) -> str:
+    answer_type = MemoryAnswerType(
+        str(candidate.get("answerType") or "UNKNOWN").strip().upper()
+    )
+
+    templates = {
+        MemoryAnswerType.FOOD: "어떤 음식을 드셨다고 말씀하셨나요?",
+        MemoryAnswerType.PLACE: "아까 이야기하신 곳이 어디였는지 기억나세요?",
+        MemoryAnswerType.PERSON: "그때 누구와 하셨다고 말씀하셨나요?",
+        MemoryAnswerType.TIME: "아까 이야기하신 일이 언제쯤이었는지 기억나세요?",
+        MemoryAnswerType.MEDIA: "무엇을 보거나 들으셨다고 말씀하셨나요?",
+        MemoryAnswerType.ACTIVITY: "어떤 일을 하셨다고 말씀하셨나요?",
+        MemoryAnswerType.OBJECT: "아까 이야기하신 물건이 무엇이었는지 기억나세요?",
+    }
+
+    question = templates.get(
+        answer_type,
+        "조금 전에 이야기하신 내용 중 기억나는 게 있으세요?",
+    )
+    if answer_type == MemoryAnswerType.MEDIA and "READ" in extract_memory_action_concepts(
+        str(candidate.get("sourceText") or "")
+    ):
+        question = "무엇을 읽으셨다고 말씀하셨나요?"
+    return recall_context_prefix(candidate) + question
+
+
+def build_engine_recall_result(
+    *,
+    candidate: Dict,
+    previous_questions: Optional[List[str]] = None,
+    used_memory_points: Optional[List[str]] = None,
+) -> Dict[str, object]:
+    source_text = str(candidate.get("sourceText") or "").strip()
+    answer_keyword = str(candidate.get("answerValue") or "").strip()
+    question = build_engine_recall_question(candidate)
+
+    memory_evaluation = score_recall_memory_candidate(source_text)
+
+    evidence = candidate.get("evidence") or []
+    source_is_linked = any(
+        item.get("sourceRecordId") == candidate.get("sourceRecordId")
+        and clean_text(item.get("sourceText") or "") == clean_text(source_text)
+        for item in evidence
+    )
+    has_event_backing = False
+    for item in evidence:
+        event_text = item.get("sourceText") or ""
+        evaluation = score_recall_memory_candidate(event_text)
+        if evaluation["isValid"] and (
+            extract_memory_action_concepts(event_text)
+            or "has_general_past_action" in evaluation["reasons"]
+        ):
+            has_event_backing = True
+            break
+    detail_only = (
+        candidate.get("answerType") in {"TIME", "PLACE", "PERSON"}
+        and not extract_memory_action_concepts(source_text)
+    )
+    # A detail cannot certify its own event merely because it contains a noun
+    # also used for a meal or location. Require its linked action evidence.
+    if (evidence and not source_is_linked) or (detail_only and not (source_is_linked and has_event_backing)):
+        return {
+            "status": "SKIPPED",
+            "reason": "detail_without_linked_completed_event",
+            "memoryPoint": source_text,
+            "question": question,
+        }
+    disallowed = {"uncertain_memory", "future_or_wish_expression", "incomplete_or_negated_action",
+                  "forbidden_fixed_question_content", "interrogative_utterance", "social_utterance"}
+    if (not memory_evaluation["isValid"] and candidate.get("isRecallReady") and source_is_linked
+            and has_event_backing and not disallowed.intersection(memory_evaluation["reasons"])):
+        memory_evaluation = {
+            **memory_evaluation, "isValid": True,
+            "recallScore": candidate.get("episodeScore") or candidate.get("qualityScore") or 0,
+            "reasons": [*memory_evaluation["reasons"], "grounded_episode_detail"],
+        }
+
+    if not memory_evaluation["isValid"]:
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문으로 저장하기에는 memoryPoint가 너무 짧거나 구체성이 부족합니다.",
+            "memoryPoint": source_text,
+            "question": question,
+            "memoryQualityScore": memory_evaluation["recallScore"],
+            "memoryQualityReasons": memory_evaluation["reasons"],
+        }
+
+    if not is_valid_answer_keyword_format(answer_keyword):
+        return {
+            "status": "SKIPPED",
+            "reason": "answerKeyword는 한 개의 짧은 단어 또는 구절이어야 합니다.",
+            "memoryPoint": source_text,
+            "answerKeyword": answer_keyword,
+            "question": question,
+        }
+
+    if not is_answer_keyword_grounded(answer_keyword, source_text, source_text):
+        return {
+            "status": "SKIPPED",
+            "reason": "answerKeyword가 memoryPoint 또는 원래 대화에서 확인되지 않습니다.",
+            "memoryPoint": source_text,
+            "answerKeyword": answer_keyword,
+            "question": question,
+        }
+
+    if not is_answer_keyword_compatible_with_question(
+        answer_keyword,
+        question,
+        source_text,
+    ):
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문이 요구하는 답변 종류와 answerKeyword가 일치하지 않습니다.",
+            "memoryPoint": source_text,
+            "answerKeyword": answer_keyword,
+            "question": question,
+        }
+
+    if question_reveals_memory_answer(answer_keyword, question):
+        return {
+            "status": "SKIPPED",
+            "reason": "회상 질문에 answerKeyword가 직접 포함되어 저장하지 않았습니다.",
+            "memoryPoint": source_text,
+            "answerKeyword": answer_keyword,
+            "question": question,
+        }
+
+    if used_memory_points and any(
+        is_similar_memory_point(source_text, used_memory_point)
+        for used_memory_point in used_memory_points
+    ):
+        return {
+            "status": "SKIPPED",
+            "reason": "이미 사용한 memoryPoint와 유사하여 저장하지 않았습니다.",
+            "memoryPoint": source_text,
+            "question": question,
+        }
+
+    if previous_questions:
+        for previous_question in previous_questions:
+            if is_similar_recall_question(question, previous_question):
+                return {
+                    "status": "SKIPPED",
+                    "reason": "이미 생성된 질문과 유사한 질문이 생성되어 저장하지 않았습니다.",
+                    "memoryPoint": source_text,
+                    "question": question,
+                }
+
+    action_concepts, _concrete_concepts = _memory_signature(source_text)
+    memory_event = MemoryEvent.from_generation(
+        source_text=source_text,
+        memory_point=source_text,
+        answer_keyword=answer_keyword,
+        question=question,
+        action=",".join(sorted(action_concepts)),
+        source_record_id=candidate["sourceRecordId"],
+        answer_type=candidate["answerType"],
+        quality_score=memory_evaluation["recallScore"],
+    )
+
+    return {
+        "status": "CREATED",
+        "reason": "",
+        "memoryPoint": source_text,
+        "sourceText": source_text,
+        "answerKeywords": [answer_keyword],
+        "question": question,
+        "memoryQualityScore": memory_evaluation["recallScore"],
+        "memoryQualityReasons": memory_evaluation["reasons"],
+        "memoryEvent": memory_event.to_dict(),
+        "memoryCandidate": candidate,
+        "generationMode": "ENGINE",
+    }
 
 
 def parse_recall_generation_content(content: str) -> Dict[str, str]:
@@ -1783,17 +2031,23 @@ def generate_recall_question_from_conversation(
     used_memory_points: Optional[List[str]] = None,
     memory_candidates: Optional[List[Dict]] = None,
 ) -> Dict[str, str]:
-    structured_candidates = normalize_structured_memory_candidates(
+    normalized_structured_candidates = normalize_structured_memory_candidates(
         memory_candidates,
         conversation_history,
     )
     valid_conversation_history = (
-        [candidate["sourceText"] for candidate in structured_candidates]
+        [
+            candidate["sourceText"]
+            for candidate in normalized_structured_candidates
+        ]
         if memory_candidates is not None
         else select_recall_memory_candidates(conversation_history)
     )
 
-    if len(valid_conversation_history) < MIN_RECALL_MEMORY_CANDIDATES:
+    if (
+        not normalized_structured_candidates
+        and len(valid_conversation_history) < MIN_RECALL_MEMORY_CANDIDATES
+    ):
         return {
             "status": "SKIPPED",
             "reason": "회상 질문을 만들 유효한 memoryPoint 후보가 2개 미만입니다.",
@@ -1813,19 +2067,44 @@ def generate_recall_question_from_conversation(
 
     previous_questions_text = build_previous_questions_text(previous_questions)
     used_memory_points_text = build_used_memory_points_text(used_memory_points)
+    if normalized_structured_candidates:
+        last_skipped_result = None
+
+        for structured_recall_target in normalized_structured_candidates:
+            engine_result = build_engine_recall_result(
+                candidate=structured_recall_target,
+                previous_questions=previous_questions,
+                used_memory_points=used_memory_points,
+            )
+
+            if engine_result.get("status") == "CREATED":
+                return engine_result
+
+            last_skipped_result = engine_result
+
+        return last_skipped_result or {
+            "status": "SKIPPED",
+            "reason": "사용 가능한 structured memoryPoint 후보가 없습니다.",
+            "memoryPoint": "",
+            "question": "",
+        }
+
+    structured_candidates = []
+
     structured_candidates_text = build_structured_memory_candidates_text(
         structured_candidates
     )
     structured_candidate_instructions = (
         """
-14. 아래 구조화 memoryPoint 후보 중 정확히 1개를 선택합니다.
-15. memoryPoint는 선택한 후보의 sourceText를 그대로 작성합니다.
-16. answerKeyword는 선택한 후보의 answerValue를 그대로 작성합니다.
-17. 질문은 선택한 후보의 answerType에 해당하는 정보만 묻습니다.
-18. eventId와 sourceRecordId는 출력하지 않습니다.
-19. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
-20. 서로 다른 후보의 사람, 장소, 음식, 행동을 한 질문에 섞지 않습니다.
-21. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
+14. 아래에는 memoryPoint 엔진이 이번 회상 대상으로 확정한 후보 1개만 제공됩니다.
+15. 다른 대화 내용으로 대상을 바꾸지 말고 이 후보만 질문으로 표현합니다.
+16. memoryPoint는 확정 후보의 sourceText를 그대로 작성합니다.
+17. answerKeyword는 확정 후보의 answerValue를 그대로 작성합니다.
+18. 질문은 확정 후보의 answerType에 해당하는 정보만 묻습니다.
+19. eventId와 sourceRecordId는 출력하지 않습니다.
+20. eventEvidence가 있으면 같은 후보의 발화들만 하나의 사건 문맥으로 사용합니다.
+21. 다른 사건의 사람, 장소, 음식, 행동을 질문에 섞지 않습니다.
+22. eventEvidence에 없는 행동이나 상황을 새로 만들어 질문하지 않습니다.
 """.strip()
         if structured_candidates
         else ""
@@ -2049,7 +2328,7 @@ question: 자연스러운 회상 질문
                     for item in evidence
                 )
             )
-            question_actions = extract_memory_action_concepts(question)
+            question_actions = extract_recall_question_action_concepts(question)
 
             if question_actions and not question_actions <= event_actions:
                 return {
@@ -2151,6 +2430,10 @@ def save_recall_question_to_spring(
     memory_point: str,
     question_text: str,
     answer_keywords: Optional[List[str]] = None,
+    memory_candidate: Optional[Dict] = None,
+    episode_id: Optional[str] = None,
+    recall_status: Optional[str] = None,
+    ask_after_turn: Optional[int] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
     expected_answer = next(
@@ -2168,6 +2451,23 @@ def save_recall_question_to_spring(
         "category": "CONVERSATION",
         "expectedAnswer": expected_answer,
     }
+    if episode_id:
+        body["episodeId"] = episode_id
+    if recall_status:
+        body["recallStatus"] = recall_status
+    if ask_after_turn is not None:
+        body["askAfterTurn"] = ask_after_turn
+
+    if memory_candidate:
+        recall_clue = memory_candidate.get("recallClue") or {}
+        body.update(
+            {
+                "eventId": memory_candidate.get("eventId"),
+                "clueId": recall_clue.get("clueId"),
+                "sourceRecordId": memory_candidate.get("sourceRecordId"),
+                "answerType": memory_candidate.get("answerType"),
+            }
+        )
 
     response = requests.post(
         f"{base_url}/api/recall/questions",
@@ -2214,6 +2514,9 @@ def generate_and_save_recall_question(
     previous_questions: Optional[List[str]] = None,
     used_memory_points: Optional[List[str]] = None,
     memory_candidates: Optional[List[Dict]] = None,
+    episode_id: Optional[str] = None,
+    recall_status: Optional[str] = None,
+    ask_after_turn: Optional[int] = None,
     base_url: str = BASE_URL,
 ) -> Dict:
     if previous_questions is None or used_memory_points is None:
@@ -2243,6 +2546,10 @@ def generate_and_save_recall_question(
         memory_point=result["memoryPoint"],
         question_text=result["question"],
         answer_keywords=result.get("answerKeywords"),
+        memory_candidate=result.get("memoryCandidate"),
+        episode_id=(result.get("memoryCandidate") or {}).get("episodeId") or episode_id,
+        recall_status=recall_status,
+        ask_after_turn=ask_after_turn,
         base_url=base_url,
     )
 

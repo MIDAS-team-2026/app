@@ -34,6 +34,13 @@ public class RecallQuestionService {
             dto.setQuestionType(question.getQuestionType());
             dto.setCategory(question.getCategory());
             dto.setExpectedAnswer(question.getExpectedAnswer());
+            dto.setEventId(question.getEventId());
+            dto.setClueId(question.getClueId());
+            dto.setSourceRecordId(question.getSourceRecordId());
+            dto.setAnswerType(question.getAnswerType());
+            dto.setEpisodeId(question.getEpisodeId());
+            dto.setRecallStatus(question.getRecallStatus());
+            dto.setAskAfterTurn(question.getAskAfterTurn());
 
             // Keyword 엔티티 리스트에서 'keywordText'만 추출하여 순수 문자열 리스트로 변환
             List<String> keywordList = question.getKeywords().stream()
@@ -73,6 +80,16 @@ public class RecallQuestionService {
         User user = userRepository.findById(dto.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
+        if (dto.getClueId() != null && !dto.getClueId().isBlank()) {
+            RecallQuestion existing = recallQuestionRepository
+                    .findByUser_IdAndClueId(dto.getUserId(), dto.getClueId())
+                    .orElse(null);
+
+            if (existing != null) {
+                return toResponse(existing);
+            }
+        }
+
         RecallQuestion question = new RecallQuestion();
         question.setUser(user);
         question.setQuestionText(dto.getQuestionText());
@@ -85,16 +102,39 @@ public class RecallQuestionService {
                         dto.getCategory() : "CONVERSATION"
         );
         question.setExpectedAnswer(dto.getExpectedAnswer());
+        question.setEventId(dto.getEventId());
+        question.setClueId(dto.getClueId());
+        question.setSourceRecordId(dto.getSourceRecordId());
+        question.setAnswerType(dto.getAnswerType());
+        question.setEpisodeId(dto.getEpisodeId());
+        String questionType = question.getQuestionType();
+        question.setRecallStatus(
+                dto.getRecallStatus() != null ?
+                        dto.getRecallStatus() :
+                        ("RECALL".equalsIgnoreCase(questionType) ? "PENDING_RECALL" : null)
+        );
+        question.setAskAfterTurn(dto.getAskAfterTurn());
 
         RecallQuestion saved = recallQuestionRepository.save(question);
 
+        return toResponse(saved);
+    }
+
+    private RecallQuestionResponseDTO toResponse(RecallQuestion saved) {
         RecallQuestionResponseDTO response = new RecallQuestionResponseDTO();
         response.setQuestionId(saved.getId());
         response.setQuestionText(saved.getQuestionText());
         response.setQuestionType(saved.getQuestionType());
         response.setCategory(saved.getCategory());
         response.setExpectedAnswer(saved.getExpectedAnswer());
+        response.setEventId(saved.getEventId());
+        response.setClueId(saved.getClueId());
+        response.setSourceRecordId(saved.getSourceRecordId());
+        response.setAnswerType(saved.getAnswerType());
+        response.setEpisodeId(saved.getEpisodeId());
+        response.setRecallStatus(saved.getRecallStatus());
+        response.setAskAfterTurn(saved.getAskAfterTurn());
 
         return response;
-    }   
+    }
 }

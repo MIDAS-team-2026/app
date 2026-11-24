@@ -13,4 +13,11 @@ public class RecallQuestionResponseDTO {
     private String category;
     private List<String> keywords;
     private String expectedAnswer;
+    private String eventId;
+    private String clueId;
+    private Long sourceRecordId;
+    private String answerType;
+    private String episodeId;
+    private String recallStatus;
+    private Integer askAfterTurn;
 }
