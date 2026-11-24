@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.midas26.mobileapp.network.LinkedUserInfo
 import com.midas26.mobileapp.network.LinkRequest
 import com.midas26.mobileapp.network.RetrofitClient
+import com.midas26.mobileapp.network.parseServerMessage
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -147,7 +148,9 @@ class GuardianViewModel(application: Application) : AndroidViewModel(application
                     LinkRequest(currentGuardianId, code)
                 )
                 if (!linkResp.isSuccessful) {
-                    val msg = linkResp.body()?.message ?: "연동에 실패했습니다."
+                    // 실패 사유("이미 연동된 환자입니다." 등)는 errorBody 에 들어 있다.
+                    val msg = parseServerMessage(linkResp.errorBody()?.string())
+                        ?: "연동에 실패했습니다."
                     onError(msg); return@launch
                 }
 

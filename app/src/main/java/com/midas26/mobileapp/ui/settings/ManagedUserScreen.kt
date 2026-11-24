@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import android.widget.Toast
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -173,7 +174,11 @@ fun ManagedUserScreen(
                             context   = context,
                             patientId = id,
                             onSuccess = { showUnlinkDialog = null },
-                            onError   = { showUnlinkDialog = null }
+                            onError   = { message ->
+                                // 실패했는데 아무 안내 없이 창만 닫히지 않도록 사유를 보여준다.
+                                showUnlinkDialog = null
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
                         )
                     }
                 }) {
