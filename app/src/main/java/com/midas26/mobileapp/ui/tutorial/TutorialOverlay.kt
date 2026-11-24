@@ -69,7 +69,7 @@ fun TutorialOverlay(
         mutableFloatStateOf(0f)
     }
 
-    // 단계가 바뀌면 안내 카드 높이를 다시 측정한다.
+    // 단계 변경 시 안내 카드 높이를 다시 측정합니다.
     LaunchedEffect(currentStep, title, message) {
         measuredCardHeightPx = 0f
     }
@@ -84,17 +84,17 @@ fun TutorialOverlay(
     val cornerRadiusPx = with(density) {
         if (isBottomTabGuide) 16.dp.toPx() else 22.dp.toPx()
     }
-    // 홈 튜토리얼의 위치 정보(5/23) 안내만 세로 여백을 줄인다.
+    // 보호자 튜토리얼의 위치 정보 안내만 카드 여백을 줄입니다.
     val compactLocationGuide = currentStep == 5 && totalSteps == 23 &&
             title == "위치 정보"
     val highlightBorderColor = tutorialColor
 
-    // 전달받은 루트 좌표를 오버레이의 로컬 좌표로 변환한다.
+    // 강조 영역 좌표를 오버레이 기준으로 변환합니다.
     val localTargetBounds = targetBounds?.let { bounds ->
         val overlayRoot = overlayBoundsInRoot
 
         if (overlayRoot == null) {
-            null // 오버레이 위치가 확정되기 전에는 잘못된 강조 영역을 표시하지 않는다.
+            null
         } else {
             Rect(
                 left = bounds.left - overlayRoot.left,
@@ -122,55 +122,39 @@ fun TutorialOverlay(
             }
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
-        // 전체 안내 11단계는 점수 카드와 가깝게, 분석 다시 보기 2단계는
-        // 그래프 카드 아래에 작은 간격을 두고 안내 창을 배치한다.
+        // 하단 탭과 분석 안내 카드의 간격을 설정합니다.
         val cardGapDp = when {
+            isBottomTabGuide && totalSteps == 19 -> 16.dp
+            isBottomTabGuide -> 12.dp
             currentStep == 11 && totalSteps == 23 && title == "세부 분석 결과" -> 8.dp
             currentStep == 2 && totalSteps == 3 && title == "이번 주 점수 추이" -> 12.dp
-            else -> 24.dp
+            else -> 12.dp
         }
-        val cardMarginPx = with(density) { cardGapDp.toPx() }
+        val cardGapPx = with(density) { cardGapDp.toPx() }
+        val screenEdgePx = with(density) { 12.dp.toPx() }
         val fallbackCardHeightPx = with(density) { 230.dp.toPx() }
+        val cardHeightPx = measuredCardHeightPx.takeIf { it > 0f } ?: fallbackCardHeightPx
+        val maxCardTopPx = (screenHeightPx - cardHeightPx - screenEdgePx).coerceAtLeast(0f)
 
-        val cardHeightPx = if (measuredCardHeightPx > 0f) {
-            measuredCardHeightPx
-        } else {
-            fallbackCardHeightPx
-        }
-
-        val normalCardTopPx = when {
-            expandedTarget == null ->
-                ((screenHeightPx - cardHeightPx) / 2f)
-                    .coerceAtLeast(cardMarginPx)
-
-            expandedTarget.bottom + cardMarginPx + cardHeightPx <= screenHeightPx ->
-                expandedTarget.bottom + cardMarginPx
-
-            expandedTarget.top - cardMarginPx - cardHeightPx >= 0f ->
-                expandedTarget.top - cardMarginPx - cardHeightPx
-
-            // 대상이 화면 대부분을 차지하면 여유 공간이 더 큰 쪽에 안내 카드를 둔다.
+        // 하단 탭 안내는 탭 위에, 일반 안내는 사용 가능한 공간에 배치합니다.
+        val desiredCardTopPx = when {
+            expandedTarget == null -> (screenHeightPx - cardHeightPx) / 2f
+            isBottomTabGuide -> expandedTarget.top - cardGapPx - cardHeightPx
+            expandedTarget.bottom + cardGapPx + cardHeightPx <= screenHeightPx - screenEdgePx ->
+                expandedTarget.bottom + cardGapPx
+            expandedTarget.top - cardGapPx - cardHeightPx >= screenEdgePx ->
+                expandedTarget.top - cardGapPx - cardHeightPx
             else -> {
                 val spaceAbove = expandedTarget.top
                 val spaceBelow = screenHeightPx - expandedTarget.bottom
                 if (spaceAbove >= spaceBelow) {
-                    cardMarginPx
+                    expandedTarget.top - cardGapPx - cardHeightPx
                 } else {
-                    (screenHeightPx - cardHeightPx - cardMarginPx)
-                        .coerceAtLeast(cardMarginPx)
+                    expandedTarget.bottom + cardGapPx
                 }
             }
         }
-
-        val bottomGuidePadding = if (isBottomTabGuide && expandedTarget != null) {
-            with(density) {
-                (screenHeightPx - expandedTarget.top + cardMarginPx)
-                    .coerceIn(0f, screenHeightPx)
-                    .toDp()
-            }
-        } else {
-            0.dp
-        }
+        val cardTopPx = desiredCardTopPx.coerceIn(0f, maxCardTopPx)
 
         Canvas(
             modifier = Modifier
@@ -206,16 +190,17 @@ fun TutorialOverlay(
             )
 
             expandedTarget?.let { target ->
-                // 테두리 선의 절반이 화면 밖으로 잘리지 않도록 안쪽으로 제한한다.
+                // 강조 테두리가 화면 밖으로 잘리지 않도록 제한합니다.
                 val borderInset = with(density) { 3.dp.toPx() }
+                val maxX = (size.width - borderInset).coerceAtLeast(borderInset)
+                val maxY = (size.height - borderInset).coerceAtLeast(borderInset)
                 val safeTarget = Rect(
-                    left = target.left.coerceIn(borderInset, size.width - borderInset),
-                    top = target.top.coerceIn(borderInset, size.height - borderInset),
-                    right = target.right.coerceIn(borderInset, size.width - borderInset),
-                    bottom = target.bottom.coerceIn(borderInset, size.height - borderInset)
+                    left = target.left.coerceIn(borderInset, maxX),
+                    top = target.top.coerceIn(borderInset, maxY),
+                    right = target.right.coerceIn(borderInset, maxX),
+                    bottom = target.bottom.coerceIn(borderInset, maxY)
                 )
 
-                // 화면 바깥의 영역은 캔버스 크기로 잘라낸다.
                 if (safeTarget.width > 0f && safeTarget.height > 0f) {
                     drawRoundRect(
                         color = Color.Transparent,
@@ -240,28 +225,10 @@ fun TutorialOverlay(
             }
         }
 
-        val cardModifier = if (
-            isBottomTabGuide &&
-            expandedTarget != null
-        ) {
-            Modifier
-                .align(Alignment.BottomCenter)
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    bottom = bottomGuidePadding
-                )
-        } else {
-            Modifier
-                .align(Alignment.TopCenter)
-                .offset {
-                    IntOffset(
-                        x = 0,
-                        y = normalCardTopPx.roundToInt()
-                    )
-                }
-                .padding(horizontal = 20.dp)
-        }
+        val cardModifier = Modifier
+            .align(Alignment.TopCenter)
+            .offset { IntOffset(x = 0, y = cardTopPx.roundToInt()) }
+            .padding(horizontal = 20.dp)
 
         TutorialMessageCard(
             title = title,

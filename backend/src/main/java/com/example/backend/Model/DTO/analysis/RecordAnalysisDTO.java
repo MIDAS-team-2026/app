@@ -16,6 +16,10 @@ public class RecordAnalysisDTO {
     public static class SpeechAnalysisData {
         private Integer pauseCount;
         private Float totalPauseDuration, avgPauseDuration, maxPauseDuration;
+
+        @JsonAlias("pause_ratio")
+        private Float pauseRatio;
+
         private Float rmsMean, rmsStd, zcrMean, zcrStd;
         private Float spectralCentroidMean, spectralCentroidStd;
         private Float mfcc1Mean, mfcc2Mean, mfcc3Mean, mfcc4Mean, mfcc5Mean, mfcc6Mean, mfcc7Mean, mfcc8Mean, mfcc9Mean, mfcc10Mean, mfcc11Mean, mfcc12Mean, mfcc13Mean;
@@ -27,6 +31,10 @@ public class RecordAnalysisDTO {
         private Float f0SemitoneMean, f0SemitoneStddevNorm;
         private Float jitterLocal, shimmerLocalDb, hnrDb;
         private Float voicedSegmentsPerSec, meanVoicedSegmentLength, meanUnvoicedSegmentLength;
+
+        @JsonAlias("voice_activity_ratio")
+        private Float voiceActivityRatio;
+
         private Integer voiceBreakCount;
         private Float voiceBreakRatio;
 
@@ -40,7 +48,7 @@ public class RecordAnalysisDTO {
         private String speechAbnormalityLevel;
 
         @JsonAlias("speech_abnormality_score")
-        private Integer speechAbnormalityScore;
+        private Float speechAbnormalityScore;
     }
 
     @Getter @Setter

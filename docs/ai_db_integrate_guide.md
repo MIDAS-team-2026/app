@@ -203,6 +203,7 @@ Content-Type: application/json
     "totalPauseDuration": 0.0,
     "avgPauseDuration": 0.0,
     "maxPauseDuration": 0.0,
+    "pauseRatio": 0.0,
     "rmsMean": 0.05,
     "rmsStd": 0.01,
     "zcrMean": 0.1,
@@ -221,7 +222,9 @@ Content-Type: application/json
     "pronunciationStability": null,
     "responseLatency": null,
     "repetitionCount": 0,
-    "fillerCount": 0
+    "fillerCount": 0,
+    "voiceActivityRatio": 0.72,
+    "speechAbnormalityScore": 4.35
   },
   "textAnalysis": {
     "wordCount": 5,
@@ -274,8 +277,8 @@ POST /api/ai/analysis/risk
   "speechScore": 70.0,
   "textScore": 75.0,
   "recallScore": 80.0,
-  "finalRiskScore": 39.85,
-  "riskLevel": "low"
+  "finalRiskScore": 47.5,
+  "riskLevel": "MEDIUM"
 }
 ```
 
@@ -283,7 +286,7 @@ POST /api/ai/analysis/risk
 
 ```
 textRiskScore = 100 - textScore
-finalRiskScore = speechScore×0.33 + textRiskScore×0.67
+finalRiskScore = speechScore×0.50 + textRiskScore×0.50
 ```
 
 - `speechScore`: **높을수록 위험**

@@ -156,7 +156,6 @@ fun AppNavHost(
     var guardianPatientsRequested by remember { mutableStateOf(false) }
     var guardianPatientsLoaded by remember { mutableStateOf(false) }
 
-    // 튜토리얼용 데이터는 실제 연결 사용자 및 서버 데이터와 분리한다.
     val isGuardianDemo = isGuardian && guardianTutorialState.isRunning
 
 
@@ -354,57 +353,35 @@ fun AppNavHost(
     }
     val density = LocalDensity.current
 
-    val horizontalPaddingPx =
-        with(density) { 10.dp.toPx() }
+    // 사용자와 보호자 탭의 실제 측정 영역을 기준으로 하이라이트를 중앙 정렬한다.
+    val bottomTabHighlightWidthPx = with(density) { 64.dp.toPx() }
+    val bottomTabHighlightHeightPx = with(density) { 76.dp.toPx() }
 
-    val topPaddingPx =
-        with(density) { 18.dp.toPx() }
-
-    val bottomPaddingPx =
-        with(density) { 8.dp.toPx() }
-
-    // 탭의 실제 측정 영역을 기준으로 강조 테두리의 여백을 적용한다.
-    // 임의의 수직 이동값은 적용하지 않아 강조 영역이 위로 치우치지 않게 한다.
     fun createBottomTabHighlightBounds(bounds: Rect?): Rect? {
         bounds ?: return null
 
+        val highlightWidth = minOf(bottomTabHighlightWidthPx, bounds.width)
+        val highlightHeight = minOf(bottomTabHighlightHeightPx, bounds.height)
+        val centerX = (bounds.left + bounds.right) / 2f
+        val centerY = (bounds.top + bounds.bottom) / 2f
+
         return Rect(
-            left = bounds.left - horizontalPaddingPx,
-            top = bounds.top - topPaddingPx,
-            right = bounds.right + horizontalPaddingPx,
-            bottom = bounds.bottom + bottomPaddingPx
+            left = centerX - highlightWidth / 2f,
+            top = centerY - highlightHeight / 2f,
+            right = centerX + highlightWidth / 2f,
+            bottom = centerY + highlightHeight / 2f
         )
     }
 
     val highlightedUserBottomTabBounds =
         createBottomTabHighlightBounds(
-            highlightedUserTab?.let {
-                userBottomTabBounds[it]
-            }
+            highlightedUserTab?.let { userBottomTabBounds[it] }
         )
 
-    // 보호자 튜토리얼: 탭 전체가 아닌 아이콘과 글자 주변만 강조한다.
-    // 실제 탭 영역의 중심을 기준으로 배치해 네 탭의 위치를 동일하게 맞춘다.
-    val guardianHighlightWidthPx = with(density) { 64.dp.toPx() }
-    val guardianHighlightHeightPx = with(density) { 76.dp.toPx() }
-
     val highlightedGuardianBottomTabBounds =
-        highlightedGuardianTab?.let { tab ->
-            guardianBottomTabBounds[tab]?.let { bounds ->
-                val highlightWidth = minOf(guardianHighlightWidthPx, bounds.width)
-                val highlightHeight = minOf(guardianHighlightHeightPx, bounds.height)
-                val centerX = (bounds.left + bounds.right) / 2f
-                val centerY = (bounds.top + bounds.bottom) / 2f
-
-                Rect(
-                    left = centerX - highlightWidth / 2f,
-                    top = centerY - highlightHeight / 2f,
-                    right = centerX + highlightWidth / 2f,
-                    bottom = centerY + highlightHeight / 2f
-                )
-            }
-        }
-
+        createBottomTabHighlightBounds(
+            highlightedGuardianTab?.let { guardianBottomTabBounds[it] }
+        )
 
     val handleBottomTabClick: (TabId) -> Unit = { tabId ->
         pendingReplayTarget = null
@@ -815,7 +792,8 @@ fun AppNavHost(
                             onMenuClick = { menu ->
                                 when (menu) {
                                     UserMenu.VoiceChat -> navController.navigate(Routes.VoiceChat)
-                                    UserMenu.Recall -> { /* 미구현 */ }
+                                    UserMenu.Recall -> { // 미구현
+                                    }
                                     UserMenu.Analysis -> navController.navigate(Routes.AnalysisResult)
                                     UserMenu.Settings -> navController.navigate(Routes.Settings)
                                 }

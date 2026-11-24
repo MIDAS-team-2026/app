@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -50,11 +51,14 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
@@ -76,11 +80,6 @@ fun UserHomeScreen(
 ) {
     val tutorialState by tutorialViewModel.state.collectAsState()
 
-    /*
-     * 현재 Compose 버전에서 localBoundingBoxOf를 지원하지 않을 수 있으므로
-     * 최상위 화면의 boundsInRoot 값을 저장한 뒤 대상 좌표에서 빼서
-     * 오버레이 내부 좌표로 변환합니다.
-     */
     var tutorialRootBounds by remember {
         mutableStateOf<Rect?>(null)
     }
@@ -147,7 +146,6 @@ fun UserHomeScreen(
         ) {
             val targetBounds = when (tutorialState.homeStep) {
                 HomeTutorialStep.MOVE_TO_HOME_TAB -> null
-                HomeTutorialStep.WELCOME -> null
                 HomeTutorialStep.WEEKLY_CHECK -> weeklyCheckBounds
                 HomeTutorialStep.VOICE_CHAT -> voiceChatBounds
                 HomeTutorialStep.ANALYSIS -> analysisBounds
@@ -163,17 +161,7 @@ fun UserHomeScreen(
                 totalNumber = tutorialState.totalNumber,
                 onNext = {
                     when (tutorialState.homeStep) {
-                        HomeTutorialStep.MOVE_TO_HOME_TAB -> {
-                            // AppNavGraph에서 하단 홈 탭 안내와 클릭을 처리합니다.
-                        }
-
-                        HomeTutorialStep.WELCOME -> {
-                            tutorialViewModel.moveHomeStep(
-                                step = HomeTutorialStep.WEEKLY_CHECK,
-                                number = tutorialState.currentNumber + 1
-                            )
-                        }
-
+                        HomeTutorialStep.MOVE_TO_HOME_TAB -> Unit
                         HomeTutorialStep.WEEKLY_CHECK -> {
                             tutorialViewModel.moveHomeStep(
                                 step = HomeTutorialStep.VOICE_CHAT,
@@ -197,10 +185,6 @@ fun UserHomeScreen(
 
                         HomeTutorialStep.SETTINGS -> {
                             if (tutorialViewModel.isFullTutorial()) {
-                                /*
-                                 * 홈 설명이 끝나면 바로 화면을 이동하지 않고
-                                 * AppNavGraph에서 하단 대화 탭을 안내합니다.
-                                 */
                                 tutorialViewModel.showVoiceTabGuide(
                                     number = tutorialState.currentNumber + 1
                                 )
@@ -209,11 +193,7 @@ fun UserHomeScreen(
                             }
                         }
 
-                        HomeTutorialStep.MOVE_TO_VOICE_TAB -> {
-                            /*
-                             * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
-                             */
-                        }
+                        HomeTutorialStep.MOVE_TO_VOICE_TAB -> Unit
 
                         HomeTutorialStep.COMPLETED -> {
                             tutorialViewModel.completeTutorial()
@@ -229,12 +209,7 @@ fun UserHomeScreen(
 }
 
 
-/**
- * boundsInRoot()로 얻은 대상 Rect를 현재 화면 최상위 Box 기준 좌표로 변환합니다.
- *
- * rootBounds가 아직 측정되지 않은 첫 프레임에는 null을 반환하며,
- * 다음 onGloballyPositioned 호출에서 정상 좌표가 저장됩니다.
- */
+// 강조 대상의 좌표를 홈 화면 기준으로 변환합니다.
 private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
     val root = rootBounds ?: return null
 
@@ -257,15 +232,10 @@ private fun HomeTutorialOverlay(
 ) {
     val density = LocalDensity.current
 
-    /*
-     * AppColor의 일부 색상 값이 @Composable getter일 수 있으므로
-     * Canvas DrawScope 내부에서 직접 호출하지 않고 미리 읽어 둡니다.
-     */
     val highlightColor = AppColor.greenPrimary
 
     val title = when (step) {
         HomeTutorialStep.MOVE_TO_HOME_TAB -> "홈 화면 살펴보기"
-        HomeTutorialStep.WELCOME -> "똑똑 사용법을 알아볼까요?"
         HomeTutorialStep.WEEKLY_CHECK -> "요일별 음성 점검"
         HomeTutorialStep.VOICE_CHAT -> "음성 대화"
         HomeTutorialStep.ANALYSIS -> "분석 결과"
@@ -277,9 +247,6 @@ private fun HomeTutorialOverlay(
     val description = when (step) {
         HomeTutorialStep.MOVE_TO_HOME_TAB ->
             "홈 탭에서는 오늘의 점검 상태와 주요 기능을 확인할 수 있어요."
-
-        HomeTutorialStep.WELCOME ->
-            "화면의 주요 기능을 하나씩 천천히 알려드릴게요."
 
         HomeTutorialStep.WEEKLY_CHECK ->
             "이번 주에 음성 대화를 진행했는지 요일별로 확인할 수 있어요."
@@ -306,15 +273,38 @@ private fun HomeTutorialOverlay(
             .clickable(onClick = {})
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
+        // 강조 대상별로 안내 창 간격과 배치 방향을 조정합니다.
+        val gapDp = when (step) {
+            HomeTutorialStep.WEEKLY_CHECK -> 20.dp
+            HomeTutorialStep.VOICE_CHAT -> 16.dp
+            HomeTutorialStep.ANALYSIS -> 20.dp
+            HomeTutorialStep.SETTINGS -> 20.dp
+            else -> 8.dp
+        }
+        val gapPx = with(density) { gapDp.roundToPx() }
+        val edgePx = with(density) { 12.dp.roundToPx() }
+        var popupSize by remember { mutableStateOf(IntSize.Zero) }
 
-        val showPopupAtTop = targetBounds?.let { bounds ->
-            bounds.center.y > screenHeightPx * 0.54f
-        } ?: false
+        // 안내 창의 실제 높이를 기준으로 겹침을 방지합니다.
+        val popupTopPx = if (targetBounds == null) {
+            ((screenHeightPx - popupSize.height) / 2f).toInt()
+        } else {
+            val above = (targetBounds.top - popupSize.height - gapPx).toInt()
+            val below = (targetBounds.bottom + gapPx).toInt()
+            val fitsAbove = above >= edgePx
+            val fitsBelow = below + popupSize.height <= screenHeightPx - edgePx
 
-        val popupAlignment = when {
-            step == HomeTutorialStep.WELCOME -> Alignment.Center
-            showPopupAtTop -> Alignment.TopCenter
-            else -> Alignment.BottomCenter
+            when {
+                (step == HomeTutorialStep.WEEKLY_CHECK ||
+                        step == HomeTutorialStep.VOICE_CHAT) && fitsBelow -> below
+                fitsAbove -> above
+                fitsBelow -> below
+                else -> {
+                    // 공간이 부족하면 화면 안쪽으로 위치를 제한합니다.
+                    val preferred = if (targetBounds.top >= screenHeightPx - targetBounds.bottom) above else below
+                    preferred.coerceIn(edgePx, (screenHeightPx.toInt() - popupSize.height - edgePx).coerceAtLeast(edgePx))
+                }
+            }
         }
 
         Canvas(
@@ -365,14 +355,11 @@ private fun HomeTutorialOverlay(
 
         Surface(
             modifier = Modifier
-                .align(popupAlignment)
+                .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = if (showPopupAtTop) 24.dp else 20.dp,
-                    bottom = if (showPopupAtTop) 20.dp else 28.dp
-                ),
+                .padding(horizontal = 20.dp)
+                .offset { IntOffset(0, popupTopPx) }
+                .onSizeChanged { popupSize = it },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite,
             shadowElevation = 12.dp
@@ -402,11 +389,7 @@ private fun HomeTutorialOverlay(
                     text = description,
                     style = MaterialTheme.typography.bodyLarge,
                     color = AppColor.textSecondary,
-                    textAlign = if (step == HomeTutorialStep.WELCOME) {
-                        TextAlign.Center
-                    } else {
-                        TextAlign.Start
-                    }
+                    textAlign = TextAlign.Start
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))
@@ -430,14 +413,7 @@ private fun HomeTutorialOverlay(
                         onClick = onNext
                     ) {
                         Text(
-                            text = if (
-                                step == HomeTutorialStep.SETTINGS ||
-                                step == HomeTutorialStep.COMPLETED
-                            ) {
-                                "다음"
-                            } else {
-                                "다음"
-                            },
+                            text = "다음",
                             color = AppColor.greenPrimary,
                             fontWeight = FontWeight.Bold
                         )

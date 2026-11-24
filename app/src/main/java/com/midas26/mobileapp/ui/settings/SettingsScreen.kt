@@ -69,10 +69,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -93,6 +95,7 @@ import com.midas26.mobileapp.ui.tutorial.TutorialScreen
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
@@ -113,13 +116,7 @@ fun SettingsScreen(
 
     val tutorialState by tutorialViewModel.state.collectAsState()
 
-    /*
-     * 현재 프로젝트의 Compose 버전에서 localBoundingBoxOf를 지원하지 않을 수 있으므로
-     * 최상위 화면의 boundsInRoot 값을 저장합니다.
-     *
-     * 각 강조 대상도 boundsInRoot로 측정한 뒤 루트 위치를 빼서
-     * SettingsScreen 내부 오버레이 좌표로 변환합니다.
-     */
+    // 강조 대상의 루트 좌표를 화면 내부 좌표로 변환합니다.
     var tutorialRootBounds by remember { mutableStateOf<Rect?>(null) }
 
     // 튜토리얼에서 강조할 실제 UI 위치입니다.
@@ -232,19 +229,13 @@ fun SettingsScreen(
                 }
 
                 SettingsTutorialStep.NOTIFICATION_TIME -> {
-                    /*
-                     * 알림 시간이 화면에 보이도록 화면 표시 상태만 임시로 엽니다.
-                     * SharedPreferences의 실제 알림 설정 값은 변경하지 않습니다.
-                     */
+                    // 알림 시간이 화면에 보이도록 화면 표시 상태만 임시로 엽니다. SharedPreferences의 실제 알림 설정 값은 변경하지 않습니다.
                     notificationEnabled = true
                     scrollState.animateScrollTo(190)
                 }
 
                 SettingsTutorialStep.REPLAY_TUTORIAL -> {
-                    /*
-                     * 다시 보기 항목이 화면에 보이도록 스크롤한 뒤
-                     * 좌표를 다시 측정합니다.
-                     */
+                    // 다시 보기 항목이 화면에 보이도록 스크롤한 뒤 좌표를 다시 측정합니다.
                     replayTutorialBounds = null
                     val replayScrollTarget = 230.coerceAtMost(scrollState.maxValue)
                     scrollState.animateScrollTo(replayScrollTarget)
@@ -570,20 +561,12 @@ fun SettingsScreen(
                 SettingsTutorialStep.COMPLETED -> null
             }
 
-            /*
-             * 선택한 설정 항목의 위치가 측정된 뒤에만 오버레이를 표시합니다.
-             * 위치 정보 공유 단계에서 targetBounds가 null인 채 스크림만 보이는
-             * 현상을 방지합니다.
-             */
+            // 선택한 설정 항목의 위치가 측정된 뒤에만 오버레이를 표시합니다. 위치 정보 공유 단계에서 targetBounds가 null인 채 스크림만 보이는 현상을 방지합니다.
             if (
                 targetBounds != null ||
                 tutorialState.settingsStep == SettingsTutorialStep.COMPLETED
             ) {
-                /*
-                 * 전체 튜토리얼에서는 설정 단계가 16~20번으로 진행되고,
-                 * 설정 화면만 다시 보기에서는 1~5번으로 진행됩니다.
-                 * 번호는 TutorialState의 currentNumber/totalNumber를 그대로 사용합니다.
-                 */
+                // 전체 튜토리얼 설정 단계는 15~19번이며, 설정 다시 보기는 1~5번입니다.
                 SettingsTutorialOverlay(
                     step = tutorialState.settingsStep,
                     targetBounds = targetBounds,
@@ -637,12 +620,7 @@ fun SettingsScreen(
 }
 
 
-/**
- * boundsInRoot()로 측정한 대상 영역을 SettingsScreen 최상위 Box 기준으로 변환합니다.
- *
- * 루트가 아직 측정되지 않은 최초 프레임에는 null을 반환하고,
- * 이후 onGloballyPositioned가 다시 호출되면 정상 좌표가 저장됩니다.
- */
+
 private fun Rect.relativeTo(rootBounds: Rect?): Rect? {
     val root = rootBounds ?: return null
 
@@ -665,10 +643,7 @@ private fun SettingsTutorialOverlay(
 ) {
     val density = LocalDensity.current
 
-    /*
-     * AppColor의 색상 값이 @Composable getter로 선언되어 있을 수 있으므로
-     * Canvas DrawScope 내부에서 직접 호출하지 않고 Composable 영역에서 미리 읽습니다.
-     */
+    // Canvas에서 사용할 강조 색상을 미리 읽습니다.
     val highlightColor = AppColor.greenPrimary
 
     val title = when (step) {
@@ -707,24 +682,27 @@ private fun SettingsTutorialOverlay(
     ) {
         val screenHeightPx = with(density) { maxHeight.toPx() }
 
-        /*
-         * 강조 대상이 화면 아래쪽에 있으면 안내창을 위로,
-         * 강조 대상이 화면 위쪽에 있으면 안내창을 아래로 배치합니다.
-         */
-        val showPopupAtTop = targetBounds?.let { bounds ->
-            bounds.center.y > screenHeightPx * 0.52f
-        } ?: false
+        // 하이라이트와 안내 창 사이 간격을 모든 설정 단계에서 동일하게 유지합니다.
+        val highlightPopupGapPx = with(density) { 20.dp.toPx() }
+        val screenEdgePaddingPx = with(density) { 8.dp.toPx() }
+        var popupHeightPx by remember { mutableIntStateOf(0) }
 
-        val popupAlignment = if (showPopupAtTop) {
-            Alignment.TopCenter
-        } else {
-            Alignment.BottomCenter
-        }
+        val popupTopPx = targetBounds?.let { bounds ->
+            val desiredTop = if (step == SettingsTutorialStep.ACCESSIBILITY) {
+                // 접근성 설정은 하이라이트 아래에 안내 창을 배치합니다.
+                bounds.bottom + highlightPopupGapPx
+            } else {
+                // 나머지 설정 단계는 하이라이트 위에 안내 창을 배치합니다.
+                bounds.top - highlightPopupGapPx - popupHeightPx
+            }
+            desiredTop.coerceIn(
+                screenEdgePaddingPx,
+                (screenHeightPx - popupHeightPx - screenEdgePaddingPx)
+                    .coerceAtLeast(screenEdgePaddingPx)
+            )
+        } ?: screenEdgePaddingPx
 
-        /*
-         * 화면 전체를 어둡게 한 뒤 강조 대상 영역만 투명하게 뚫습니다.
-         * 따라서 강조 영역 내부는 원래 밝기로 보이고 바깥쪽만 어두워집니다.
-         */
+        // 화면 전체를 어둡게 한 뒤 강조 대상 영역만 투명하게 뚫습니다. 따라서 강조 영역 내부는 원래 밝기로 보이고 바깥쪽만 어두워집니다.
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
@@ -773,14 +751,11 @@ private fun SettingsTutorialOverlay(
 
         Surface(
             modifier = Modifier
-                .align(popupAlignment)
+                .align(Alignment.TopCenter)
+                .offset { IntOffset(0, popupTopPx.roundToInt()) }
                 .fillMaxWidth()
-                .padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    top = if (showPopupAtTop) 24.dp else 20.dp,
-                    bottom = if (showPopupAtTop) 20.dp else 28.dp
-                ),
+                .padding(horizontal = 20.dp)
+                .onSizeChanged { popupHeightPx = it.height },
             shape = RoundedCornerShape(24.dp),
             color = BrandWhite,
             shadowElevation = 12.dp

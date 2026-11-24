@@ -62,16 +62,6 @@ import kotlinx.coroutines.delay
 
 private const val END_CONVERSATION_MESSAGE = "수고하셨습니다!"
 
-/**
- * 음성 대화 화면 — 캐릭터 중심 UI.
- *
- * 말풍선·캐릭터·버튼이 Box 절대 배치로 고정되어
- * 상태가 바뀌어도 위치가 움직이지 않는다.
- *
- * TopCenter    : AiSpeechBubble
- * Center       : CharacterImage
- * BottomCenter : 상태별 버튼 / 음파 / 대화종료 버튼
- */
 @Composable
 fun VoiceChatScreen(
     tutorialViewModel: TutorialViewModel,
@@ -88,38 +78,22 @@ fun VoiceChatScreen(
     val tapToReplay = LocalTapToReplay.current
     val tutorialState by tutorialViewModel.state.collectAsState()
 
-    /*
-     * 현재 프로젝트의 Compose 버전에서는 localBoundingBoxOf를 사용할 수 없으므로
-     * 최상위 화면의 boundsInRoot 값을 저장합니다.
-     *
-     * 각 강조 대상도 boundsInRoot로 측정한 뒤 루트 위치를 빼서
-     * VoiceChatScreen 내부 오버레이 좌표로 변환합니다.
-     */
     var tutorialRootBounds by remember {
         mutableStateOf<Rect?>(null)
     }
 
-    // TutorialOverlay에 전달할 실제 UI 위치입니다.
     var speechBubbleBounds by remember { mutableStateOf<Rect?>(null) }
     var microphoneBounds by remember { mutableStateOf<Rect?>(null) }
     var endButtonBounds by remember { mutableStateOf<Rect?>(null) }
 
-    // 대화 종료 진행 여부
     var isEnding by remember {
         mutableStateOf(false)
     }
 
-    // 다시 말하기 비활성화 안내 표시 여부
     var showReplayHint by remember {
         mutableStateOf(false)
     }
 
-    /*
-     * 대화 종료 버튼 클릭 후 2초 뒤 홈 화면으로 이동한다.
-     *
-     * 실제 화면 이동 코드는 AppNavGraph.kt에서
-     * onNavigateHome에 전달한다.
-     */
     LaunchedEffect(isEnding) {
         if (isEnding) {
             delay(2000L)
@@ -127,7 +101,6 @@ fun VoiceChatScreen(
         }
     }
 
-    // 다시 말하기 안내 카드는 3초 후 자동으로 숨긴다.
     LaunchedEffect(showReplayHint) {
         if (showReplayHint) {
             delay(3000L)
@@ -135,14 +108,6 @@ fun VoiceChatScreen(
         }
     }
 
-    /*
-     * TTS 재생
-     *
-     * speakTrigger가 변경되면 현재 문장을 재생한다.
-     * speakTrigger == 0은 초기값이므로 무시한다.
-     *
-     * 대화 종료 중에는 기존 AI 문장을 새로 재생하지 않는다.
-     */
     LaunchedEffect(viewModel.speakTrigger, isEnding) {
         if (isEnding) return@LaunchedEffect
         if (viewModel.speakTrigger == 0) return@LaunchedEffect
@@ -156,19 +121,15 @@ fun VoiceChatScreen(
         }
     }
 
-    // 녹음이 시작되면 기존 TTS를 즉시 중단한다.
+    // 녹음이 시작되면 기존 TTS를 즉시 중단
     LaunchedEffect(state) {
         if (state is VoiceChatState.Recording) {
             ttsManager?.stop()
         }
     }
 
-    /*
-     * 화면에서 벗어날 때:
-     * 1. TTS 중단
-     * 2. 재생 상태 초기화
-     * 3. 업로드된 음성이 있다면 세션 종료
-     */
+    // 화면 이탈 시 TTS와 세션을 정리
+
     DisposableEffect(Unit) {
         onDispose {
             ttsManager?.stop()
@@ -181,10 +142,6 @@ fun VoiceChatScreen(
         }
     }
 
-    /*
-     * 종료 버튼을 누른 경우 기존 AI 문장 대신
-     * "수고하셨습니다!"를 말풍선에 표시한다.
-     */
     val aiText = if (isEnding) {
         END_CONVERSATION_MESSAGE
     } else {
@@ -194,11 +151,6 @@ fun VoiceChatScreen(
     val isPlaying =
         state is VoiceChatState.Playing && !isEnding
 
-    /*
-     * 말풍선 또는 캐릭터 탭 처리
-     *
-     * 종료 중에는 다시 말하기를 사용할 수 없다.
-     */
     val replayTap: (() -> Unit)? = when {
         isEnding -> null
 
@@ -233,13 +185,11 @@ fun VoiceChatScreen(
                 }
             )
 
-            // ── 메인 영역 ─────────────────────────────────────────────
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
             ) {
-                // ① AI 말풍선
                 AiSpeechBubble(
                     text = aiText,
                     highlighted = isPlaying,
@@ -259,7 +209,6 @@ fun VoiceChatScreen(
                         }
                 )
 
-                // ② 캐릭터 이미지
                 CharacterImage(
                     state = state,
                     onClick = replayTap,
@@ -268,7 +217,6 @@ fun VoiceChatScreen(
                         .offset(y = (-10).dp)
                 )
 
-                // ③ 다시 말하기 비활성화 안내 카드
                 val hintAlpha by animateFloatAsState(
                     targetValue = if (showReplayHint && !isEnding) {
                         1f
@@ -298,19 +246,13 @@ fun VoiceChatScreen(
                     }
                 }
 
-                // ④ 하단 컨트롤
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    /*
-                     * 마이크 버튼과 종료 버튼을 같은 220dp Box 안에 배치한다.
-                     *
-                     * 따라서 종료 버튼을 추가해도 기존 마이크 버튼의
-                     * 중심 위치는 변경되지 않는다.
-                     */
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -330,12 +272,7 @@ fun VoiceChatScreen(
                                 animated = true
                             )
                         } else {
-                            /*
-                             * 종료 중에도 버튼 위치가 변하지 않도록
-                             * BigActionButton은 그대로 유지한다.
-                             *
-                             * 단, 종료 중에는 클릭 동작을 실행하지 않는다.
-                             */
+
                             Box(
                                 modifier = Modifier
                                     .offset(y = (-18).dp)
@@ -385,19 +322,12 @@ fun VoiceChatScreen(
                                     return@EndConversationButton
                                 }
 
-                                /*
-                                 * 녹음 중이라면 먼저 녹음을 중단한다.
-                                 */
                                 if (
                                     state is VoiceChatState.Recording
                                 ) {
                                     viewModel.stopRecording()
                                 }
 
-                                /*
-                                 * AI 음성이 재생 중이라면 기존 TTS와
-                                 * Playing 상태를 종료한다.
-                                 */
                                 if (
                                     state is VoiceChatState.Playing
                                 ) {
@@ -407,19 +337,10 @@ fun VoiceChatScreen(
                                     ttsManager?.stop()
                                 }
 
-                                // 다시 말하기 안내 카드가 떠 있다면 숨긴다.
                                 showReplayHint = false
 
-                                /*
-                                 * 먼저 종료 상태를 true로 변경하여
-                                 * 말풍선 문구를 바꾼다.
-                                 */
                                 isEnding = true
 
-                                /*
-                                 * 캐릭터가 종료 인사를 말하도록 TTS를 재생한다.
-                                 * 화면은 2초 후 자동으로 홈으로 이동한다.
-                                 */
                                 ttsManager?.speak(
                                     END_CONVERSATION_MESSAGE
                                 ) {
@@ -462,11 +383,6 @@ fun VoiceChatScreen(
             VoiceChatTutorialStep.COMPLETED -> null
         }
 
-        /*
-         * 강조 대상 위치가 측정되기 전에는 오버레이를 표시하지 않습니다.
-         * targetBounds가 null인 상태에서 오버레이를 그리면 화면 전체가
-         * 회색 스크림으로만 덮여 실제 대화 화면이 보이지 않을 수 있습니다.
-         */
         if (
             targetBounds != null ||
             tutorialState.voiceChatStep == VoiceChatTutorialStep.COMPLETED
@@ -494,10 +410,7 @@ fun VoiceChatScreen(
 
                         VoiceChatTutorialStep.END_BUTTON -> {
                             if (tutorialViewModel.isFullTutorial()) {
-                                /*
-                                 * 음성 대화 설명이 끝나면 AppNavGraph에서
-                                 * 하단 분석 탭을 안내합니다.
-                                 */
+
                                 tutorialViewModel.showAnalysisTabGuide(
                                     number = tutorialState.currentNumber + 1
                                 )
@@ -507,9 +420,7 @@ fun VoiceChatScreen(
                         }
 
                         VoiceChatTutorialStep.MOVE_TO_ANALYSIS_TAB -> {
-                            /*
-                             * 하단 탭 오버레이와 실제 이동은 AppNavGraph에서 처리합니다.
-                             */
+
                         }
 
                         VoiceChatTutorialStep.COMPLETED -> {
@@ -547,10 +458,6 @@ private fun VoiceChatTutorialOverlay(
 ) {
     val density = LocalDensity.current
 
-    /*
-     * AppColor 색상이 @Composable getter일 수 있으므로
-     * Canvas DrawScope 외부에서 먼저 읽어 둡니다.
-     */
     val highlightColor = AppColor.greenPrimary
 
     val title = when (step) {
@@ -607,11 +514,13 @@ private fun VoiceChatTutorialOverlay(
             )
 
             targetBounds?.let { bounds ->
-                val padding = 5.dp.toPx()
-                val left = (bounds.left - padding).coerceAtLeast(0f)
-                val top = (bounds.top - padding).coerceAtLeast(0f)
-                val right = (bounds.right + padding).coerceAtMost(size.width)
-                val bottom = (bounds.bottom + padding).coerceAtMost(size.height)
+                // 말풍선 단계는 하이라이트의 좌우 여백을 넓힌다.
+                val horizontalPadding = if (step == VoiceChatTutorialStep.MESSAGE) 12.dp.toPx() else 5.dp.toPx()
+                val verticalPadding = 5.dp.toPx()
+                val left = (bounds.left - horizontalPadding).coerceAtLeast(0f)
+                val top = (bounds.top - verticalPadding).coerceAtLeast(0f)
+                val right = (bounds.right + horizontalPadding).coerceAtMost(size.width)
+                val bottom = (bounds.bottom + verticalPadding).coerceAtMost(size.height)
 
                 val topLeft = Offset(left, top)
                 val highlightSize = Size(
@@ -721,9 +630,6 @@ private fun VoiceChatTutorialOverlay(
     }
 }
 
-/**
- * 대화종료 버튼
- */
 @Composable
 private fun EndConversationButton(
     isEnding: Boolean,
@@ -767,7 +673,7 @@ private fun EndConversationButton(
     ) {
         Text(
             text = if (isEnding) {
-                "대화 종료 중..."
+                "대화 종료 중"
             } else {
                 "대화종료"
             },

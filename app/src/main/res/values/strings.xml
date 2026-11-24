@@ -33,7 +33,7 @@
     <string name="signup_role_guardian_desc">가족의 건강 상태를 함께 관리하고 싶어요</string>
     <string name="signup_title_2">기본 정보를 입력해주세요</string>
     <string name="hint_name">이름</string>
-    <string name="hint_birth">생년월일 (YYYYMMDD)</string>
+    <string name="hint_birth">생년월일 (YYYY/MM/DD)</string>
     <string name="hint_phone">전화번호</string>
     <string name="hint_password_confirm">비밀번호 확인</string>
     <string name="btn_complete">완료</string>

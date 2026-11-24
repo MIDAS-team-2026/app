@@ -71,6 +71,7 @@ public class AiAnalysisService {
             speechResult.setTotalPauseDuration(speechDto.getTotalPauseDuration());
             speechResult.setAvgPauseDuration(speechDto.getAvgPauseDuration());
             speechResult.setMaxPauseDuration(speechDto.getMaxPauseDuration());
+            speechResult.setPauseRatio(speechDto.getPauseRatio());
             speechResult.setRmsMean(speechDto.getRmsMean());
             speechResult.setRmsStd(speechDto.getRmsStd());
             speechResult.setZcrMean(speechDto.getZcrMean());
@@ -122,6 +123,7 @@ public class AiAnalysisService {
             speechResult.setVoicedSegmentsPerSec(speechDto.getVoicedSegmentsPerSec());
             speechResult.setMeanVoicedSegmentLength(speechDto.getMeanVoicedSegmentLength());
             speechResult.setMeanUnvoicedSegmentLength(speechDto.getMeanUnvoicedSegmentLength());
+            speechResult.setVoiceActivityRatio(speechDto.getVoiceActivityRatio());
             speechResult.setVoiceBreakCount(speechDto.getVoiceBreakCount());
             speechResult.setVoiceBreakRatio(speechDto.getVoiceBreakRatio());
             speechResult.setDysarthriaSimilarityScore(speechDto.getDysarthriaSimilarityScore());
