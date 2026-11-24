@@ -86,6 +86,7 @@ import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialScreen
 import com.midas26.mobileapp.ui.tutorial.guardian.GuardianTutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.util.SessionManager
 
 private val GuardianTutorialAccentColor = Color(0xFFC85E48)
 
@@ -231,7 +232,7 @@ fun GuardianSettingsScreen(
             message = "정말 로그아웃 하시겠어요?",
             confirmText = "로그아웃",
             onConfirm = {
-                PrefsManager.from(context).clearToken()
+                SessionManager.signOut(context)
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }
