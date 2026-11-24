@@ -48,3 +48,8 @@ venv/
 # Local server logs
 backend/*.log
 backend/ai/*.log
+
+# 로컬 환경변수 파일 (비밀값 포함 — 커밋 금지). 양식은 backend/.env.example 참고
+.env
+.env.*
+!.env.example
