@@ -49,6 +49,7 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.util.PasswordRules
 
 /** 숫자 원본은 그대로 두고 화면에만 구분 기호를 표시한다. */
 private class GroupedDigitsTransformation(
@@ -148,12 +149,6 @@ fun SignupInfoScreen(
     val errorBirthFormat = stringResource(R.string.error_birth_format)
     val passwordHelper = stringResource(R.string.password_helper)
 
-    fun isValidPassword(value: String): Boolean {
-        val hasEnglish = value.any { it in 'A'..'Z' || it in 'a'..'z' }
-        val hasDigit = value.any { it.isDigit() }
-        return value.length >= 8 && hasEnglish && hasDigit
-    }
-
     fun validate(): Boolean {
         var ok = true
 
@@ -213,7 +208,7 @@ fun SignupInfoScreen(
                 ok = false
                 errorRequired
             }
-            !isValidPassword(password) -> {
+            !PasswordRules.isValid(password) -> {
                 ok = false
                 passwordHelper
             }

@@ -38,6 +38,7 @@ import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
+import com.midas26.mobileapp.util.PasswordRules
 
 @Composable
 fun ResetPasswordScreen(
@@ -69,12 +70,6 @@ fun ResetPasswordScreen(
         }
     }
 
-    fun isValidPassword(value: String): Boolean {
-        val hasEnglish = value.any { it in 'A'..'Z' || it in 'a'..'z' }
-        val hasDigit = value.any { it.isDigit() }
-        return value.length >= 8 && hasEnglish && hasDigit
-    }
-
     fun validate(): Boolean {
         var ok = true
 
@@ -83,7 +78,7 @@ fun ResetPasswordScreen(
                 ok = false
                 "새 비밀번호를 입력해주세요."
             }
-            !isValidPassword(newPassword) -> {
+            !PasswordRules.isValid(newPassword) -> {
                 ok = false
                 passwordHelper
             }
