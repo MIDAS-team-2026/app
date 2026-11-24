@@ -542,7 +542,9 @@ class AnalysisViewModel(application: Application) : AndroidViewModel(application
             val dRisk       = sel?.riskLevel   ?: riskLevel
             val dSpeechRisk = sel?.speechScore ?: speechScore
             val dTextScore  = sel?.textScore   ?: textScore
-            val dRecallScore = recallScore
+            // 지난 날짜를 선택하면 기억력 점수도 그날 값으로 보여준다.
+            // (예전에는 음성 점수만 바뀌고 기억력 점수는 오늘 값 그대로였다.)
+            val dRecallScore = sel?.recallScore ?: recallScore
 
             return listOf(
                 AnalysisItem(

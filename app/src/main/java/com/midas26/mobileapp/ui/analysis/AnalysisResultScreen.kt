@@ -277,13 +277,14 @@ private fun UserAnalysisResultContent(
                                 },
                                 verticalAlignment = Alignment.Bottom
                             ) {
-                                Text(
-                                    text = if (
-                                        viewModel.isViewingToday &&
+                                // 오늘 아직 점검을 하지 않은 상태 — 결과가 없는 것이지 0점이 아니다.
+                                val noResultToday = viewModel.isViewingToday &&
                                         !viewModel.hasTodayData &&
                                         !viewModel.isTutorialDemo
-                                    ) {
-                                        "0"
+
+                                Text(
+                                    text = if (noResultToday) {
+                                        "–"
                                     } else {
                                         viewModel.displayScore.toString()
                                     },
@@ -295,7 +296,7 @@ private fun UserAnalysisResultContent(
                                 Spacer(modifier = Modifier.size(4.dp))
 
                                 Text(
-                                    text = "점",
+                                    text = if (noResultToday) "" else "점",
                                     fontSize = (18 * fontScale).sp,
                                     color = BrandWhite,
                                     fontWeight = FontWeight.SemiBold,
