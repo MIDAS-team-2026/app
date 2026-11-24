@@ -49,6 +49,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +63,7 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import androidx.compose.foundation.BorderStroke
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
+import com.midas26.mobileapp.util.PasswordRules
 import com.midas26.mobileapp.util.PrefsManager
 import androidx.compose.foundation.layout.offset
 
@@ -115,6 +117,8 @@ fun ProfileEditScreen(
         }
     }
 
+    val passwordHelper = stringResource(R.string.password_helper)
+
     fun validate(): Boolean {
         var ok = true
         currentPasswordError = if (currentPassword.isEmpty()) {
@@ -122,7 +126,8 @@ fun ProfileEditScreen(
         } else null
         newPasswordError = when {
             newPassword.isEmpty() -> { ok = false; "새 비밀번호를 입력해주세요." }
-            newPassword.length < 8 -> { ok = false; "8자 이상 입력해주세요." }
+            // 회원가입·비밀번호 재설정과 같은 규칙(영문, 숫자 포함 8자 이상)을 적용
+            !PasswordRules.isValid(newPassword) -> { ok = false; passwordHelper }
             else -> null
         }
         confirmPasswordError = when {
@@ -445,7 +450,7 @@ fun ProfileEditScreen(
                         label = "새 비밀번호",
                         leadingIcon = Icons.Filled.Lock,
                         isPassword = true,
-                        helperText = "8자 이상 입력해주세요.",
+                        helperText = passwordHelper,
                         errorText = newPasswordError,
                         imeAction = ImeAction.Next
                     )
