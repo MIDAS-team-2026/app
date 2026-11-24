@@ -94,6 +94,7 @@ import com.midas26.mobileapp.ui.tutorial.TutorialReplayTarget
 import com.midas26.mobileapp.ui.tutorial.TutorialScreen
 import com.midas26.mobileapp.ui.tutorial.TutorialViewModel
 import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.util.SessionManager
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -254,7 +255,7 @@ fun SettingsScreen(
             confirmText = "로그아웃",
             isGuardian = isGuardian,
             onConfirm = {
-                PrefsManager.from(context).clearToken()
+                SessionManager.signOut(context)
                 onLogout()
             },
             onDismiss = { showLogoutDialog = false }

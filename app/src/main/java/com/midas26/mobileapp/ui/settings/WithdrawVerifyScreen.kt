@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.ui.theme.BrandWhite
-import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.util.SessionManager
 
 @Composable
 fun WithdrawVerifyScreen(
@@ -69,7 +69,7 @@ fun WithdrawVerifyScreen(
     LaunchedEffect(state) {
         when (state) {
             is WithdrawState.Withdrawn -> {
-                PrefsManager.from(context).clearToken()
+                SessionManager.signOut(context)
                 viewModel.resetState()
                 onWithdrawn()
             }
