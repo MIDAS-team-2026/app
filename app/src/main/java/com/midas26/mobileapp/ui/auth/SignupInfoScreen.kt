@@ -36,10 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -48,45 +44,12 @@ import java.util.Calendar
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
+import com.midas26.mobileapp.ui.components.GroupedDigitsTransformation
+import com.midas26.mobileapp.ui.components.phoneNumberTransformation
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PasswordRules
 
-/** 숫자 원본은 그대로 두고 화면에만 구분 기호를 표시한다. */
-private class GroupedDigitsTransformation(
-    private val separator: Char,
-    private val boundaries: List<Int>
-) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val raw = text.text
-        val result = StringBuilder()
-        val originalToDisplay = IntArray(raw.length + 1)
-        val displayToOriginal = mutableListOf(0)
-
-        for (i in raw.indices) {
-            if (i in boundaries) {
-                result.append(separator)
-                displayToOriginal.add(i)
-            }
-            originalToDisplay[i] = result.length
-            result.append(raw[i])
-            displayToOriginal.add(i + 1)
-        }
-        originalToDisplay[raw.length] = result.length
-
-        val mapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int =
-                originalToDisplay[offset.coerceIn(0, raw.length)]
-
-            override fun transformedToOriginal(offset: Int): Int =
-                displayToOriginal[offset.coerceIn(0, result.length)]
-        }
-        return TransformedText(AnnotatedString(result.toString()), mapping)
-    }
-}
-
 private val birthTransformation = GroupedDigitsTransformation('/', listOf(4, 6))
-private val phoneTransformation11 = GroupedDigitsTransformation('-', listOf(3, 7))
-private val phoneTransformation10 = GroupedDigitsTransformation('-', listOf(3, 6))
 
 @Composable
 fun SignupInfoScreen(
@@ -345,7 +308,7 @@ fun SignupInfoScreen(
                 keyboardType = KeyboardType.Phone,
                 imeAction = ImeAction.Next,
                 maxLength = 11,
-                visualTransformation = if (phone.length == 10) phoneTransformation10 else phoneTransformation11,
+                visualTransformation = phoneNumberTransformation(phone),
                 errorText = phoneError
             )
 
