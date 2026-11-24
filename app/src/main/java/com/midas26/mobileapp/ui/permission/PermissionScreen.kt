@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
@@ -61,11 +60,9 @@ fun PermissionScreen(
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             add(Manifest.permission.POST_NOTIFICATIONS)
-            add(Manifest.permission.READ_MEDIA_IMAGES)
-            add(Manifest.permission.READ_MEDIA_VIDEO)
-        } else {
-            add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
+        // 사진·동영상·저장소 권한은 요청하지 않는다. 앱이 미디어 파일을 읽지 않고,
+        // 녹음 파일은 권한이 필요 없는 앱 전용 캐시 폴더에 저장한다.
     }.toTypedArray()
 
     val launcher = rememberLauncherForActivityResult(
@@ -75,8 +72,7 @@ fun PermissionScreen(
     val items = listOf(
         PermissionItem(Icons.Default.Mic,           R.string.permission_mic,          R.string.permission_mic_desc,          true),
         PermissionItem(Icons.Default.LocationOn,    R.string.permission_location,     R.string.permission_location_desc,     false),
-        PermissionItem(Icons.Default.Notifications, R.string.permission_notification, R.string.permission_notification_desc, false),
-        PermissionItem(Icons.Default.Folder,        R.string.permission_storage,      R.string.permission_storage_desc,      false)
+        PermissionItem(Icons.Default.Notifications, R.string.permission_notification, R.string.permission_notification_desc, false)
     )
 
     Column(
