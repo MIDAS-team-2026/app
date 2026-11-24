@@ -1,276 +1,128 @@
-# \# 🧠 Dementia Care AI
+# 똑똑 (Knock Knock)
 
-# 
+음성 대화와 회상 과제로 인지 기능 변화를 살펴보는 안드로이드 앱입니다.
+사용자가 앱과 대화하면 음성·언어·회상 결과를 분석해 점수로 보여 주고, 연결된 보호자가 결과와 위치를 확인할 수 있습니다.
 
-# AI 기반 음성·텍스트 분석을 통해 사용자의 인지 기능 변화를 모니터링하고
+> 분석 결과는 참고용 정보이며 의학적 진단이나 치료를 대체하지 않습니다.
 
-# 치매 위험도를 조기 예측하는 안드로이드 애플리케이션입니다.
+영남대학교 컴퓨터공학과 캡스톤디자인 MIDAS 팀 프로젝트입니다.
 
-# 
+## 구성
 
-# ---
+하나의 저장소에 앱, 백엔드, AI 서버가 함께 들어 있습니다.
 
-# 
+| 폴더 | 내용 | 기술 |
+|---|---|---|
+| `app/` | 안드로이드 앱 | Kotlin, Jetpack Compose, Retrofit (minSdk 24, targetSdk 36) |
+| `backend/` | API 서버 | Spring Boot 3.5, Java 17, JPA, MySQL, JWT, AWS S3 |
+| `backend/ai/` | AI 서버 | Python, FastAPI |
+| `docs/` | 설계 문서 | 요구사항(DRD), 설계(DSD), 백엔드–AI 연동 가이드 |
 
-# \## 📱 App Info
+```text
+앱 ──HTTP──▶ Spring 서버(8080) ──HTTP──▶ AI 서버(8000)
+                 │  ▲                        │
+                 ▼  └──── 분석 결과 저장 ◀───┘
+              MySQL · S3
+```
 
-# 
+- 앱은 Spring 서버하고만 통신합니다.
+- AI 서버는 DB에 직접 접근하지 않고, Spring 서버의 API를 호출해 결과를 저장합니다.
+- 녹음한 음성 파일은 S3에 보관하고, 음성 인식과 질문 생성에는 외부 AI 서비스를 사용합니다.
 
-# \* \*\*Platform\*\*: Android
+## 주요 기능
 
-# \* \*\*Language\*\*: Kotlin
+- **음성 대화**: 앱이 질문하고 사용자가 말로 답합니다. 답변은 녹음해 서버로 보냅니다.
+- **회상 질문**: 대화에서 한 말을 나중에 다시 물어보고, 날짜·요일 같은 기본 질문도 함께 묻습니다.
+- **분석 결과**: 음성 점수와 기억력 점수, 종합 위험도를 날짜별·주간으로 보여 줍니다.
+- **보호자 연동**: 보호자가 사용자 코드로 연결해 분석 결과를 확인합니다.
+- **위치 공유**: 사용자가 설정에서 켠 경우에만 보호자가 현재 위치와 이동 경로를 볼 수 있습니다.
+- **접근성**: 글자 크기, 고대비, 음성 안내 속도 등을 조절할 수 있습니다.
 
-# \* \*\*Version\*\*: 0.1.0 (Prototype)
+## 실행에 필요한 것
 
-# \* \*\*Min SDK\*\*: 24
+- JDK 17
+- MySQL (데이터베이스 이름 `midas`)
+- Python 3.11
+- Android Studio (앱을 실행할 때)
 
-# \* \*\*Target SDK\*\*: 36
+### 환경변수
 
-# 
+키와 비밀번호는 저장소에 올리지 않고 환경변수로 넣습니다. 값은 팀 내부에서 공유합니다.
 
-# ---
+| 이름 | 쓰는 곳 | 설명 |
+|---|---|---|
+| `DB_PASSWORD` | Spring | MySQL `root` 계정 비밀번호 |
+| `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` | Spring | 음성 파일을 저장하는 S3 접근 키 |
+| `JWT_SECRET` | Spring | 로그인 토큰 서명 키. 32바이트 이상의 임의 문자열을 직접 만들어 사용 (선택, 없으면 서버를 재시작할 때마다 다시 로그인 필요) |
+| `AI_PYTHON_URL` | Spring | AI 서버 주소 (선택, 기본값 `http://localhost:8000`) |
+| `GROQ_API_KEY` | AI 서버 | 음성 인식(Groq) 키 |
+| `YNU_API_KEY` | AI 서버 | 질문 생성에 쓰는 LLM 게이트웨이 키 |
+| `SPRING_BASE_URL` | AI 서버 | Spring 서버 주소 (선택, 기본값 `http://localhost:8080`) |
 
-# 
+## 실행 방법
 
-# \## 🚀 주요 기능
+### 1. Spring 서버 (포트 8080)
 
-# 
+```bash
+cd backend
+./mvnw spring-boot:run
+```
 
-# \### 🎤 1. 음성 기반 분석
+Windows에서는 `mvnw.cmd spring-boot:run` 을 씁니다.
+서버가 뜨면 `http://localhost:8080/swagger-ui/index.html` 에서 API 목록을 볼 수 있습니다.
+테이블은 서버를 처음 띄울 때 자동으로 만들어집니다.
 
-# 
+### 2. AI 서버 (포트 8000)
 
-# \* 사용자 음성 녹음 및 저장
+```bash
+cd backend/ai
+python -m venv .venv
+```
 
-# \* 발화 속도, 침묵 구간, 반복 발화 분석
+가상환경을 켠 뒤 필요한 패키지를 설치합니다. 패키지 목록은 `analysis/`, `recall/`, `speech_ensemble/` 폴더의 `requirements.txt` 에 나뉘어 있습니다.
 
-# \* pitch, jitter, shimmer 기반 음성 특징 추출
+```bash
+python -m uvicorn fastapi_ai:app --host 0.0.0.0 --port 8000
+```
 
-# 
+음성 분석 모델 파일은 용량 문제로 저장소에 올리지 않습니다. 팀 내부에서 받아 `backend/ai/speech_ensemble/models/` 에 넣어야 음성 분석이 동작합니다.
 
-# \### 📝 2. 텍스트 분석
+### 3. 앱
 
-# 
+Android Studio에서 저장소 최상위 폴더를 열고 `app` 을 실행합니다.
 
-# \* STT(Speech-to-Text)를 통한 텍스트 변환
+앱의 서버 주소는 `app/src/main/java/com/midas26/mobileapp/network/RetrofitClient.kt` 의 `BASE_URL` 에 있습니다.
+기본값 `http://10.0.2.2:8080/` 은 에뮬레이터에서 PC의 8080 포트를 가리키는 주소라서, 실제 기기에서 실행하려면 PC의 IP 주소로 바꿔야 합니다.
 
-# \* 어휘 다양성, 문장 길이, 반복 표현 분석
+### 한 번에 실행하기
 
-# \* 의미 연결성 및 언어 패턴 변화 감지
+최상위 폴더의 `start.sh`(Windows는 `start.bat`)는 AI 서버와 Spring 서버를 함께 띄우는 스크립트입니다.
+실행하기 전에 스크립트 안의 경로와 환경변수 설정을 자신의 PC에 맞게 확인하세요.
 
-# 
+## 테스트
 
-# \### 🧠 3. 기억 일치도 평가
+```bash
+# 백엔드
+cd backend
+./mvnw test
 
-# 
+# 앱 단위 테스트
+./gradlew :app:testDebugUnitTest
+```
 
-# \* 과거 대화 데이터와 현재 응답 비교
+AI 서버의 테스트는 `backend/ai/tests/` 에 있습니다.
 
-# \* 회상 정확도 기반 인지 기능 평가
+`BackendApplicationTests` 는 실제 DB에 연결하므로 MySQL과 환경변수가 준비된 상태에서만 통과합니다.
 
-# 
+## 문서
 
-# \### 📊 4. 위험도 분석 및 시각화
+- [요구사항 정의서 (DRD)](docs/DRD_문서.md)
+- [설계 문서 (DSD)](docs/DSD_문서.md)
+- [백엔드–AI 연동 가이드](docs/ai_db_integrate_guide.md)
+- [AI–DB 요구사항](docs/ai_db_requirements.md)
+- AI 모듈별 설명: [음성 분석](backend/ai/analysis/README.md) · [회상 분석](backend/ai/recall/README.md) · [음성 앙상블 모델](backend/ai/speech_ensemble/README.md)
 
-# 
+## 협업 방식
 
-# \* 음성 + 텍스트 + 기억 데이터 통합 분석
-
-# \* 일별/주별 인지 기능 변화 그래프 제공
-
-# 
-
-# \### 🔔 5. 알림 및 모니터링
-
-# 
-
-# \* 정기 자가 점검 알림
-
-# \* 이상 징후 발생 시 경고 알림
-
-# \* 보호자 연동 기능 (예정)
-
-# 
-
-# ---
-
-# 
-
-# \## 🏗️ 시스템 구조
-
-# 
-
-# ```text
-
-# \[Android App]
-
-# &nbsp;  ↓ 음성 입력
-
-# \[STT 변환]
-
-# &nbsp;  ↓
-
-# \[분석 서버 / AI 모델]
-
-# &nbsp;  ↓
-
-# \[위험도 계산 및 저장]
-
-# &nbsp;  ↓
-
-# \[앱에서 시각화]
-
-# ```
-
-# 
-
-# ---
-
-# 
-
-# \## 🛠️ 기술 스택
-
-# 
-
-# \### 📱 Client
-
-# 
-
-# \* Kotlin
-
-# \* Jetpack Compose
-
-# \* Android Studio
-
-# 
-
-# \### 🖥️ Backend
-
-# 
-
-# \* Spring Boot (예정)
-
-# \* REST API
-
-# 
-
-# \### 🤖 AI / Data
-
-# 
-
-# \* STT (Speech-to-Text)
-
-# \* LLM API (OpenAI / Gemini)
-
-# \* Similarity Analysis (Cosine Similarity)
-
-# 
-
-# \### 🗄️ Database
-
-# 
-
-# \* MySQL (예정)
-
-# 
-
-# ---
-
-# 
-
-# \## 📊 데이터
-
-# 
-
-# \* AI Hub 인지기능 장애 음성 데이터셋 활용
-
-# \* 총 1002명 대상자
-
-# \* 약 5769건 음성 데이터
-
-# \* 총 녹음 시간 약 672시간
-
-# 
-
-# ---
-
-# 
-
-# \## 📅 개발 일정
-
-# 
-
-# \* 2026.03 ~ 2026.05 : 기획 및 설계
-
-# \* 2026.05 ~ 2026.10 : 시스템 구현
-
-# \* 2026.10 ~ 2026.11 : 테스트 및 개선
-
-# \* 2026.11 : 최종 발표
-
-# 
-
-# ---
-
-# 
-
-# \## 🎯 프로젝트 목표
-
-# 
-
-# \* 인지 기능 저하 조기 탐지
-
-# \* 지속적인 사용자 상태 모니터링
-
-# \* 보호자 및 의료기관 연계 지원
-
-# 
-
-# ---
-
-# 
-
-# \## ⚠️ 주의사항
-
-# 
-
-# 본 애플리케이션은 의료 진단 도구가 아닌
-
-# \*\*참고용 인지 상태 모니터링 시스템\*\*입니다.
-
-# 
-
-# ---
-
-# 
-
-# \## 👨‍💻 Team
-
-# 
-
-# \* 김형섭
-
-# \* 전선영
-
-# \* 김민정
-
-# \* 이주연
-
-# \* 김경빈
-
-# \* 김동현
-
-# 
-
-# ---
-
-# 
-
-# \## 📌 GitHub
-
-# 
-
-# > 프로젝트 진행 중 지속적으로 업데이트됩니다.
-
-
-
+- 작업은 브랜치에서 하고 Pull Request로 `main` 에 병합합니다.
+- 커밋 메시지는 `[추가]`, `[수정]`, `[삭제]` 같은 말머리로 시작합니다.
