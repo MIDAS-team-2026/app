@@ -26,7 +26,7 @@ public class ChatSessionService {
 
     @Value("${ai.python.url:http://localhost:8000}")
     private String pythonBaseUrl;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
 
     // 새로운 대화 세션을 생성하고 세션 ID + 오늘 고정질문 완료 여부 + 첫 고정질문 텍스트를 반환
     @Transactional
