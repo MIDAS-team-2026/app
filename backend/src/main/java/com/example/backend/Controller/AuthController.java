@@ -13,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -22,6 +24,8 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserService userService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -44,7 +48,8 @@ public class AuthController {
                         .body(ApiResponse.fail(404, "등록되지 않은 전화번호입니다."));
             }
         }
-        String code = String.format("%06d", (int)(Math.random() * 1000000));
+        // 예측할 수 없는 난수(SecureRandom)로 6자리 인증번호 생성
+        String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
         VerificationStore.saveCode(dto.getPhone(), code);
         log.info("[인증코드] 전화번호: {} → 코드: {}", dto.getPhone(), code);
         return ResponseEntity.ok(ApiResponse.success(null));
@@ -62,8 +67,10 @@ public class AuthController {
                 .body(ApiResponse.fail(400, "인증번호가 올바르지 않습니다."));
     }
 
+    // 회원가입
+    // 응답에는 화면에 필요한 정보만 담는다. (User 엔티티를 그대로 내보내면 비밀번호 해시까지 노출됨)
     @PostMapping("/signup")
-    public ResponseEntity<ApiResponse<User>> signup(@RequestBody SignupDTO signupDTO) {
+    public ResponseEntity<ApiResponse<UserResponseDTO>> signup(@RequestBody SignupDTO signupDTO) {
         try {
             User user = new User();
             user.setPhone(signupDTO.getPhone());
@@ -74,7 +81,21 @@ public class AuthController {
             user.setGender(signupDTO.getGender());
 
             User savedUser = userService.register(user);
-            return ResponseEntity.ok(ApiResponse.success(savedUser));
+
+            // 가입에 쓴 인증 완료 상태는 여기서 끝낸다. (남겨두면 비밀번호 재설정에 재사용될 수 있음)
+            VerificationStore.clearVerified(savedUser.getPhone());
+
+            UserResponseDTO response = new UserResponseDTO(
+                    savedUser.getId(),
+                    savedUser.getPhone(),
+                    savedUser.getName(),
+                    savedUser.getRole(),
+                    savedUser.getPatientCode()
+            );
+            return ResponseEntity.ok(ApiResponse.success(response));
+        } catch (ResponseStatusException e) {
+            // 비밀번호 규칙 위반(400) 등은 공통 예외 처리기로 그대로 넘긴다.
+            throw e;
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.fail(409, e.getMessage()));
@@ -123,11 +144,33 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(null));
     }
 
+    // 비밀번호 변경
+    // 본인 확인이 된 요청만 허용한다.
+    //  1) 비밀번호 찾기: 인증번호 확인(/verify-code)을 통과한 전화번호
+    //  2) 프로필에서 변경: 로그인 토큰의 주인이 해당 전화번호의 사용자
+    // 둘 다 아니면 403 (401로 주면 앱이 강제 로그아웃 처리하므로 403 사용)
     @PostMapping("/reset-password")
-    public ResponseEntity<ApiResponse<?>> resetPassword(@RequestBody ResetPasswordDTO dto) {
+    public ResponseEntity<ApiResponse<?>> resetPassword(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody ResetPasswordDTO dto) {
+
+        boolean verifiedByCode = VerificationStore.isVerified(dto.getPhone());
+        boolean verifiedByToken = userService.isTokenOwner(authorizationHeader, dto.getPhone());
+
+        if (!verifiedByCode && !verifiedByToken) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.fail(403, "본인 확인이 필요합니다. 인증번호 확인 후 다시 시도해주세요."));
+        }
+
         try {
             userService.resetPassword(dto.getPhone(), dto.getNewPassword());
+
+            // 인증 완료 상태는 한 번만 쓸 수 있다.
+            VerificationStore.clearVerified(dto.getPhone());
             return ResponseEntity.ok(ApiResponse.success(null));
+        } catch (ResponseStatusException e) {
+            // 비밀번호 규칙 위반(400) 등은 공통 예외 처리기로 그대로 넘긴다.
+            throw e;
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(ApiResponse.fail(404, e.getMessage()));
@@ -137,8 +180,20 @@ public class AuthController {
         }
     }
 
+    // 회원 탈퇴
+    // 로그인한 본인만 자신의 계정을 탈퇴할 수 있다. (토큰 없음 401, 다른 사람 번호 403)
     @PostMapping("/withdraw")
-    public ResponseEntity<ApiResponse<?>> withdraw(@RequestBody ForgotPasswordDTO dto) {
+    public ResponseEntity<ApiResponse<?>> withdraw(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody ForgotPasswordDTO dto) {
+
+        User requester = userService.getAuthenticatedUser(authorizationHeader);
+
+        if (!requester.getPhone().equals(dto.getPhone())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(ApiResponse.fail(403, "본인 계정만 탈퇴할 수 있습니다."));
+        }
+
         try {
             userService.deleteUser(dto.getPhone());
             return ResponseEntity.ok(ApiResponse.success(null));
@@ -152,8 +207,14 @@ public class AuthController {
     }
 
     // 환자 기준: 해당 환자에게 연결된 보호자 목록 조회
+    // 환자 본인 또는 그 환자와 연동된 보호자만 조회할 수 있다.
     @GetMapping("/patients/{patientId}/guardians")
-    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getGuardiansByPatient(@PathVariable Integer patientId) {
+    public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getGuardiansByPatient(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Integer patientId) {
+
+        userService.validatePatientAccess(authorizationHeader, patientId);
+
         List<UserResponseDTO> guardians = userService.getGuardiansByPatient(patientId).stream()
                 .map(u -> new UserResponseDTO(
                         u.getId(),
@@ -168,9 +229,13 @@ public class AuthController {
     }
 
     // 보호자 기준: 해당 보호자가 연결한 환자 목록 조회
+    // 보호자 본인만 자신의 환자 목록을 조회할 수 있다.
     @GetMapping("/protectors/{protectorId}/patients")
     public ResponseEntity<ApiResponse<List<UserResponseDTO>>> getPatientsByProtector(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @PathVariable Integer protectorId) {
+
+        userService.validateSelfAccess(authorizationHeader, protectorId);
 
         try {
             List<UserResponseDTO> patients = userService.getPatientsByProtector(protectorId).stream()
@@ -195,8 +260,14 @@ public class AuthController {
 
 
     // 코드로 환자 정보 조회 (교차검증용 — 이름·전화번호만 응답)
+    // 로그인한 사용자만 조회할 수 있다.
     @GetMapping("/patients/by-code/{code}")
-    public ResponseEntity<ApiResponse<UserResponseDTO>> getPatientByCode(@PathVariable String code) {
+    public ResponseEntity<ApiResponse<UserResponseDTO>> getPatientByCode(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable String code) {
+
+        userService.getAuthenticatedUser(authorizationHeader);
+
         try {
             User patient = userService.findByPatientCode(code.toUpperCase());
             UserResponseDTO dto = new UserResponseDTO(
@@ -214,10 +285,15 @@ public class AuthController {
     }
 
     // 보호자-환자 연동 해제
+    // 해당 보호자 본인 또는 해당 환자 본인만 해제할 수 있다.
     @DeleteMapping("/protectors/{protectorId}/patients/{patientId}")
     public ResponseEntity<ApiResponse<Void>> unlinkPatient(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @PathVariable Integer protectorId,
             @PathVariable Integer patientId) {
+
+        userService.validateLinkAccess(authorizationHeader, protectorId, patientId);
+
         try {
             userService.unlinkPatient(protectorId, patientId);
             return ResponseEntity.ok(ApiResponse.success());
@@ -227,8 +303,15 @@ public class AuthController {
         }
     }
 
+    // 보호자-환자 연동
+    // 보호자 본인만 자신의 계정에 환자를 연동할 수 있다.
     @PostMapping("/link")
-    public ResponseEntity<ApiResponse<Void>> linkProtector(@RequestBody LinkRequestDTO linkDTO) {
+    public ResponseEntity<ApiResponse<Void>> linkProtector(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @RequestBody LinkRequestDTO linkDTO) {
+
+        userService.validateSelfAccess(authorizationHeader, linkDTO.getProtectorId());
+
         try {
             userService.linkProtector(linkDTO.getProtectorId(), linkDTO.getPatientCode());
             return ResponseEntity.ok(ApiResponse.success());
