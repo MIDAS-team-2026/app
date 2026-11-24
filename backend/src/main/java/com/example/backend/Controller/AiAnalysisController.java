@@ -165,7 +165,13 @@ class AiAnalysisController {
 
     // 세션 종료 및 Python 배치 분석 트리거
     @PostMapping("/chat/session/{sessionId}/complete")
-    public ResponseEntity<String> completeSession(@PathVariable Long sessionId) {
+    public ResponseEntity<String> completeSession(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long sessionId) {
+
+        // 세션의 주인 본인(또는 연동된 보호자)만 세션을 종료할 수 있다.
+        userService.validatePatientAccess(authorizationHeader, chatSessionService.getSessionOwnerId(sessionId));
+
         chatSessionService.endSession(sessionId);
         aiAnalysisService.completeSessionAndTriggerBatch(sessionId);
         return ResponseEntity.ok("세션이 성공적으로 종료되었으며 분석 트리거가 완료되었습니다.");

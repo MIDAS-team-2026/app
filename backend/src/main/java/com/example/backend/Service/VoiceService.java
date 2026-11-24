@@ -52,15 +52,23 @@ public class VoiceService {
             String answerRole,
             MultipartFile file) throws IOException {
 
+        // 사용자·세션을 먼저 확인한 뒤에 파일을 올린다.
+        // (확인 전에 올리면 잘못된 요청에도 S3에 파일이 남는다.)
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 세션입니다."));
+
+        // 다른 사용자의 세션에 음성이 섞여 들어가지 않도록 세션의 주인을 확인한다.
+        if (!session.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("해당 사용자의 세션이 아닙니다.");
+        }
+
         long uploadStarted = System.nanoTime();
         String fileUrl = s3Service.uploadFile(file);
         log.info("voice_stage stage=s3_upload sessionId={} elapsed_ms={}", sessionId,
                 (System.nanoTime() - uploadStarted) / 1_000_000);
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 유저입니다."));
-        ChatSession session = chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 세션입니다."));
         Integer nextTurn = audioRecordRepository.findMaxTurnOrderByChatSessionId(sessionId) + 1;
 
         AudioRecord record = new AudioRecord();
@@ -98,6 +106,14 @@ public class VoiceService {
                 .recordedAt(savedRecord.getRecordedAt())
                 .build();
     }
+    // 녹음의 소유자(사용자) ID 조회 — 녹음 단위 API의 접근 권한 검사에 사용
+    @Transactional(readOnly = true)
+    public Integer getRecordOwnerId(Long recordId) {
+        AudioRecord record = audioRecordRepository.findById(recordId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 녹음 기록입니다. recordId=" + recordId));
+        return record.getUser().getId();
+    }
+
     @Transactional
     public void updateTranscript(Long recordId, String transcriptText) {
         AudioRecord record = audioRecordRepository.findById(recordId)

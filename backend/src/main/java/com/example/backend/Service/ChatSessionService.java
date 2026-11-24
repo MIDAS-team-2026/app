@@ -72,4 +72,12 @@ public class ChatSessionService {
 
         chatSessionRepository.save(session);
     }
+
+    // 세션의 소유자(사용자) ID 조회 — 세션 단위 API의 접근 권한 검사에 사용
+    @Transactional(readOnly = true)
+    public Integer getSessionOwnerId(Long sessionId) {
+        ChatSession session = chatSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("세션을 찾을 수 없습니다."));
+        return session.getUser().getId();
+    }
 }
