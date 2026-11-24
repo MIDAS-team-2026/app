@@ -9,6 +9,7 @@ import com.example.backend.Model.DTO.analysis.SessionRecordsResponseDTO;
 import com.example.backend.Model.DTO.analysis.SttResponseDTO;
 import com.example.backend.Model.DTO.analysis.SttUpdateRequestDTO;
 import com.example.backend.Model.DTO.analysis.VoiceResponseDTO;
+import com.example.backend.Service.UserService;
 import com.example.backend.Service.VoiceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,7 @@ import java.util.List;
 public class VoiceController {
 
     private final VoiceService voiceService;
+    private final UserService userService;
 
     /**
      * 환자의 음성 답변 파일 업로드 및 DB 기록 생성
@@ -36,11 +38,15 @@ public class VoiceController {
      */
     @PostMapping("/upload")
     public ResponseEntity<ApiResponse<VoiceResponseDTO>> uploadVoice(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
             @RequestParam("userId") Integer userId,
             @RequestParam("sessionId") Long sessionId,
             @RequestParam(value = "recallQuestionId", required = false) Long recallQuestionId,
             @RequestParam(value = "answerRole", required = false) String answerRole,
             @RequestParam("file") MultipartFile file) {
+
+        // 본인(또는 연동된 보호자)만 해당 사용자의 음성을 올릴 수 있다.
+        userService.validatePatientAccess(authorizationHeader, userId);
 
         if (file == null || file.isEmpty()) {
             return ResponseEntity.status(400)
@@ -153,8 +159,14 @@ public class VoiceController {
      * replyText == null → 아직 생성 중 / replyText != null → 완료
      */
     @GetMapping("/reply/{recordId}")
-    public ResponseEntity<ApiResponse<AiReplyResponseDTO>> getAiReply(@PathVariable Long recordId) {
+    public ResponseEntity<ApiResponse<AiReplyResponseDTO>> getAiReply(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long recordId) {
+
         try {
+            // 녹음의 주인 본인(또는 연동된 보호자)만 AI 답변을 조회할 수 있다.
+            userService.validatePatientAccess(authorizationHeader, voiceService.getRecordOwnerId(recordId));
+
             AiReplyResponseDTO dto = voiceService.getAiReply(recordId);
             return ResponseEntity.ok(ApiResponse.success(dto));
         } catch (IllegalArgumentException e) {
