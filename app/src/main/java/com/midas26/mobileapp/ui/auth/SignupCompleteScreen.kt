@@ -32,6 +32,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,12 +57,19 @@ fun SignupCompleteScreen(
     val context = LocalContext.current
     val authState by viewModel.authState.collectAsState()
 
-    var userCode by remember { mutableStateOf("") }
+    // 화면이 다시 만들어져도(화면 회전 등) 유지되어야 하는 값은 rememberSaveable 로 보관한다.
+    var userCode by rememberSaveable { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var signupRequested by rememberSaveable { mutableStateOf(false) }
+    var signupDone by rememberSaveable { mutableStateOf(false) }
 
-    // 화면 최초 진입 시 회원가입 API 호출
+    // 화면 최초 진입 시 회원가입 API 호출 — 한 번만 보낸다.
+    // (화면 회전으로 다시 호출되면 "이미 등록된 전화번호" 오류가 나면서 발급된 코드가 사라진다.)
     LaunchedEffect(Unit) {
-        viewModel.signupFromPending()
+        if (!signupRequested) {
+            signupRequested = true
+            viewModel.signupFromPending()
+        }
     }
 
     // 회원가입 결과 처리
@@ -77,6 +85,7 @@ fun SignupCompleteScreen(
                 prefs.saveUserId(user.userId ?: -1)
                 prefs.saveUserCode(user.patientCode.orEmpty())
                 userCode = user.patientCode.orEmpty().ifEmpty { "------" }
+                signupDone = true
                 viewModel.resetState()
             }
             is AuthState.Error -> {
@@ -134,7 +143,9 @@ fun SignupCompleteScreen(
             Spacer(modifier = Modifier.height(28.dp))
 
             Text(
-                text = stringResource(R.string.signup_complete_title),
+                // 가입에 실패했는데 "완료되었어요"라고 보여주지 않는다.
+                text = if (errorMessage != null) "가입을 완료하지 못했어요"
+                else stringResource(R.string.signup_complete_title),
                 style = MaterialTheme.typography.headlineSmall,
                 color = BrandWhite,
                 fontWeight = FontWeight.Bold,
@@ -142,12 +153,61 @@ fun SignupCompleteScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = stringResource(R.string.signup_complete_subtitle),
+                text = if (errorMessage != null) "아래 내용을 확인한 뒤 다시 시도해주세요."
+                else stringResource(R.string.signup_complete_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = BrandWhite.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(32.dp))
+
+            // 보호자 — 가입 처리 중이거나 실패했을 때만 안내를 보여준다.
+            // (오류 안내가 사용자 전용 코드 박스 안에만 있어서, 보호자는 가입에 실패해도 알 수 없었다.)
+            if (isGuardian && (isLoading || errorMessage != null)) Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = BrandWhite.copy(alpha = 0.16f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = BrandWhite,
+                            modifier = Modifier.size(40.dp),
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        Text(
+                            text = errorMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = BrandWhite,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(BrandWhite.copy(alpha = 0.20f))
+                                .clickable {
+                                    errorMessage = null
+                                    viewModel.signupFromPending()
+                                }
+                                .padding(horizontal = 16.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = "다시 시도",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = BrandWhite,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
 
             // 코드 박스 — 사용자 전용
             if (!isGuardian) Surface(
@@ -256,8 +316,8 @@ fun SignupCompleteScreen(
             }
         }
 
-        // 하단 "홈으로 시작하기" 버튼 — 보호자는 바로 활성화, 사용자는 코드 발급 후 활성화
-        val homeButtonEnabled = isGuardian || userCode.isNotEmpty()
+        // 하단 버튼 — 가입이 실제로 끝난 뒤에만 활성화 (보호자: 가입 성공 후, 사용자: 코드 발급 후)
+        val homeButtonEnabled = if (isGuardian) signupDone else userCode.isNotEmpty()
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)

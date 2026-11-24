@@ -4,6 +4,8 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -275,7 +277,11 @@ private fun OtpInputRow(
                 val isFocused = i == code.length
                 Box(
                     modifier = Modifier
-                        .size(52.dp)
+                        // 칸 6개가 화면 폭을 나눠 쓰도록 한다 (최대 52dp).
+                        // 고정 크기(52dp x 6 + 간격 = 362dp)는 폭이 좁은 폰에서 마지막 칸이 찌그러졌다.
+                        .weight(1f, fill = false)
+                        .widthIn(max = 52.dp)
+                        .aspectRatio(1f)
                         .background(
                             color = if (char != null) AppColor.greenSurface else BrandWhite,
                             shape = RoundedCornerShape(14.dp)
