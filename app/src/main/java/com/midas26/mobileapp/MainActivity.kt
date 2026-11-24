@@ -45,6 +45,7 @@ import com.midas26.mobileapp.ui.theme.LocalTapToReplay
 import com.midas26.mobileapp.ui.theme.LocalTtsManager
 import com.midas26.mobileapp.network.RetrofitClient
 import com.midas26.mobileapp.util.PrefsManager
+import com.midas26.mobileapp.util.SessionManager
 import com.midas26.mobileapp.util.TtsManager
 
 class MainActivity : ComponentActivity() {
@@ -91,7 +92,7 @@ fun AppRoot(ttsManager: TtsManager? = null) {
             tokenProvider = { prefs.getToken() },
             onUnauthorized = {
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    prefs.clearToken()
+                    SessionManager.signOut(context)
                     forceLogout = true
                 }
             }
@@ -179,8 +180,12 @@ fun AppRoot(ttsManager: TtsManager? = null) {
                             TextButton(onClick = {
                                 analysisViewModel.clearNetworkError()
                                 splashVisible = false
-                                navController.navigate(Routes.Login) {
-                                    popUpTo(0) { inclusive = true }
+                                // 통신이 한 번 실패했다고 로그인이 풀린 것은 아니다.
+                                // 로그인 상태면 보던 화면에 그대로 두고, 로그인 전일 때만 로그인 화면으로 보낸다.
+                                if (!prefs.isLoggedIn()) {
+                                    navController.navigate(Routes.Login) {
+                                        popUpTo(0) { inclusive = true }
+                                    }
                                 }
                             }) {
                                 Text("확인")
