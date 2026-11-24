@@ -6,6 +6,7 @@ import com.example.backend.Model.Repository.AiAnalysisRepository.RecallQuestionR
 import com.example.backend.Model.Repository.UserRepository;
 import com.example.backend.Util.DefaultRecallQuestions;
 import com.example.backend.Util.JwtTokenProvider;
+import com.example.backend.Util.PasswordPolicy;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -29,6 +30,9 @@ public class UserService {
     // 회원가입
     @Transactional
     public User register(User dto) {
+
+        // 비밀번호 규칙 검사 (영문 + 숫자 포함 8자 이상)
+        PasswordPolicy.validate(dto.getPassword());
 
         // 중복 체크
         if (userRepository.existsByPhone(dto.getPhone())) {
@@ -130,6 +134,9 @@ public class UserService {
 
     @Transactional
     public void resetPassword(String phone, String newPassword) {
+        // 비밀번호 규칙 검사 (영문 + 숫자 포함 8자 이상)
+        PasswordPolicy.validate(newPassword);
+
         User user = userRepository.findByPhone(phone)
                 .orElseThrow(() -> new IllegalArgumentException("사용자를 찾을 수 없습니다."));
 
@@ -169,12 +176,9 @@ public class UserService {
         return protector.getPatients();
     }
 
-    // 민감정보 접근 권한 검사
-    // 허용 조건:
-    // 1. 요청자가 targetUserId 본인인 경우
-    // 2. 요청자가 보호자이고, targetUserId 환자와 연결되어 있는 경우
-    @Transactional
-    public User validatePatientAccess(String authorizationHeader, Integer targetUserId) {
+    // Authorization 헤더의 JWT로 요청자를 확인한다.
+    // 토큰이 없거나, 유효하지 않거나, 토큰의 사용자가 존재하지 않으면 401
+    public User getAuthenticatedUser(String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
@@ -193,11 +197,67 @@ public class UserService {
 
         String requesterPhone = jwtTokenProvider.getPhoneFromToken(token);
 
-        User requester = userRepository.findByPhone(requesterPhone)
+        return userRepository.findByPhone(requesterPhone)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "토큰 사용자 정보를 찾을 수 없습니다."
                 ));
+    }
+
+    // 토큰의 주인이 해당 전화번호의 사용자인지 확인한다.
+    // 예외를 던지지 않고 true/false 로만 알려준다. (비밀번호 변경 시 본인 확인용)
+    public boolean isTokenOwner(String authorizationHeader, String phone) {
+        if (phone == null || authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            return false;
+        }
+
+        String token = authorizationHeader.substring(7);
+
+        if (!jwtTokenProvider.validateToken(token)) {
+            return false;
+        }
+
+        return phone.equals(jwtTokenProvider.getPhoneFromToken(token));
+    }
+
+    // 본인 확인: 요청자가 userId 본인일 때만 허용 (아니면 403)
+    public User validateSelfAccess(String authorizationHeader, Integer userId) {
+        User requester = getAuthenticatedUser(authorizationHeader);
+
+        if (userId == null || !requester.getId().equals(userId)) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "본인 계정으로만 요청할 수 있습니다."
+            );
+        }
+
+        return requester;
+    }
+
+    // 연동 해제 권한 검사: 해당 보호자 본인 또는 해당 환자 본인일 때만 허용 (아니면 403)
+    public User validateLinkAccess(String authorizationHeader, Integer protectorId, Integer patientId) {
+        User requester = getAuthenticatedUser(authorizationHeader);
+
+        boolean isProtector = requester.getId().equals(protectorId);
+        boolean isPatient = requester.getId().equals(patientId);
+
+        if (!isProtector && !isPatient) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "해당 연동 정보를 변경할 권한이 없습니다."
+            );
+        }
+
+        return requester;
+    }
+
+    // 민감정보 접근 권한 검사
+    // 허용 조건:
+    // 1. 요청자가 targetUserId 본인인 경우
+    // 2. 요청자가 보호자이고, targetUserId 환자와 연결되어 있는 경우
+    @Transactional
+    public User validatePatientAccess(String authorizationHeader, Integer targetUserId) {
+        User requester = getAuthenticatedUser(authorizationHeader);
 
         User targetUser = userRepository.findById(targetUserId)
                 .orElseThrow(() -> new ResponseStatusException(
