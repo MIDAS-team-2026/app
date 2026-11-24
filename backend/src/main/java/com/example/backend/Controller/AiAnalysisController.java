@@ -70,9 +70,16 @@ class AiAnalysisController {
     }
 
     // 세션별 최종 분석 요약 조회
-    // TODO: sessionId 기반으로 세션 소유자 확인 로직을 추가하면 더 안전함
+    // 세션의 소유자 본인 또는 연동된 보호자만 조회할 수 있다.
     @GetMapping("/session/{sessionId}/summary")
-    public ResponseEntity<SessionAnalysisSummaryResponseDTO> getSessionSummary(@PathVariable Long sessionId) {
+    public ResponseEntity<SessionAnalysisSummaryResponseDTO> getSessionSummary(
+            @RequestHeader(value = "Authorization", required = false) String authorizationHeader,
+            @PathVariable Long sessionId) {
+
+        // 로그인 여부를 먼저 확인한 뒤(401), 세션 소유자 기준으로 접근 권한을 검사한다(403).
+        userService.getAuthenticatedUser(authorizationHeader);
+        userService.validatePatientAccess(authorizationHeader, aiAnalysisService.getSessionOwnerId(sessionId));
+
         return ResponseEntity.ok(aiAnalysisService.getSessionSummary(sessionId));
     }
 
