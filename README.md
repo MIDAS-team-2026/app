@@ -53,6 +53,7 @@
 |---|---|---|
 | `DB_PASSWORD` | Spring | MySQL `root` 계정 비밀번호 |
 | `AWS_ACCESS_KEY`, `AWS_SECRET_KEY` | Spring | 음성 파일을 저장하는 S3 접근 키 |
+| `JWT_SECRET` | Spring | 로그인 토큰 서명 키. 32바이트 이상의 임의 문자열을 직접 만들어 사용 (선택, 없으면 서버를 재시작할 때마다 다시 로그인 필요) |
 | `AI_PYTHON_URL` | Spring | AI 서버 주소 (선택, 기본값 `http://localhost:8000`) |
 | `GROQ_API_KEY` | AI 서버 | 음성 인식(Groq) 키 |
 | `YNU_API_KEY` | AI 서버 | 질문 생성에 쓰는 LLM 게이트웨이 키 |
