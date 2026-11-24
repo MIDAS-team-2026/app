@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -116,9 +117,23 @@ fun VoiceChatScreen(
 
         if (text.isBlank()) return@LaunchedEffect
 
-        ttsManager?.speak(text) {
+        if (ttsManager != null) {
+            ttsManager.speak(text) {
+                viewModel.advanceSentence()
+            }
+        } else {
+            // 음성 안내를 꺼 둔 경우에는 읽기가 끝났다는 신호가 오지 않는다.
+            // 문장을 읽을 시간을 준 뒤 다음 문장으로 넘긴다. (예전에는 첫 문장에서 멈췄다.)
+            delay((text.length * 120L).coerceIn(1_500L, 6_000L))
             viewModel.advanceSentence()
         }
+    }
+
+    // 대화 중에는 화면이 꺼지지 않게 한다. (답변을 말하거나 기다리는 동안 화면을 건드리지 않기 때문)
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
     }
 
     // 녹음이 시작되면 기존 TTS를 즉시 중단
