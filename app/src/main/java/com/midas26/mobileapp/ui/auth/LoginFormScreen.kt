@@ -48,22 +48,9 @@ import com.midas26.mobileapp.ui.components.AppOutlinedTextField
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.components.AppTextButton
 import com.midas26.mobileapp.ui.components.VerticalScrollbar
+import com.midas26.mobileapp.ui.components.phoneNumberTransformation
 import com.midas26.mobileapp.ui.theme.AppColor
 import com.midas26.mobileapp.util.PrefsManager
-
-private fun formatPhoneNumber(input: String): String {
-    val digits = input.filter { it.isDigit() }.take(11)
-
-    return when {
-        digits.length <= 3 -> digits
-
-        digits.length <= 7 ->
-            "${digits.substring(0, 3)}-${digits.substring(3)}"
-
-        else ->
-            "${digits.substring(0, 3)}-${digits.substring(3, 7)}-${digits.substring(7)}"
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -205,11 +192,11 @@ fun LoginFormScreen(
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // [수정] 전화번호 자동 하이픈 적용
+                // 값은 숫자만 보관하고 하이픈은 화면에만 표시한다. (값에 하이픈을 넣으면 커서 위치가 어긋난다)
                 AppOutlinedTextField(
                     value = phone,
                     onValueChange = {
-                        phone = formatPhoneNumber(it)
+                        phone = it.filter(Char::isDigit).take(11)
                         phoneError = null
                         serverError = null
                     },
@@ -218,7 +205,8 @@ fun LoginFormScreen(
                     keyboardType = KeyboardType.Phone,
                     imeAction = ImeAction.Next,
                     maxLength = 13,
-                    errorText = phoneError
+                    errorText = phoneError,
+                    visualTransformation = phoneNumberTransformation(phone)
                 )
 
                 AppOutlinedTextField(
