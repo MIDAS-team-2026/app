@@ -23,12 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -42,7 +40,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
 import com.midas26.mobileapp.ui.theme.AppColor
@@ -51,8 +48,7 @@ import com.midas26.mobileapp.ui.theme.BrandWhite
 private data class PrivacyItem(
     val titleRes: Int,
     val descRes: Int,
-    val detailTitle: String,
-    val detailContent: String
+    val terms: LegalTermsItem
 )
 
 @Composable
@@ -64,20 +60,17 @@ fun PrivacyScreen(
         PrivacyItem(
             titleRes = R.string.privacy_terms,
             descRes = R.string.privacy_terms_desc,
-            detailTitle = ServiceTermsItem.detailTitle,
-            detailContent = ServiceTermsItem.detailContent
+            terms = ServiceTermsItem
         ),
         PrivacyItem(
             titleRes = R.string.privacy_personal,
             descRes = R.string.privacy_personal_desc,
-            detailTitle = PrivacyPolicyItem.detailTitle,
-            detailContent = PrivacyPolicyItem.detailContent
+            terms = PrivacyPolicyItem
         ),
         PrivacyItem(
             titleRes = R.string.privacy_voice,
             descRes = R.string.privacy_voice_desc,
-            detailTitle = VoiceDataTermsItem.detailTitle,
-            detailContent = VoiceDataTermsItem.detailContent
+            terms = VoiceDataTermsItem
         )
     )
 
@@ -98,9 +91,8 @@ fun PrivacyScreen(
     }
 
     selectedItem?.let { item ->
-        TermsDetailDialog(
-            title = item.detailTitle,
-            content = item.detailContent,
+        LegalTermsDetailDialog(
+            item = item.terms,
             onDismiss = { selectedItem = null }
         )
     }
@@ -210,42 +202,6 @@ fun PrivacyScreen(
             modifier = Modifier.align(Alignment.TopEnd)
         )
     }
-}
-
-@Composable
-private fun TermsDetailDialog(
-    title: String,
-    content: String,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                color = AppColor.textPrimary,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Text(
-                text = content,
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppColor.textSecondary,
-                lineHeight = 22.sp
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(
-                    text = "확인",
-                    color = AppColor.greenPrimary,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    )
 }
 
 @Composable
