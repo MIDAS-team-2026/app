@@ -9,7 +9,7 @@ from recall.dialogue_act import conversation_control, is_clarification_request
 
 
 embedding_model = SentenceTransformer("jhgan/ko-sroberta-multitask")
-SCORING_POLICY_VERSION = "recall-rules-v2-20261112"
+SCORING_POLICY_VERSION = "recall-rules-v2-20261124"
 
 
 KEYWORD_STOPWORDS = {
@@ -623,6 +623,7 @@ def calculate_final_recall_score(
     current_text: str,
     keywords: Optional[List[str]] = None,
     question_type: str = "DEFAULT",
+    *, target_answer: str | None = None, source_text: str | None = None,
 ) -> dict:
     unavailable_reason = (
         "missing_reference" if not clean_text(past_text or "") else
@@ -632,6 +633,11 @@ def calculate_final_recall_score(
     )
     if unavailable_reason:
         return _unavailable_recall(unavailable_reason, keywords)
+    if target_answer:
+        from recall.event_modality import EventMode, classify_event, is_current_state
+        corrected = get_final_correction_segment(current_text)
+        if classify_event(corrected) in {EventMode.WISH, EventMode.PLAN} or is_current_state(corrected):
+            return _unavailable_recall("non_recall_intent", keywords)
     normalized_question_type = str(question_type or "DEFAULT").upper()
     if not keywords:
         nouns, predicates = _action_components(past_text)
@@ -695,6 +701,21 @@ def calculate_final_recall_score(
         before = final_recall_score
         final_recall_score = max(final_recall_score, 60)
         trace_adjustment("combined_partial_floor", before, final_recall_score)
+
+    # A verified single-slot answer is not a sentence-reproduction task.
+    if target_answer and keyword_score == 100:
+        target_nouns, _ = _action_components(target_answer)
+        answer_nouns, answer_predicates = _action_components(scoring_current_text)
+        _, source_predicates = _action_components(source_text or past_text)
+        if (target_nouns and answer_nouns == target_nouns
+                and answer_predicates <= source_predicates | {"이"}
+                and is_keyword_matched(target_answer, scoring_current_text)
+                and not is_uncertain_answer(scoring_current_text)
+                and not is_keyword_explicitly_rejected(target_answer, scoring_current_text)
+                and not re.search(r"(?:안|못)\s|않|못했|아니|거나|든지|또는|혹은", scoring_current_text)):
+            before = final_recall_score
+            final_recall_score = 100.0
+            trace_adjustment("verified_target_answer", before, final_recall_score)
 
     final_recall_score = clamp_score(final_recall_score)
     ambiguous_keywords = [

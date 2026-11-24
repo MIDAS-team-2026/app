@@ -48,7 +48,7 @@ from recall.dialogue_act import classify_recall_response, RecallResponseIntent
 from recall.event_continuity import answers_event_detail
 from recall.event_modality import EventFrame, EventMode, NON_EXPERIENCED, resolve_event_frames, is_current_state
 from recall.uncertain_reply import short_reference, declines_detail, resolve_short_reference
-from recall.recall_scheduler import select_pending_recall, turn_position, memory_wait_turns, memory_wait_seconds, scheduled_recall_turn, recall_is_due
+from recall.recall_scheduler import select_pending_recall, turn_position, memory_wait_turns, memory_wait_seconds, scheduled_recall_turn, recall_is_due, session_recall_history
 from recall.recall_context import clarify_recall_question
 from recall.llm_dialogue_prototype import propose_dialogue
 from recall.dialogue_response_experiment import propose_reply_only, validate_local_voice_reply
@@ -4131,7 +4131,7 @@ def _plan_next_normal_reply(
     latest_text: str = "",
 ) -> ConversationReply:
     engine = os.getenv("MIDAS_DIALOGUE_ENGINE", "legacy").lower()
-    if engine not in {"llm", "llm_reply"}:
+    if is_greeting(latest_text) or engine not in {"llm", "llm_reply"}:
         return _plan_legacy_normal_reply(candidate_count, session_records, latest_text)
 
     # Fixed questions and recall linkage run in process_voice_reply first.
@@ -4160,11 +4160,13 @@ def _plan_next_normal_reply(
             *((text, infer_followup_target(text)) for text in _get_topic_openers()),
         ))
         for text, action, target in candidates:
+            if action == "CHANGE_TOPIC":
+                text = _with_topic_change_acknowledgement(text, records)
             checked = validate_local_voice_reply(records, text, action, target)
             if checked.status == "PROPOSED":
                 return ConversationReply(text, "DEEPEN" if action == "FOLLOW_UP" else "OPEN", None,
                                          "voice_continuation_fallback")
-        return ConversationReply("계속 이야기할까요, 아니면 잠시 쉬실까요?", "OPEN", None,
+        return ConversationReply("지금 나누고 싶은 이야기가 있으세요?", "OPEN", None,
                                  "no_grounded_question")
     return fallback
 
@@ -4826,6 +4828,7 @@ def process_voice_reply(
             result = generate_and_save_recall_question(
                 user_id=user_id,
                 conversation_history=recall_ready_history,
+                **session_recall_history(updated_records, recall_questions),
                 memory_candidates=list(
                     recall_candidate_context.memory_candidates
                 ),

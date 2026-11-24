@@ -8,6 +8,20 @@ from recall.recall_corrections import retracted_before_presentation
 from recall.recall_presentation import normalized_question, presented_question_matches
 
 
+def session_recall_history(records: list[dict], questions: list[dict]) -> dict:
+    """Previous sessions' wording is not a duplicate of this session's event."""
+    ids = {row.get("recallQuestionId") for row in records
+           if row.get("answerRole") in {"INITIAL", "RECALL"}}
+    ids.update(row.get("presentedRecallQuestionId") for row in records)
+    ids.discard(None)
+    return {
+        "previous_questions": [q["questionText"] for q in questions
+                               if q.get("questionId") in ids and q.get("questionText")],
+        "used_memory_points": [row["transcriptText"] for row in records
+                               if row.get("answerRole") == "INITIAL" and row.get("transcriptText")],
+    }
+
+
 def turn_position(records: list[dict], record_id: int) -> int:
     for index, row in enumerate(ordered_records(records), start=1):
         if int(row.get("recordId") or 0) == int(record_id):

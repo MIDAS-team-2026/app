@@ -23,9 +23,10 @@ def retracted_before_presentation(records: list[dict], question: dict, source_in
     question_text = re.sub(r"[\s.,!?]+", "", str(question.get("questionText") or ""))
     if not question_text:
         return False
-    values = question.get("keywords") or [question.get("expectedAnswer")]
-    if not isinstance(values, (list, tuple)):
-        return False
+    keywords = question.get("keywords") or []
+    values = [question.get("expectedAnswer")]
+    if isinstance(keywords, (list, tuple)):
+        values.extend(keywords)
     for index, row in enumerate(records[source_index:], start=source_index):
         # A user's text precedes the outgoing reply stored on the same row.
         if index > source_index and row.get("answerRole") not in {"FIXED", "RECALL"}:

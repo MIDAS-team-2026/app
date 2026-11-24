@@ -33,7 +33,9 @@ def recall_context_prefix(candidate: dict) -> str:
         # Multiple event details are not interchangeable merely because they
         # share an episode. Prefer this target's own clause; otherwise abstain.
         if len(choices) == 1:
-            return f'아까 말씀하신 "{choices[0]}" 이야기예요. '
+            if slot == "PLACE" and answer_type == "FOOD":
+                return f"아까 {choices[0]}에서 드셨다고 했는데, "
+            return f"아까 말씀하신 {choices[0]} 말인데요, "
     return ""
 
 

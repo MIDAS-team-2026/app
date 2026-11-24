@@ -4,7 +4,7 @@ import re
 
 from recall.episode_context import active_episode_records, ordered_records
 from recall.event_modality import EventMode, classify_event
-from recall.conversation_recall_generator import _tokenize_cached, _get_final_correction_segment, score_recall_memory_candidate, extract_memory_action_concepts
+from recall.conversation_recall_generator import _tokenize_cached, _get_final_correction_segment, _keyword_occurs_in_text, score_recall_memory_candidate, extract_memory_action_concepts
 from recall.memory_evidence_extractor import is_context_only_place, extract_content_nouns, extract_memory_clues, extract_predicate_forms
 from recall.followup_intent import infer_followup_target
 from recall.uncertain_reply import declines_detail
@@ -118,6 +118,18 @@ def add_voice_policy(context: dict, records: list[dict]) -> None:
     context["active_subject_terms"] = sorted(_subject_terms(active_text) - places)
     context["active_action_concepts"] = sorted(extract_memory_action_concepts(active_text) - {"ACTIVITY", "GIVE"})
     latest_text = str(recent[-1].get("transcriptText") or "")
+    # A new subject in the answer may deepen an activity, without resetting the
+    # episode's turn budget or reopening already answered factual slots.
+    previous_terms = set().union(*(_subject_terms(str(row.get("transcriptText") or ""))
+                                  | _subject_terms(question_part(str(row.get("aiReplyText") or "")))
+                                  for row in active[:-1]))
+    asserted_latest = _affirmative_texts([latest_text])
+    context["followup_expansion_terms"] = sorted(_subject_terms(" ".join(asserted_latest)) - previous_terms - places) if (
+        len(active) >= 2 and experienced
+        and mode not in {EventMode.WISH, EventMode.PLAN, EventMode.NEGATED, EventMode.UNCERTAIN}
+        and asserted_latest and not declines_detail(latest_text)
+    ) else []
+    context["followup_extension"] = len(active) == 3 and bool(context["followup_expansion_terms"])
     context["unanswered_action_concepts"] = sorted(
         extract_memory_action_concepts(question_part(str(recent[-2].get("aiReplyText") or "")))
         - {"ACTIVITY", "GIVE"}
@@ -159,11 +171,66 @@ def add_voice_policy(context: dict, records: list[dict]) -> None:
         clue for text in asserted for clue in extract_memory_clues(text)
         if clue["answerType"] in {"TIME", "PLACE", "PERSON"}
     ]
+    session_facts = []
+    home_only_scopes = []
+    for row in ordered:
+        if row.get("answerRole") in {"FIXED", "RECALL"}:
+            continue
+        text = _get_final_correction_segment(str(row.get("transcriptText") or ""))
+        forms = {token.form for token in _tokenize_cached(text)}
+        mode = classify_event(text)
+        scope = _time_scopes(text)
+        actions = extract_memory_action_concepts(text) - {"ACTIVITY", "GIVE"}
+        if mode == EventMode.NEGATED and actions:
+            denied_terms = extract_content_nouns(text)
+            session_facts = [fact for fact in session_facts
+                             if not actions.intersection(fact["actions"])
+                             or _different_time_scope(text, {"active_time_scopes": fact["time_scopes"]})
+                             or (denied_terms and not denied_terms.intersection(fact["answer_terms"]))]
+        if mode not in {EventMode.WISH, EventMode.PLAN, EventMode.UNCERTAIN}:
+            if (({"집", "있"} <= forms and forms.intersection({"계속", "종일", "하루종일", "만"})
+                 and not forms.intersection({"안", "못", "않", "아니", "없"}))
+                    or (forms.intersection({"나가", "외출"}) and forms.intersection({"안", "않", "못"}))):
+                home_only_scopes.append(scope)
+            elif ((mode == EventMode.EXPERIENCED and _affirmative_texts([text]) and (
+                    "GO" in extract_memory_action_concepts(text) or "나가" in forms))
+                  or ({"집", "있"} <= forms and forms.intersection({"안", "못", "않", "아니"}))):
+                home_only_scopes = [known for known in home_only_scopes
+                                    if _different_time_scope(text, {"active_time_scopes": known})]
+        if mode == EventMode.EXPERIENCED and _affirmative_texts([text]):
+            targets = []
+            answer_terms = set()
+            for target, concepts in (("FOOD", {"EAT", "DRINK"}), ("MEDIA", {"READ", "SEE", "HEAR"})):
+                clues = [clue for clue in extract_memory_clues(text, target)
+                         if clue["answerType"] == target] if actions.intersection(concepts) else []
+                if clues:
+                    targets.append(target)
+                    answer_terms.update(term for clue in clues for term in extract_content_nouns(clue["answerValue"]))
+            if targets:
+                fact = {"answer_types": targets, "answer_terms": sorted(answer_terms),
+                        "actions": sorted(actions), "time_scopes": scope}
+                if fact not in session_facts:
+                    session_facts.append(fact)
+    context["session_answered_events"] = session_facts
+    context["home_only_time_scopes"] = home_only_scopes
 
 
 def validate_voice_policy(reply: str, action: str, context: dict) -> None:
     question = question_part(reply)
     goal = context.get("dialogue_goal")
+    forms = {token.form for token in _tokenize_cached(question)}
+    if (forms.intersection({"나가", "다녀오", "외출", "산책"})
+            and any(not _different_time_scope(question, {"active_time_scopes": scope})
+                    for scope in context.get("home_only_time_scopes", []))):
+        raise ValueError("known_detail_reasked")
+    if action == "CHANGE_TOPIC":
+        target = infer_followup_target(question)
+        actions = extract_memory_action_concepts(question) - {"ACTIVITY", "GIVE"}
+        if any(target in fact["answer_types"]
+               and (not actions or not fact["actions"] or actions.intersection(fact["actions"]))
+               and not _different_time_scope(question, {"active_time_scopes": fact["time_scopes"]})
+               for fact in context.get("session_answered_events", [])):
+            raise ValueError("known_detail_reasked")
     if goal != "RESPECT_INTENT" and asks_about_habit(question):
         raise ValueError("habit_question_without_event")
     if action != "CLARIFY" and (goal == "ELICIT_EVENT" or action == "CHANGE_TOPIC") and not asks_about_event(question):
@@ -179,6 +246,25 @@ def validate_voice_policy(reply: str, action: str, context: dict) -> None:
     if action == "CHANGE_TOPIC" and extract_memory_action_concepts(question).intersection(
             context.get("declined_action_concepts", [])):
         raise ValueError("declined_topic_reopened")
+    if action == "CHANGE_TOPIC":
+        target = infer_followup_target(question)
+        actions = extract_memory_action_concepts(question) - {"ACTIVITY", "GIVE"}
+        if target in {"PLACE", "PERSON", "TIME"}:
+            for row in context.get("history", []):
+                if row["record_id"] in context.get("detail_evidence_record_ids", []):
+                    continue
+                for source in _affirmative_texts([row["user"]]):
+                    clues = extract_memory_clues(source)
+                    detail_terms = set().union(*(extract_content_nouns(clue["answerValue"])
+                        for clue in clues if clue["answerType"] in {"PLACE", "PERSON", "TIME"}))
+                    same_event = (actions.intersection(extract_memory_action_concepts(source))
+                                  or subjects.intersection(_subject_terms(source) - detail_terms))
+                    if (not _different_time_scope(question, {"active_time_scopes": _time_scopes(source)})
+                            and same_event
+                            and any(clue["answerType"] == target
+                                    and not (target == "PLACE" and is_context_only_place(clue["answerValue"]))
+                                    for clue in clues)):
+                        raise ValueError("known_detail_reasked")
     if not _different_time_scope(question, context):
         target = infer_followup_target(question)
         if action in {"FOLLOW_UP", "CLARIFY"} and target in {"PLACE", "PERSON"}:
@@ -207,6 +293,6 @@ def validate_voice_policy(reply: str, action: str, context: dict) -> None:
         ):
             continue
         known_tokens = [_detail_tokens(text, person=person) for text in known_texts]
-        if not any(tokens == source[index:index + len(tokens)]
+        if not any(_keyword_occurs_in_text(clue["answerValue"], text) for text in known_texts) and not any(tokens == source[index:index + len(tokens)]
                    for source in known_tokens for index in range(len(source))):
             raise ValueError("unsupported_question_detail")

@@ -129,8 +129,6 @@ def validate_proposal(raw: str, context: dict, *, previous_questions: list[str] 
     proposal = DialogueProposal.model_validate_json(raw)
     if proposal.action not in context["allowed_actions"]:
         raise ValueError("action_not_allowed")
-    if proposal.action == "FOLLOW_UP" and proposal.target in context.get("attempted_targets", []):
-        raise ValueError("repeated_followup_target")
     reply = proposal.reply.strip()
     if context.get("require_continuation") and any(
         char.isalpha() and not (char.isascii() or "가" <= char <= "힣") for char in reply
@@ -147,8 +145,18 @@ def validate_proposal(raw: str, context: dict, *, previous_questions: list[str] 
     if proposal.action == "FOLLOW_UP":
         question = next(part for part in reversed(re.split(r"[.!。！]", reply))
                         if "?" in part or "？" in part)
-        if infer_followup_target(question) in context.get("attempted_targets", []):
-            raise ValueError("repeated_followup_target")
+        if context.get("followup_extension") and (
+            proposal.target in {"PERSON", "PLACE", "TIME"}
+            or not extract_content_nouns(question).intersection(context["followup_expansion_terms"])
+        ):
+            raise ValueError("unrelated_followup_extension")
+        for target in {proposal.target, infer_followup_target(question)}:
+            if target in context.get("attempted_targets", []):
+                expands_subject = (target in {"ACTIVITY", "MEDIA", "OBJECT"}
+                    and re.search(r"어떤|무엇|뭘|뭐|어떻게|어느", question)
+                    and extract_content_nouns(question).intersection(context.get("followup_expansion_terms", [])))
+                if not expands_subject:
+                    raise ValueError("repeated_followup_target")
     if any(term in reply for term in ("치매", "진단", "정답", "오답", "위험 점수")):
         raise ValueError("clinical_or_scoring_language")
     if questions and any(term in reply for term in FORBIDDEN_QUESTION_PATTERNS):
@@ -253,6 +261,8 @@ def propose_dialogue(
         context["allowed_actions"] = [action for action in context["allowed_actions"] if action != "ACKNOWLEDGE"]
         from recall.voice_dialogue_policy import add_voice_policy
         add_voice_policy(context, records)
+        if context.get("followup_extension") and not completed_recall:
+            context["allowed_actions"].append("FOLLOW_UP")
     if conversation_control(str(latest.get("transcriptText") or "")):
         return DialogueExperimentResult("DEFERRED", "conversation_control")
     if str(latest.get("aiReplyText") or "").strip():
@@ -295,7 +305,7 @@ def propose_dialogue(
                         "habit_question_without_event", "recent_event_question_required",
                         "exhausted_subject_reopened", "unsupported_question_detail",
                         "broad_activity_question", "known_detail_reasked", "active_topic_reopened",
-                        "unanswered_topic_reasked", "declined_topic_reopened"}
+                        "unanswered_topic_reasked", "declined_topic_reopened", "unrelated_followup_extension"}
         reason = str(exc) if type(exc) is ValueError and str(exc) in safe_reasons else "invalid_proposal_schema"
         return DialogueExperimentResult("REJECTED", reason, elapsed_ms=int((perf_counter() - started) * 1000))
     return DialogueExperimentResult("PROPOSED", "source_checked_not_semantically_verified",

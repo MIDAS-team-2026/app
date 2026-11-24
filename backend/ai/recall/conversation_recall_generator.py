@@ -1154,6 +1154,11 @@ def is_answer_keyword_compatible_with_question(
     asks_person = answer_type == MemoryAnswerType.PERSON
 
     if asks_person:
+        from recall.memory_evidence_extractor import extract_memory_clues
+        if any(clue["answerType"] == "PERSON"
+               and clean_text(clue["answerValue"]) == answer_keyword
+               for clue in extract_memory_clues(source_text)):
+            return True
         if any(_memory_hint_occurs(hint, answer_keyword) for hint in PERSON_MEMORY_HINTS):
             return True
 
@@ -1164,11 +1169,11 @@ def is_answer_keyword_compatible_with_question(
         escaped_keyword = re.escape(answer_keyword)
         has_person_relation = bool(
             re.search(
-                rf"{escaped_keyword}(?:이|가|은|는)?(?:와|과|랑|하고|에게|한테)",
+                rf"(?<![가-힣A-Za-z0-9]){escaped_keyword}(?:이|가|은|는)?(?:와|과|랑|하고|에게|한테)",
                 source_text,
             )
         )
-        return has_person_relation and bool(source_actions & {"MEET", "CONTACT"})
+        return has_person_relation and bool(source_actions)
 
     asks_place = answer_type == MemoryAnswerType.PLACE
 
@@ -1778,7 +1783,7 @@ def build_engine_recall_question(candidate: Dict) -> str:
     templates = {
         MemoryAnswerType.FOOD: "어떤 음식을 드셨다고 말씀하셨나요?",
         MemoryAnswerType.PLACE: "아까 이야기하신 곳이 어디였는지 기억나세요?",
-        MemoryAnswerType.PERSON: "조금 전에 이야기하신 분이 누구였는지 기억나세요?",
+        MemoryAnswerType.PERSON: "그때 누구와 하셨다고 말씀하셨나요?",
         MemoryAnswerType.TIME: "아까 이야기하신 일이 언제쯤이었는지 기억나세요?",
         MemoryAnswerType.MEDIA: "무엇을 보거나 들으셨다고 말씀하셨나요?",
         MemoryAnswerType.ACTIVITY: "어떤 일을 하셨다고 말씀하셨나요?",
@@ -1814,11 +1819,16 @@ def build_engine_recall_result(
         and clean_text(item.get("sourceText") or "") == clean_text(source_text)
         for item in evidence
     )
-    has_event_backing = any(
-        score_recall_memory_candidate(item.get("sourceText") or "")["isValid"]
-        and extract_memory_action_concepts(item.get("sourceText") or "")
-        for item in evidence
-    )
+    has_event_backing = False
+    for item in evidence:
+        event_text = item.get("sourceText") or ""
+        evaluation = score_recall_memory_candidate(event_text)
+        if evaluation["isValid"] and (
+            extract_memory_action_concepts(event_text)
+            or "has_general_past_action" in evaluation["reasons"]
+        ):
+            has_event_backing = True
+            break
     detail_only = (
         candidate.get("answerType") in {"TIME", "PLACE", "PERSON"}
         and not extract_memory_action_concepts(source_text)

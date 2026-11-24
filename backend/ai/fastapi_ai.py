@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from time import perf_counter
 from typing import Optional
 from groq import Groq
 
@@ -130,12 +131,14 @@ def get_stt_pipeline():
     return model_name, pipeline(task="automatic-speech-recognition", model=model_name, device=device)
 
 def download_audio(audio_url: str) -> Path:
+    started = perf_counter()
     suffix = Path(audio_url.split("?")[0]).suffix or ".wav"
     response = requests.get(audio_url, timeout=60)
     response.raise_for_status()
     temp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
     with temp:
         temp.write(response.content)
+    logger.info("voice_stage stage=audio_download elapsed_ms=%.1f", (perf_counter() - started) * 1000)
     return Path(temp.name)
 
 def run_session_batch_analysis(
@@ -294,6 +297,7 @@ def transcribe(request: SttRequest):
         audio_path = download_audio(request.audioUrl)
 
         # 2. Groq Whisper API로 STT 수행
+        stt_started = perf_counter()
         with open(audio_path, "rb") as audio_file:
             transcription = groq_client.audio.transcriptions.create(
                 file=(os.path.basename(audio_path), audio_file.read()),
@@ -302,6 +306,7 @@ def transcribe(request: SttRequest):
                 response_format="json"
             )
 
+        logger.info("voice_stage stage=whisper elapsed_ms=%.1f", (perf_counter() - stt_started) * 1000)
         raw_text = transcription.text.strip()
 
         # 3. 만약 텍스트가 비어있다면 정제 패스
@@ -326,6 +331,7 @@ def transcribe(request: SttRequest):
 
         clean_text = raw_text
         refinement_model = None
+        refinement_started = perf_counter()
         try:
             llm_response = groq_client.chat.completions.create(
                 model=GROQ_REFINEMENT_MODEL,
@@ -343,6 +349,9 @@ def transcribe(request: SttRequest):
                 "STT text refinement failed; using the Whisper transcript: %s",
                 exc,
             )
+        finally:
+            logger.info("voice_stage stage=stt_refinement applied=%s elapsed_ms=%.1f",
+                        refinement_model is not None, (perf_counter() - refinement_started) * 1000)
 
         # 5. 스프링이 원하는 포맷에 맞춰 정제된 텍스트 리턴
         return SttResponse(

@@ -3,11 +3,37 @@ from collections import OrderedDict
 from copy import deepcopy
 from hashlib import sha256
 import json
+import logging
 from threading import Lock
 from time import monotonic
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from recall.record_execution import record_execution
 from recall.recall_score_calculator import is_valid_score
+
+logger = logging.getLogger(__name__)
+
+def audio_cache_identity(path):
+    """Ignore rotating S3 credentials, not object/version or content parameters."""
+    if not isinstance(path, str):
+        return path
+    try:
+        url = urlsplit(path)
+        host = url.hostname or ""
+        if url.scheme not in {"http", "https"} or not host.endswith((".amazonaws.com", ".amazonaws.com.cn")):
+            return path
+        query = parse_qsl(url.query, keep_blank_values=True)
+        keys = {key.lower() for key, _ in query}
+        if not ({"x-amz-signature", "x-amz-credential", "x-amz-date"} <= keys
+                or {"awsaccesskeyid", "signature", "expires"} <= keys):
+            return path
+        auth_keys = {"x-amz-algorithm", "x-amz-credential", "x-amz-date", "x-amz-expires",
+                     "x-amz-signedheaders", "x-amz-signature", "x-amz-security-token",
+                     "awsaccesskeyid", "signature", "expires"}
+        query = [(key, value) for key, value in query if key.lower() not in auth_keys]
+        return urlunsplit((url.scheme, url.netloc, url.path, urlencode(query), url.fragment))
+    except ValueError:
+        return path
 
 
 class TurnAnalysisCache:
@@ -22,6 +48,8 @@ class TurnAnalysisCache:
         # Include input content: corrections or a replaced recording invalidate reuse.
         inputs = {key: record.get(key) for key in (
             'transcriptText', 'audioFilePath', 'recordedAt')}
+        # Uploads have unique object keys; refreshed access URLs are not new audio.
+        inputs['audioFilePath'] = audio_cache_identity(inputs['audioFilePath'])
         digest = sha256(json.dumps(inputs, sort_keys=True, ensure_ascii=False,
                                    default=str).encode('utf-8')).hexdigest()
         key = (session_id, int(record['recordId']))
@@ -33,7 +61,9 @@ class TurnAnalysisCache:
                     valid = valid_audio_result(value)
                     if valid or (not retry_failed and self.clock() - created < self.failure_ttl):
                         self.entries.move_to_end(key)
+                        logger.info("audio_analysis_cache status=hit sessionId=%s recordId=%s", *key)
                         return deepcopy(value)
+            logger.info("audio_analysis_cache status=miss sessionId=%s recordId=%s", *key)
             result = analyze(
                 record_id=key[1], session_id=session_id,
                 audio_path=record.get('audioFilePath') or '',

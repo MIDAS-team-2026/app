@@ -628,6 +628,11 @@ def analyze_session_recall(
             current_text=current_text,
             keywords=keywords,
             question_type=question_type,
+            target_answer=(past_text if question.get("answerType") in
+                           {"FOOD", "PLACE", "PERSON", "OBJECT", "MEDIA"}
+                           and question.get("expectedAnswer") not in PLACEHOLDER_EXPECTED_ANSWERS
+                           and question.get("expectedAnswer") else None),
+            source_text=initial_record.get("transcriptText") or "",
         )
         evaluation_status = recall_scores.get("evaluationStatus", "SCORED")
         if evaluation_status == "SCORED" and (
@@ -705,6 +710,11 @@ def analyze_session_recall(
     missing = []
     if initial_fixed_score is None:
         missing.append("no_fixed_evaluation")
+        if any(str(row.get("answerRole") or "").upper() == "FIXED"
+               and questions.get(row.get("recallQuestionId"), {}).get("questionType") == "PERSONAL"
+               and questions.get(row.get("recallQuestionId"), {}).get("expectedAnswer") in PLACEHOLDER_EXPECTED_ANSWERS
+               for row in records):
+            missing.append("personal_reference_not_registered")
     if recall_score is None:
         missing.append("no_recall_evaluation")
     if not speech_available:
