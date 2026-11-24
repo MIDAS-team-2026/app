@@ -183,6 +183,9 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
+            // 업로드가 끝난(또는 실패한) 녹음 파일은 기기에 남기지 않는다.
+            file?.delete()
+
             if (recordId > 0) {
                 pollForReply(recordId)
             } else {
@@ -191,10 +194,10 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    /** 업로드 완료 후 AI 답변이 올 때까지 2초 간격으로 폴링. 30초 타임아웃. */
+    /** 업로드 완료 후 AI 답변이 올 때까지 1초 간격으로 폴링. 30초 타임아웃. */
     private suspend fun pollForReply(recordId: Long) {
         val timeoutMs  = 30_000L
-        val intervalMs =  2_000L
+        val intervalMs =  1_000L
         val startTime  = System.currentTimeMillis()
 
         while (System.currentTimeMillis() - startTime < timeoutMs) {
@@ -203,8 +206,10 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
                 .getOrNull()?.body()?.data?.replyText
 
             if (!replyText.isNullOrBlank()) {
-                refreshPendingRecallQuestion(recordId)
+                // 받은 답변을 먼저 들려준 뒤에 회상 질문 정보를 갱신한다.
+                // (예전에는 갱신이 끝날 때까지 최대 2.5초 동안 이미 받은 답변을 붙잡고 있었다.)
                 dispatchAiReply(replyText)
+                refreshPendingRecallQuestion(recordId)
                 return
             }
         }
@@ -322,7 +327,8 @@ class VoiceChatViewModel(application: Application) : AndroidViewModel(applicatio
     override fun onCleared() {
         timerJob?.cancel()
         advanceSentenceJob?.cancel()
-        wavRecorder.stop()
+        // 화면을 떠날 때 녹음 중이던 파일은 쓰지 않으므로 지운다.
+        wavRecorder.stop()?.delete()
         super.onCleared()
     }
 }
