@@ -22,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.midas26.mobileapp.BuildConfig
 import com.midas26.mobileapp.R
 import com.midas26.mobileapp.ui.components.AppOutlineButton
 import com.midas26.mobileapp.ui.components.AppPrimaryButton
@@ -65,6 +66,16 @@ fun LoginScreen(
                 onClick = onNavigateToSignup
             )
         }
+
+        // ── 앱 버전 (좌측 상단) ──────────────────────────────────────────
+        Text(
+            text = "ver.${BuildConfig.VERSION_NAME}",
+            fontSize = 12.sp,
+            color = AppColor.textTertiary,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+        )
 
         // ── 접근성 버튼 (우측 하단) ──────────────────────────────────────
         // Text(
